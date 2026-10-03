@@ -1,0 +1,106 @@
+# Vantage local build: SQL Server, the API, the Admin Portal, the User Portal and a mail catcher.
+# Start:  docker compose -f deploy/docker-compose.yml up -d --build
+# Open:   http://localhost:8080 (Admin)  http://localhost:8081 (User)  http://localhost:8025 (emails)
+# Secrets live in deploy/.env (not in git); deploy/.env.example shows the format.
+name: vantage
+
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: vantage-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in deploy/.env}
+    ports:
+      - "1433:1433"          # for SSMS / Azure Data Studio
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    restart: unless-stopped
+
+  # Runs once: creates the RDDashboard database, the rd_app login and the dummy HRMS table, then exits.
+  # (The database and login keep their original names so existing data carries over.)
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in deploy/.env}
+    volumes:
+      - ./db:/init:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - /opt/mssql-tools18/bin/sqlcmd -S db -U sa -P "$$MSSQL_SA_PASSWORD" -C -b -v APP_PASSWORD="$$APP_DB_PASSWORD" -i /init/init.sql
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    container_name: vantage-api
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      mail:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development      # local build: dev sign-in picker instead of ADFS/Cognito
+      ConnectionStrings__Default: "Server=db,1433;Database=RDDashboard;User Id=rd_app;Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      DataProtection__KeysPath: /data/keys     # encrypts the secrets entered in the Tenant Master
+      Storage__LocalPath: /data/files          # uploaded .pbix files and thumbnails
+      Bootstrap__SuperAdminEmail: ${SUPER_ADMIN_EMAIL:-nimal.perera@rrd.com}
+      # Emails go to the Mailpit container below (open http://localhost:8025 to read them); SES in AWS.
+      Email__SmtpHost: mail
+      Email__SmtpPort: "1025"
+      Email__FromAddress: vantage@rrd.com
+      Email__UserPortalUrl: http://localhost:8081
+      Email__AdminPortalUrl: http://localhost:8080
+    volumes:
+      - appdata:/data
+    restart: unless-stopped
+
+  admin:
+    build:
+      context: ..
+      dockerfile: deploy/admin.Dockerfile
+    container_name: vantage-admin
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  user:
+    build:
+      context: ..
+      dockerfile: deploy/user.Dockerfile
+    container_name: vantage-user
+    depends_on:
+      - api
+    ports:
+      - "8081:80"
+    restart: unless-stopped
+
+  # Local mail catcher: every email Vantage sends shows up at http://localhost:8025 (nothing leaves your machine).
+  mail:
+    image: axllent/mailpit:latest
+    container_name: vantage-mail
+    ports:
+      - "8025:8025"
+    restart: unless-stopped
+
+# The volumes keep the names they had when the project was called rd-dashboard, so the database,
+# uploaded files and encryption keys carry over.
+volumes:
+  sqldata:
+    name: rd-dashboard_sqldata
+  appdata:
+    name: rd-dashboard_appdata

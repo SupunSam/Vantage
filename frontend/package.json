@@ -1,0 +1,12 @@
+{
+  "name": "vantage-web",
+  "private": true,
+  "workspaces": ["shared", "user-portal", "admin-portal"],
+  "scripts": {
+    "dev:user": "npm run dev -w user-portal",
+    "dev:admin": "npm run dev -w admin-portal",
+    "build": "npm run build -w user-portal && npm run build -w admin-portal",
+    "typecheck": "npm run typecheck -w user-portal && npm run typecheck -w admin-portal"
+  },
+  "engines": { "node": ">=20" }
+}

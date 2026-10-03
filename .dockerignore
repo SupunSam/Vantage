@@ -1,0 +1,14 @@
+# Build context is the repo root (see deploy/*.Dockerfile).
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.vite
+**/*.tsbuildinfo
+**/App_Data
+**/TestResults
+.git
+.github
+docs
+backend/tests
+deploy/.env
