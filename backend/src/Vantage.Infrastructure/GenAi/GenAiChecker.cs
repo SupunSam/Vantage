@@ -49,7 +49,7 @@ public static partial class GenAiChecker
         "", "text/javascript", "application/javascript", "module", "application/json", "application/ld+json", "text/plain",
     };
 
-    public static GenAiCheckResult Check(byte[] bytes, IReadOnlyCollection<string> approvedHosts)
+    public static GenAiCheckResult Check(byte[] bytes, IReadOnlyCollection<string> approvedHosts, int warnBytes = Rules.GenAiWarnBytes)
     {
         var errors = new List<string>();
         var warnings = new List<string>();
@@ -58,8 +58,8 @@ public static partial class GenAiChecker
         if (bytes.Length == 0) return new(["The file is empty."], warnings, [], 0);
         if (bytes.Length > Rules.GenAiMaxBytes)
             errors.Add($"The file is {bytes.Length / 1024d / 1024d:0.#} MB, over the {Rules.GenAiMaxBytes / 1024 / 1024} MB limit.");
-        else if (bytes.Length >= Rules.GenAiWarnBytes)
-            warnings.Add($"The file is {bytes.Length / 1024d / 1024d:0.#} MB. Files over {Rules.GenAiWarnBytes / 1024 / 1024} MB load slowly; consider trimming embedded data.");
+        else if (bytes.Length >= warnBytes)
+            warnings.Add($"The file is {bytes.Length / 1024d / 1024d:0.#} MB. Files over {warnBytes / 1024d / 1024d:0.#} MB load slowly; consider trimming embedded data.");
 
         string html;
         try { html = new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'); }

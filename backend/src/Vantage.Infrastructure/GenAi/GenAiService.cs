@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Vantage.Domain;
 using Vantage.Domain.Entities;
 using Vantage.Infrastructure.Data;
@@ -10,7 +9,11 @@ using Vantage.Infrastructure.Storage;
 
 namespace Vantage.Infrastructure.GenAi;
 
-/// <summary>Settings under "GenAi". The files are served from <see cref="BaseUrl"/>, a different origin from both portals.</summary>
+/// <summary>
+/// The deployment's own GenAI settings (the "GenAi" section of the configuration / environment variables). They are the
+/// fallback when the GenAI Config tab in Admin Configuration leaves an address or the scanner host blank; see <see cref="GenAiSettings"/>.
+/// The files are served from <see cref="BaseUrl"/>, a different origin from both portals.
+/// </summary>
 public sealed class GenAiOptions
 {
     /// <summary>Where the browser loads GenAI dashboards from: http://localhost:8082 locally, the GenAI domain in AWS.</summary>
@@ -35,17 +38,23 @@ public sealed record GenAiContent(Stream Content, string ContentSecurityPolicy);
 /// stops it being served.
 /// </summary>
 public sealed class GenAiService(
-    AppDbContext db, IFileStore files, IDataProtectionProvider protection, IOptions<GenAiOptions> options, AuditWriter audit,
+    AppDbContext db, IFileStore files, IDataProtectionProvider protection, GenAiSettings settings, AuditWriter audit,
     NotificationService notifications, IFileScanner scanner, TimeProvider clock)
 {
     private const string TokenPurpose = "Vantage.GenAi.Link.v1";
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
-    private GenAiOptions Options => options.Value;
 
     // ---------------------------------------------------------------- checking
 
     public async Task<IReadOnlyList<string>> ApprovedHostsAsync(CancellationToken ct = default) =>
         await db.ApprovedCdns.AsNoTracking().Where(c => c.IsActive).Select(c => c.Host).ToListAsync(ct);
+
+    /// <summary>The GenAI settings in force (Admin Configuration, then the environment's).</summary>
+    public Task<GenAiRuntime> CurrentSettingsAsync(CancellationToken ct = default) => settings.GetAsync(ct);
+
+    /// <summary>Runs the file check with the approved CDNs and the warning size in force.</summary>
+    public async Task<GenAiCheckResult> CheckAsync(byte[] bytes, CancellationToken ct = default) =>
+        GenAiChecker.Check(bytes, await ApprovedHostsAsync(ct), (await settings.GetAsync(ct)).WarnBytes);
 
     /// <summary>Reads the upload (never more than the limit plus one byte), runs the checks and the malware scan; throws a RuleException listing what's wrong.</summary>
     public async Task<(byte[] Bytes, GenAiCheckResult Result, ScanOutcome Scan)> ValidateUploadAsync(Stream upload, string fileName, CancellationToken ct = default)
@@ -64,7 +73,7 @@ public sealed class GenAiService(
             if (buffer.Length > Rules.GenAiMaxBytes) break;
         }
         var bytes = buffer.ToArray();
-        var result = GenAiChecker.Check(bytes, await ApprovedHostsAsync(ct));
+        var result = await CheckAsync(bytes, ct);
         if (!result.Passed) throw new RuleException("This file can't be published. " + string.Join(" ", result.Errors.Select((e, i) => $"({i + 1}) {e}")));
         return (bytes, result, await ScanAsync(bytes, ct));
     }
@@ -131,7 +140,7 @@ public sealed class GenAiService(
             await stream.CopyToAsync(ms, ct);
             bytes = ms.ToArray();
         }
-        var result = GenAiChecker.Check(bytes, await ApprovedHostsAsync(ct));
+        var result = await CheckAsync(bytes, ct);
         if (!result.Passed) throw new RuleException($"Version {versionNumber} no longer passes the checks, so it can't be restored. " + string.Join(" ", result.Errors));
         var scan = await ScanAsync(bytes, ct); // signatures change, so an old file is scanned again
         var number = await AddVersionAsync(d, bytes, source.FileName, actorUserId, $"Restored from version {versionNumber}.", scan, ct);
@@ -169,9 +178,10 @@ public sealed class GenAiService(
     {
         if (!await db.DashboardVersions.AnyAsync(v => v.DashboardId == d.Id && v.IsCurrent, ct))
             throw new Embedding.EmbedException("not-linked", "This GenAI dashboard has no file yet.");
-        var expires = clock.GetUtcNow().AddMinutes(Options.LinkMinutes);
+        var current = await settings.GetAsync(ct);
+        var expires = clock.GetUtcNow().AddMinutes(current.LinkMinutes);
         var token = Protector.Protect(d.Id.ToString(), expires);
-        return ($"{Options.BaseUrl.TrimEnd('/')}/{token}", expires);
+        return ($"{current.BaseUrl.TrimEnd('/')}/{token}", expires);
     }
 
     /// <summary>Opens the live file behind a link, or null when the link is invalid or expired, or the dashboard isn't Active.</summary>
@@ -185,7 +195,7 @@ public sealed class GenAiService(
             .Where(v => v.DashboardId == dashboardId && v.IsCurrent && v.Dashboard.Type == DashboardType.GenAi && v.Dashboard.Status == DashboardStatus.Active)
             .Select(v => v.FileKey).SingleOrDefaultAsync(ct);
         if (version is null) return null;
-        try { return new GenAiContent(files.OpenRead(version), PolicyFor(await ApprovedHostsAsync(ct), Options.FrameAncestors)); }
+        try { return new GenAiContent(files.OpenRead(version), PolicyFor(await ApprovedHostsAsync(ct), (await settings.GetAsync(ct)).FrameAncestors)); }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return null; }
     }
 

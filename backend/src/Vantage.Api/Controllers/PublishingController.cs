@@ -51,7 +51,7 @@ public sealed class PublishingController(
             },
             genAi = new
             {
-                maxBytes = Rules.GenAiMaxBytes, warnBytes = Rules.GenAiWarnBytes, versionsKept = Rules.VersionsKept,
+                maxBytes = Rules.GenAiMaxBytes, warnBytes = (await genAi.CurrentSettingsAsync(ct)).WarnBytes, versionsKept = Rules.VersionsKept,
                 approvedHosts = await genAi.ApprovedHostsAsync(ct),
             },
         });
@@ -177,7 +177,7 @@ public sealed class PublishingController(
         await using var stream = file.OpenReadStream();
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms, ct);
-        var result = GenAiChecker.Check(ms.ToArray(), await genAi.ApprovedHostsAsync(ct));
+        var result = await genAi.CheckAsync(ms.ToArray(), ct);
         return Ok(new { passed = result.Passed, result.Errors, result.Warnings, result.Libraries, result.SizeBytes });
     }
 

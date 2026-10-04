@@ -50,10 +50,23 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
         new(SettingKeys.HrmsSyncCron, "HRMS sync schedule (cron, UTC)", "Scheduled jobs", "cron", InUse: false, Note: ScheduledNote),
         new(SettingKeys.LeaverRevokeImmediately, "Leavers lose access as soon as the HRMS sync marks them Inactive", "Scheduled jobs", "bool", InUse: false, Note: ScheduledNote),
         new(SettingKeys.NewHireDigestFrequency, "New-hire digest", "Scheduled jobs", "choice", Options: ["Weekly", "Monthly", "Never"], InUse: false, Note: ScheduledNote),
+
+        // GenAI Config tab. Group names start with "GenAI" (the Settings tab hides them; the GenAI Config tab shows them).
+        new(SettingKeys.GenAiBaseUrl, "GenAI web address", GenAiGroupServing, "url"),
+        new(SettingKeys.GenAiFrameAncestors, "Portals allowed to show GenAI dashboards", GenAiGroupServing, "origins"),
+        new(SettingKeys.GenAiLinkMinutes, "Link lifetime (minutes)", GenAiGroupServing, "int", 1, 1440),
+        new(SettingKeys.GenAiWarnSizeMb, "Warn when a file is this big (MB)", GenAiGroupChecks, "int", 1, 5),
+        new(SettingKeys.GenAiScanHost, "Malware scanner host", GenAiGroupScan, "host"),
+        new(SettingKeys.GenAiScanPort, "Malware scanner port", GenAiGroupScan, "int", 1, 65535),
     ];
+
+    public const string GenAiGroupServing = "GenAI Serving";
+    public const string GenAiGroupChecks = "GenAI Upload Checks";
+    public const string GenAiGroupScan = "GenAI Malware Scan";
 
     private static readonly Regex Hex = new("^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
     private static readonly Regex Domain = new("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\\.[a-z]{2,}$", RegexOptions.Compiled);
+    private static readonly Regex HostName = new("^[A-Za-z0-9]([A-Za-z0-9.\\-]*[A-Za-z0-9])?$", RegexOptions.Compiled);
     private static readonly Regex CronField = new("^[0-9*/,\\-]+$", RegexOptions.Compiled);
 
     // ------------------------------------------------------------ Settings
@@ -93,6 +106,10 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
         return changes.Count;
     }
 
+    /// <summary>The cleaned value for a setting, or a RuleException saying what is wrong. Used by Save and by tests, which need no database for it.</summary>
+    internal static string NormaliseValue(string key, string? raw) =>
+        Normalise(Definitions.FirstOrDefault(d => d.Key == key) ?? throw new RuleException($"'{key}' is not a setting you can change here."), raw);
+
     private static string Normalise(Def d, string? raw)
     {
         var v = (raw ?? "").Trim();
@@ -116,6 +133,19 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
                 v = v.TrimStart('@').ToLowerInvariant();
                 if (!Domain.IsMatch(v)) throw new RuleException($"{d.Label} must be a domain like rrd.com.");
                 return v;
+            case "host":
+                if (v.Length == 0) return "";
+                if (v.Length > 253 || !HostName.IsMatch(v)) throw new RuleException($"{d.Label} must be a host name or address like clamav or 10.0.0.5, without http:// or a port, or blank.");
+                return v;
+            case "url":
+                if (v.Length == 0) return "";
+                return Origin(v) ?? throw new RuleException($"{d.Label} must be a web address like https://genai.example.com (no path, no login details), or blank.");
+            case "origins":
+                if (v.Length == 0) return "";
+                var origins = v.Split([' ', ',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(o => Origin(o) ?? throw new RuleException($"“{o}” isn't a portal address. Use addresses like https://portal.example.com, separated by spaces.")).Distinct().ToList();
+                if (origins.Count > 10) throw new RuleException($"{d.Label} can list up to 10 addresses.");
+                return string.Join(' ', origins);
             case "cron":
                 var parts = v.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length != 5 || parts.Any(p => !CronField.IsMatch(p))) throw new RuleException($"{d.Label} must be five fields like 0 2 1 * * (minute, hour, day of month, month, day of week).");
@@ -123,6 +153,14 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
             default:
                 return v;
         }
+    }
+
+    /// <summary>"https://host[:port]" for a plain web address (http or https, no wildcard, login details, path, query or fragment), else null.</summary>
+    internal static string? Origin(string value)
+    {
+        if (value.Contains('*') || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.AbsolutePath != "/") return null;
+        return uri.GetLeftPart(UriPartial.Authority);
     }
 
     private async Task SetAsync(Dictionary<string, SystemSetting> current, string key, string value, int actorId, CancellationToken ct)

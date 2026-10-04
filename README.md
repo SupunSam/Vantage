@@ -98,12 +98,19 @@ Tests: `cd backend && dotnet test Vantage.slnx`. The SQL Server tests run when `
 example `Server=localhost,1433;User Id=sa;Password=<MSSQL_SA_PASSWORD>;TrustServerCertificate=True`; each creates
 and drops its own database. GitHub Actions (`.github/workflows/ci.yml`) runs the same on every push and pull request.
 
-## Malware scan for GenAI uploads (optional)
+## GenAI settings and the malware scan (optional)
 
-Every GenAI file is always checked against the template and security rules. To also scan it for malware with ClamAV:
+Every GenAI file is always checked against the template and security rules. These settings live in the Admin Portal, under **Configuration, GenAI Config** (Super Admins only), and apply at once with no restart:
 
-1. In `deploy/.env` set `GENAI_SCAN_HOST=clamav`.
-2. Start with `docker compose -f deploy/docker-compose.yml --profile scan up -d --build`.
-3. The first start downloads virus signatures and takes a few minutes. Until the scanner is ready, GenAI uploads are refused with "The malware scanner couldn't be reached".
+- **Serving:** the GenAI web address, the portals allowed to show GenAI dashboards, and how long a dashboard's link works. Blank address fields use this environment's defaults (`GenAi__BaseUrl` and `GenAi__FrameAncestors`).
+- **Upload checks:** the file size that triggers a "loads slowly" warning.
+- **Malware scan:** the scanner host and port. Leave the host blank for no scan.
+- **Approved CDNs:** the hosts a GenAI page may load scripts and stylesheets from.
 
-With `GENAI_SCAN_HOST` empty (the default) no scan runs and each file version shows no scan note. In AWS point `GenAi__ScanHost` at the scanner service.
+To also scan uploads for malware with ClamAV locally:
+
+1. Start with `docker compose -f deploy/docker-compose.yml --profile scan up -d --build`.
+2. The first start downloads virus signatures and takes a few minutes.
+3. In the Admin Portal open **Configuration, GenAI Config**, set **Malware scanner host** to `clamav`, and save.
+
+Once a host is set, GenAI uploads are refused until the scanner is ready ("The malware scanner couldn't be reached"). With the host blank no scan runs and each file version shows no scan note. In AWS, set the host to the scanner service.

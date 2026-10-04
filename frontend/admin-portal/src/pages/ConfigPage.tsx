@@ -4,17 +4,17 @@ import { api, Icon, useSession } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "../ui";
 
 type Setting = {
-  key: string; label: string; group: string; kind: "text" | "int" | "bool" | "choice" | "color" | "cron" | "domain"; description: string; value: string; defaultValue: string;
+  key: string; label: string; group: string; kind: "text" | "int" | "bool" | "choice" | "color" | "cron" | "domain" | "host" | "url" | "origins"; description: string; value: string; defaultValue: string;
   min: number | null; max: number | null; options: string[] | null; inUse: boolean; note: string | null; updatedAtUtc: string | null; updatedBy: string | null;
 };
 type Cdn = { id: number; host: string; notes: string | null; isActive: boolean };
 type ServiceType = { type: string; displayName: string; isEnabled: boolean; requiresFile: boolean; allowedExtensions: string | null; maxFileSizeMb: number | null };
-type Config = { canEdit: boolean; settings: Setting[]; cdns: Cdn[]; types: ServiceType[]; logoMaxBytes: number };
+type Config = { canEdit: boolean; canEditGenAi: boolean; settings: Setting[]; cdns: Cdn[]; types: ServiceType[]; logoMaxBytes: number };
 
 const tabs = [
   { key: "branding", label: "Branding" },
   { key: "settings", label: "Settings" },
-  { key: "cdns", label: "Approved CDNs" },
+  { key: "genai", label: "GenAI Config" },
   { key: "types", label: "Dashboard Types" },
 ] as const;
 type Tab = (typeof tabs)[number]["key"];
@@ -23,7 +23,8 @@ type Tab = (typeof tabs)[number]["key"];
 export function ConfigPage() {
   const { data, error, reload } = useApi<Config>("/api/admin/config");
   const [search, setSearch] = useSearchParams();
-  const tab: Tab = (tabs.find((t) => t.key === search.get("tab"))?.key ?? "branding") as Tab;
+  const wanted = search.get("tab") === "cdns" ? "genai" : search.get("tab"); // the GenAI Config tab used to be "Approved CDNs"
+  const tab: Tab = (tabs.find((t) => t.key === wanted)?.key ?? "branding") as Tab;
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   if (error) return <Notice tone="error">{error}</Notice>;
@@ -50,8 +51,8 @@ export function ConfigPage() {
       {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       {tab === "branding" && <BrandingTab data={data} onDone={done} onError={(t) => say(false, t)} />}
-      {tab === "settings" && <SettingsTab data={data} onDone={done} onError={(t) => say(false, t)} />}
-      {tab === "cdns" && <CdnsTab data={data} onDone={done} onError={(t) => say(false, t)} />}
+      {tab === "settings" && <SettingsTab data={data} scope="general" onDone={done} onError={(t) => say(false, t)} />}
+      {tab === "genai" && <GenAiTab data={data} onDone={done} onError={(t) => say(false, t)} />}
       {tab === "types" && <TypesTab data={data} onDone={done} onError={(t) => say(false, t)} />}
     </>
   );
@@ -159,8 +160,11 @@ function ColorField({ label, value, onChange, disabled }: { label: string; value
 
 // ---------------------------------------------------------------- Settings
 
-function SettingsTab({ data, onDone, onError }: TabProps) {
-  const list = useMemo(() => data.settings.filter((s) => s.group !== "Branding"), [data.settings]);
+const isGenAi = (group: string) => group.startsWith("GenAI");
+
+/** The settings of one tab: "general" is everything except Branding and GenAI; "genai" is the GenAI Config settings. */
+function SettingsTab({ data, scope, onDone, onError }: TabProps & { scope: "general" | "genai" }) {
+  const list = useMemo(() => data.settings.filter((s) => (scope === "genai" ? isGenAi(s.group) : s.group !== "Branding" && !isGenAi(s.group))), [data.settings, scope]);
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(list.map((s) => [s.key, s.value])));
   const [busy, setBusy] = useState(false);
   useEffect(() => setValues(Object.fromEntries(list.map((s) => [s.key, s.value]))), [list]);
@@ -181,7 +185,7 @@ function SettingsTab({ data, onDone, onError }: TabProps) {
     <form className="stack" onSubmit={save}>
       {groups.map((g) => (
         <section key={g} className="panel stack">
-          <h2>{g}</h2>
+          <h2>{scope === "genai" ? g.replace(/^GenAI\s+/, "") : g}</h2>
           {list.filter((s) => s.group === g).map((s) => (
             <div key={s.key} className="cfg-setting">
               <div className="cfg-setting-text">
@@ -220,7 +224,23 @@ function SettingInput({ s, value, disabled, onChange }: { s: Setting; value: str
   if (s.kind === "int") {
     return <input type="number" inputMode="numeric" min={s.min ?? undefined} max={s.max ?? undefined} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={s.label} className="cfg-num" />;
   }
-  return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={s.label} className="cfg-text" placeholder={s.kind === "cron" ? "0 2 1 * *" : s.kind === "domain" ? "rrd.com" : undefined} />;
+  const placeholder = { cron: "0 2 1 * *", domain: "rrd.com", url: "https://genai.example.com", origins: "https://portal.example.com https://admin.example.com", host: "clamav" }[s.kind as string];
+  return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={s.label} className="cfg-text" placeholder={placeholder} />;
+}
+
+// ---------------------------------------------------------------- GenAI Config
+
+/** GenAI Config: how GenAI dashboards are served, checked and scanned, and which CDNs they may load libraries from. Super Admins only. */
+function GenAiTab({ data, onDone, onError }: TabProps) {
+  // These settings decide what code may run in front of staff, so only Super Admins can change them.
+  const genAiData = { ...data, canEdit: data.canEditGenAi };
+  return (
+    <div className="stack">
+      {data.canEdit && !data.canEditGenAi && <Notice>Only Super Admins can change the GenAI settings and the approved CDNs.</Notice>}
+      <SettingsTab data={genAiData} scope="genai" onDone={onDone} onError={onError} />
+      <CdnsTab data={genAiData} onDone={onDone} onError={onError} />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------- Approved CDNs
@@ -246,7 +266,7 @@ function CdnsTab({ data, onDone, onError }: TabProps) {
   return (
     <section className="panel stack">
       <h2>Approved CDNs</h2>
-      <p className="muted small">GenAI dashboards are a single HTML file. They may load libraries only from the hosts listed here. Pin library versions and use integrity hashes.</p>
+      <p className="muted small">GenAI dashboards are a single HTML file. They may load scripts and stylesheets only from the hosts listed here, at an exact version and with an integrity hash. The upload check enforces this.</p>
       {data.cdns.length === 0 ? <p className="pop-empty">No CDN is approved, so GenAI dashboards can't load any outside library.</p> : (
         <div className="requests-table-wrap">
           <table className="requests-table">

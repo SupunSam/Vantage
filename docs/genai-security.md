@@ -6,7 +6,7 @@ systems. Read it with `docs/requirements.md` before changing anything in `backen
 
 ## The short answer
 
-- **Only Super Admins publish a GenAI file.** The author hands the `.html` file to a Super Admin, who uploads it. The
+- **Only Super Admins publish a GenAI file or change the GenAI settings and approved CDNs.** The author hands the `.html` file to a Super Admin, who uploads it. The
   same applies to Modify Dashboard and Restore. Other roles, including those with the Publishing permission, are
   refused by the API (and don't see the GenAI tab).
 - **Every upload is vetted before it is stored, and a file that fails is blocked.** The same vetting runs on publish,
@@ -48,12 +48,30 @@ A restore runs the whole vetting again, so an old version that used a CDN since 
   Exact versions plus a short CDN list plus a Super Admin who recognises the libraries is the control.
 - It does not judge what the page displays.
 
+## Settings (Admin Configuration, GenAI Config tab)
+
+The GenAI values are data, not code, so they change without a redeploy. They are validated before saving, audited with the
+old and new value, applied at once, and **only Super Admins can change them or the approved CDN list** (the API refuses
+anyone else), because they decide what code may run in front of staff.
+
+| Setting | Meaning | Blank / default |
+| --- | --- | --- |
+| GenAI web address | The separate site GenAI pages load from (`https://host[:port]`, no path or login details) | Blank uses the environment's `GenAi:BaseUrl` |
+| Portals allowed to show GenAI dashboards | Origins in the policy's `frame-ancestors`, space separated, up to 10, no wildcards | Blank uses the environment's `GenAi:FrameAncestors` |
+| Link lifetime (minutes) | 1 to 1440 | 60 |
+| Warn when a file is this big (MB) | 1 to 5 (the hard maximum is on the Dashboard Types tab, never above 5) | 2 |
+| Malware scanner host / port | ClamAV (clamd). A host name or address only | Blank host uses the environment's `GenAi:ScanHost`, else no scan. Port 3310 |
+
+Deliberately **not** settings: the file-check rules and the policy's directives. They are in code, covered by tests, and
+change only through a reviewed code change and a recorded decision. A setting can't switch the security checks off. A
+blank scanner host in the portal falls back to the environment's, so the portal can't turn off a scan the environment requires.
+
 ## Layer 2: malware scan (`IFileScanner`, ClamAV)
 
-When `GenAi:ScanHost` is set, every upload and every restore is streamed to ClamAV (clamd). A flagged file is
+When a scanner host is set (GenAI Config, or `GenAi:ScanHost` in the environment), every upload and every restore is streamed to ClamAV (clamd). A flagged file is
 refused with the signature name; the clean result is stored on the file version (`ScanStatus`, `ScanReport`) and shown
 in File Versions. If a scanner is configured but can't answer, the upload is refused (fail closed), so nothing is
-accepted unscanned by accident. When `GenAi:ScanHost` is empty (the local default) no scan runs, the version's status is
+accepted unscanned by accident. When no scanner host is set anywhere (the local default) no scan runs, the version's status is
 `NotRequired`, and the vetting is the file check plus containment. Production should always set it. ClamAV finds known
 malware signatures; it will not find a novel malicious script, so it adds to the layers around it and does not replace them.
 
@@ -61,8 +79,8 @@ malware signatures; it will not find a novel malicious script, so it adds to the
 
 | Control | Where | What it stops |
 | --- | --- | --- |
-| **Separate origin** (`GenAi:BaseUrl`: `http://localhost:8082` locally, a dedicated domain in AWS) with its own nginx listener | `deploy/genai.nginx.conf`, `GenAiContentController` | The page can't read the portals' cookies, storage or session, or call `/api` as the viewer. GET only |
-| **Signed, expiring link** (default 60 minutes, `GenAi:LinkMinutes`) | `GenAiService.LinkAsync/OpenAsync` | The file is never public. Issued only after the normal membership check (or a Super Admin preview). A forged, tampered or expired link serves nothing |
+| **Separate origin** (GenAI web address: `http://localhost:8082` locally, a dedicated domain in AWS) with its own nginx listener | `deploy/genai.nginx.conf`, `GenAiContentController` | The page can't read the portals' cookies, storage or session, or call `/api` as the viewer. GET only |
+| **Signed, expiring link** (default 60 minutes, the Link lifetime setting) | `GenAiService.LinkAsync/OpenAsync` | The file is never public. Issued only after the normal membership check (or a Super Admin preview). A forged, tampered or expired link serves nothing |
 | **Only Active dashboards are served** | `GenAiService.OpenAsync` | A retired dashboard stops being served at once |
 | **Content-Security-Policy** | `GenAiService.PolicyFor` | `default-src 'none'`; scripts, styles, fonts and images only from the page itself (inline) or approved CDNs; **no `unsafe-eval`**, so `eval`/`new Function` fail even if obfuscated; `connect-src 'none'`; `form-action 'none'`; `object-src 'none'`; `frame-src 'none'`; `base-uri 'none'`; `frame-ancestors` only the two portals |
 | **CSP `sandbox allow-scripts`** | `GenAiService.PolicyFor` | Even if someone opens the link directly: no same-origin rights, storage or cookies, no pop-ups, downloads, forms or top-window navigation |
@@ -88,7 +106,7 @@ malware signatures; it will not find a novel malicious script, so it adds to the
    that file.
 4. **A compromised Super Admin account** can publish a page. The sandbox limits what it can do, and the audit log
    records who published it.
-5. **Without a configured scanner** there is no malware scan. Set `GenAi:ScanHost` in every shared environment.
+5. **Without a configured scanner** there is no malware scan. Set the scanner host in every shared environment.
 
 ## Options not built
 
@@ -96,7 +114,7 @@ malware signatures; it will not find a novel malicious script, so it adds to the
 - Run a real JavaScript parser (an AST check) in place of patterns, which closes the obfuscation gap for code that is
   visible in the file.
 - Require a second Super Admin to approve a file before it goes live.
-- Shorter links (`GenAi:LinkMinutes`).
+- Shorter links (the Link lifetime setting).
 - In AWS: a dedicated registrable domain (not a subdomain of the portal's), CloudFront in front, the policy also set at
   the edge, S3 private, a WAF, and the GenAI origin included in the planned penetration test.
 

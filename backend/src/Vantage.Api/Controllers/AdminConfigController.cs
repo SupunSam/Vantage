@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Vantage.Api.Auth;
 using Vantage.Domain;
 using Vantage.Infrastructure.Services;
+using Vantage.Infrastructure.Settings;
 
 namespace Vantage.Api.Controllers;
 
@@ -24,8 +25,12 @@ public sealed class AdminConfigController(CurrentUser current, ConfigService con
             cdns = await config.CdnsAsync(ct),
             types = await config.TypesAsync(ct),
             logoMaxBytes = ConfigService.LogoMaxBytes,
+            canEditGenAi = me.IsSuperAdmin && me.Can(AppModules.AdminConfig, PermissionLevel.Edit),
         });
     }
+
+    /// <summary>GenAI settings and the approved CDN list decide what code may run in front of staff, so only Super Admins change them.</summary>
+    private IActionResult GenAiSuperAdminOnly() => StatusCode(403, new { message = "Only Super Admins can change the GenAI settings and the approved CDNs." });
 
     public sealed record SettingsBody(Dictionary<string, string?> Values);
 
@@ -34,6 +39,7 @@ public sealed class AdminConfigController(CurrentUser current, ConfigService con
     {
         if (await RequireAsync(AppModules.AdminConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
         var me = (await Current.GetAsync(ct))!;
+        if ((body.Values ?? []).Keys.Any(k => k.StartsWith(SettingKeys.GenAiPrefix, StringComparison.Ordinal)) && !me.IsSuperAdmin) return GenAiSuperAdminOnly();
         return await Guard(async () => Ok(new { changed = await config.UpdateAsync(body.Values ?? [], me.Id, ct) }));
     }
 
@@ -65,6 +71,7 @@ public sealed class AdminConfigController(CurrentUser current, ConfigService con
     public async Task<IActionResult> AddCdn(CdnBody body, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.AdminConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (!(await Current.GetAsync(ct))!.IsSuperAdmin) return GenAiSuperAdminOnly();
         return await Guard(async () => Ok(await config.AddCdnAsync(body.Host, body.Notes, ct)));
     }
 
@@ -72,6 +79,7 @@ public sealed class AdminConfigController(CurrentUser current, ConfigService con
     public async Task<IActionResult> UpdateCdn(int id, CdnBody body, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.AdminConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (!(await Current.GetAsync(ct))!.IsSuperAdmin) return GenAiSuperAdminOnly();
         return await Guard(async () => { await config.UpdateCdnAsync(id, body.Notes, body.IsActive, ct); return NoContent(); });
     }
 
@@ -79,6 +87,7 @@ public sealed class AdminConfigController(CurrentUser current, ConfigService con
     public async Task<IActionResult> RemoveCdn(int id, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.AdminConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (!(await Current.GetAsync(ct))!.IsSuperAdmin) return GenAiSuperAdminOnly();
         return await Guard(async () => { await config.RemoveCdnAsync(id, ct); return NoContent(); });
     }
 

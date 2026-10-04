@@ -10,6 +10,7 @@ using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.Embedding;
 using Vantage.Infrastructure.GenAi;
 using Vantage.Infrastructure.Services;
+using Vantage.Infrastructure.Settings;
 using Vantage.Infrastructure.Storage;
 
 namespace Vantage.Tests;
@@ -17,10 +18,12 @@ namespace Vantage.Tests;
 /// <summary>Builds a <see cref="GenAiService"/> over a throwaway file store, for tests that also need an EmbedService.</summary>
 internal static class GenAiTestKit
 {
-    public static GenAiService Service(AppDbContext db, AuditWriter audit, TimeProvider clock, int linkMinutes = 60, IFileStore? files = null, IFileScanner? scanner = null) =>
+    public static GenAiService Service(AppDbContext db, AuditWriter audit, TimeProvider clock, IFileStore? files = null, IFileScanner? scanner = null) =>
         new(db, files ?? new LocalFileStore(Path.Combine(Path.GetTempPath(), "vantage-tests", Guid.NewGuid().ToString("N"))),
-            DataProtectionProvider.Create("vantage-tests"), Options.Create(new GenAiOptions { BaseUrl = "http://genai.test/", LinkMinutes = linkMinutes }),
-            audit, new NotificationService(db, clock), scanner ?? new NoFileScanner(), clock);
+            DataProtectionProvider.Create("vantage-tests"), Settings(db), audit, new NotificationService(db, clock), scanner ?? new NoFileScanner(), clock);
+
+    /// <summary>Settings as the app reads them: Admin Configuration first, then this deployment fallback.</summary>
+    public static GenAiSettings Settings(AppDbContext db) => new(db, Options.Create(new GenAiOptions { BaseUrl = "http://genai.test/" }));
 }
 
 /// <summary>GenAI dashboards: publishing, Modify Dashboard, restore, signed links and what gets served.</summary>
@@ -54,13 +57,13 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
     private static byte[] Html(string marker = "ok") =>
         Encoding.UTF8.GetBytes($"""<!DOCTYPE html><html><head><meta name="vantage-template" content="genai-1"><title>{marker}</title></head><body>{marker}</body></html>""");
 
-    private async Task<Kit> ArrangeAsync(int linkMinutes = 60, IFileScanner? scanner = null)
+    private async Task<Kit> ArrangeAsync(IFileScanner? scanner = null)
     {
         var db = fx.CreateContext();
         var clock = TimeProvider.System;
         var audit = new AuditWriter(db, new Ctx(), clock);
         var files = new LocalFileStore(Path.Combine(Path.GetTempPath(), "vantage-tests", Guid.NewGuid().ToString("N")));
-        var genAi = GenAiTestKit.Service(db, audit, clock, linkMinutes, files, scanner);
+        var genAi = GenAiTestKit.Service(db, audit, clock, files, scanner);
 
         var owner = new User { Email = Unique("o") + "@rrd.com", DisplayName = Unique("Owner "), UserType = UserType.Internal, CreatedAtUtc = DateTime.UtcNow };
         var member = new User { Email = Unique("m") + "@rrd.com", DisplayName = Unique("Member "), UserType = UserType.Internal, CreatedAtUtc = DateTime.UtcNow };
@@ -287,10 +290,23 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         await k.Db.SaveChangesAsync();
         Assert.Null(await k.GenAi.OpenAsync(token));
 
-        await using var expired = await ArrangeAsync(linkMinutes: -1);
-        var id2 = (await PublishAsync(expired)).DashboardId;
-        var (url2, _) = await expired.GenAi.LinkAsync(await expired.Db.Dashboards.SingleAsync(x => x.Id == id2));
-        Assert.Null(await expired.GenAi.OpenAsync(url2[(url2.LastIndexOf('/') + 1)..]));
+        // A link whose lifetime has already run out (the setting is checked when saved in the UI; here it's forced in the table).
+        var linkSetting = await k.Db.SystemSettings.SingleAsync(x => x.Key == SettingKeys.GenAiLinkMinutes);
+        var original = linkSetting.Value;
+        linkSetting.Value = "-1";
+        await k.Db.SaveChangesAsync();
+        try
+        {
+            await using var expired = await ArrangeAsync();
+            var id2 = (await PublishAsync(expired)).DashboardId;
+            var (url2, _) = await expired.GenAi.LinkAsync(await expired.Db.Dashboards.SingleAsync(x => x.Id == id2));
+            Assert.Null(await expired.GenAi.OpenAsync(url2[(url2.LastIndexOf('/') + 1)..]));
+        }
+        finally
+        {
+            linkSetting.Value = original;
+            await k.Db.SaveChangesAsync();
+        }
     }
 
     private sealed class FakeScanner(ScanStatus status, string? report) : IFileScanner

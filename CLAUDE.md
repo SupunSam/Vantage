@@ -166,10 +166,11 @@ depends on them:
 - **GenAI dashboards** (C32).
   - One `.html` file from the approved starter template (marker `vantage-template`/`genai-1`), 5 MB max, warning from 2 MB.
   - Only Super Admins publish, modify or restore a GenAI file (C33); the API refuses anyone else.
-  - `GenAiChecker` is the upload check: approved active CDNs over HTTPS at an exact version with an integrity hash, nothing relative, no links to other sites, no frames/objects/base/redirects, and banned code patterns. `IFileScanner` (ClamAV when `GenAi:ScanHost` is set, fail closed) scans every upload and restore. Publishing, Modify and Restore all run both; a failure changes nothing. `GenAiService` keeps the versions and signs the links; `GenAiPublisher` creates the dashboard.
+  - `GenAiChecker` is the upload check: approved active CDNs over HTTPS at an exact version with an integrity hash, nothing relative, no links to other sites, no frames/objects/base/redirects, and banned code patterns. `IFileScanner` (ClamAV when a scanner host is set, fail closed) scans every upload and restore. Publishing, Modify and Restore all run both; a failure changes nothing. `GenAiService` keeps the versions and signs the links; `GenAiPublisher` creates the dashboard.
+  - GenAI values (web address, frame ancestors, link lifetime, warn size, scanner host/port) are settings on the Admin Configuration **GenAI Config** tab (C34), read through `GenAiSettings` on each use: Admin Configuration first, then the environment's `GenAi:*` for blank addresses and scanner host. Only Super Admins change them or the CDN list. The file-check rules and CSP directives stay in code. Don't read `IOptions<GenAiOptions>` directly.
   - Keep the starter template passing the checker (a test enforces it). Rule words also trip the checker inside comments.
-  - They are served only from the separate origin (`GenAi:BaseUrl`) via `GenAiContentController`, with the strict CSP and `sandbox allow-scripts` from `GenAiService.PolicyFor`. Never serve the file from the portals' origin or through `/api`.
-  - The portals frame it with `GenAiFrame` (`sandbox="allow-scripts"`, never `allow-same-origin`). Don't widen the sandbox, the CSP or `GenAi:FrameAncestors` without a recorded decision.
+  - They are served only from the separate origin (the GenAI web address) via `GenAiContentController`, with the strict CSP and `sandbox allow-scripts` from `GenAiService.PolicyFor`. Never serve the file from the portals' origin or through `/api`.
+  - The portals frame it with `GenAiFrame` (`sandbox="allow-scripts"`, never `allow-same-origin`). Don't widen the sandbox or the CSP without a recorded decision.
   - A link is issued only after the normal membership check (or Super Admin preview) and is the only way in. The view row is written when the link is issued, as for Power BI. Not Active means not served.
   - Security write-up, including what the check does NOT do and the open hardening options: `docs/genai-security.md`. Keep it in step with any change here.
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
@@ -210,7 +211,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C34) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C35) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
