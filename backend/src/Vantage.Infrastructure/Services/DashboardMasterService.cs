@@ -72,6 +72,16 @@ public sealed class DashboardMasterService(
         foreach (var userId in oldOwners.Union(newOwners).Distinct())
             await ownership.SyncOwnerRoleAsync(userId, ct);
 
+        // A dashboard made Inactive because its owners left comes back as soon as a Super Admin names a new (active) owner (C43).
+        // One that was made Inactive for any other reason stays as it is.
+        var reactivated = d.OwnershipPendingReview && d.Status == DashboardStatus.Inactive;
+        if (reactivated)
+        {
+            d.Status = DashboardStatus.Active;
+            d.OwnershipPendingReview = false;
+            audit.Add("dashboard.reactivated-new-owner", "Dashboard", id, id, new { primaryOwnerId = primary, backupOwnerId = backup });
+        }
+
         audit.Add("dashboard.updated", "Dashboard", id, id, new
         {
             before,

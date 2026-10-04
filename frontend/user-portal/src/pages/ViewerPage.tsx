@@ -110,7 +110,7 @@ export function ViewerPage() {
   return (
     <div className="viewer">
       <div className="viewer-bar">
-        <Link to="/" className="btn">My Dashboards</Link>
+        <Link to="/" className="btn">Home</Link>
         <h1>{info?.name ?? (failure && "name" in failure ? failure.name : null) ?? "Dashboard"}</h1>
       </div>
 

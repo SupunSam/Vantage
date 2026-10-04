@@ -10,7 +10,7 @@ Everything runs in Docker: SQL Server, the API, the Admin Portal and the User Po
 - **User Portal: http://localhost:8081**. The home page shows the dashboards the signed-in user can open.
 - **Emails: http://localhost:8025** (Mailpit). Every email Vantage sends lands here instead of a real inbox.
 
-The sign-in picker stands in for ADFS and Cognito in this local build. Both portals share one layout: a sidebar
+The sign-in page offers Login as Internal User or Login as External User; each opens a picker of seeded users that stands in for ADFS and Cognito in this local build. Log Out (top bar) returns to the sign-in page, and signing in always starts on Home. Both portals share one layout: a sidebar
 that collapses to icons (the menu button at the top left), with notifications and the user menu at the top right.
 
 ## What's in this step
@@ -46,7 +46,7 @@ Work through the **Setup** page in order:
 In the User Portal, the home page shows thumbnail cards (newest first), a category view and a sortable list, with
 search and up to 12 pins. The **Dashboard Catalogue** lists every dashboard the user may see; for ones they can't open
 they click **Request Access** and give a reason. Owners get a bell notification and an email, and decide under
-**As an Owner → Access Requests**: on dashboards with RLS they choose the access group (which decides the data the
+**Owner Workspace → Access Requests**: on dashboards with RLS they choose the access group (which decides the data the
 person sees), otherwise the person joins the default group. The requester is notified and emailed either way.
 Personal folders and monthly owner reviews come in later steps.
 

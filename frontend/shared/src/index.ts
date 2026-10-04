@@ -1,6 +1,6 @@
 export * from "./api";
 export * from "./session";
-export * from "./DevSignIn";
+export * from "./SignInPage";
 export * from "./TypeGlyph";
 export * from "./Icon";
 export * from "./Shell";
@@ -13,3 +13,4 @@ export * from "./Pager";
 export * from "./TrendChart";
 export * from "./AnalyticsViews";
 export * from "./TableauViz";
+export * from "./TypeIcon";

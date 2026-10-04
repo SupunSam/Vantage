@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { can, Icon, Thumbnail, useSession } from "@vantage/shared";
+import { can, Icon, Thumbnail, TypeIcon, useSession } from "@vantage/shared";
 import { Notice, StatusPill, useApi, when } from "../ui";
 
 type Row = {
@@ -10,7 +10,6 @@ type Row = {
   publishedAtUtc: string | null; createdAtUtc: string; groups: number; needsRls: boolean; members: number; myGroup: string | null;
 };
 
-const typeLabel: Record<string, string> = { PowerBi: "Power BI", Tableau: "Tableau", GenAi: "GenAI" };
 
 /** Dashboards Master: every dashboard with its category, RLS flag, owners and groups. Open one to edit it. */
 export function DashboardsPage() {
@@ -83,7 +82,7 @@ export function DashboardsPage() {
           <div className="table-wrap">
             <table className="grid grid-rows">
               <thead>
-                <tr><th className="col-thumb"><span className="visually-hidden">Thumbnail</span></th><th>Dashboard</th><th>Category</th><th>RLS</th><th>Owners</th><th className="num">Groups</th><th className="num">Members</th><th>Status</th><th>Published</th></tr>
+                <tr><th className="col-thumb"><span className="visually-hidden">Thumbnail</span></th><th>Dashboard</th><th>Primary Category</th><th>Type</th><th>RLS</th><th>Owners</th><th className="num">Groups</th><th className="num">Members</th><th>Status</th><th>Published</th></tr>
               </thead>
               <tbody>
                 {rows.map((d) => (
@@ -91,9 +90,10 @@ export function DashboardsPage() {
                     <td className="col-thumb"><div className="mini-thumb"><Thumbnail dashboardId={d.id} version={d.thumbnail} type={d.type} /></div></td>
                     <td>
                       <Link to={`/dashboards/${d.id}`} onClick={(e) => e.stopPropagation()}>{d.name}</Link>
-                      <div className="muted small">{d.code} (#{d.id}), {typeLabel[d.type] ?? d.type}</div>
+                      <div className="muted small">{d.code} (#{d.id})</div>
                     </td>
-                    <td className="small">{d.categoryPath ?? <span className="warn-text">No category</span>}</td>
+                    <td className="small" title={d.categoryPath ?? undefined}>{d.categoryPath ? d.categoryPath.split(" / ")[0] : <span className="warn-text">No category</span>}</td>
+                    <td className="small"><TypeIcon type={d.type} /></td>
                     <td>
                       {d.rlsEnabled ? <span className="yn yn-yes">Y</span> : <span className="yn">N</span>}
                       {d.needsRls && <span className="warn-text small" title="A group on this dashboard has no RLS value"> needs a value</span>}

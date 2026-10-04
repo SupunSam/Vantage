@@ -54,13 +54,13 @@ export function UsersPage() {
       <div className="page-head">
         <div>
           <h1>Users</h1>
-          <p>Internal users (@rrd.com) are filled from HRMS. External users get an email to set up their sign-in and complete their details.</p>
+          <p>Only Super Admins create users; nobody is created automatically at sign-in. Internal users (@rrd.com) are filled from HRMS. External users get an email to set up their sign-in and complete their details.</p>
         </div>
         {canEdit && (
           <div className="actions">
             <button className="btn" type="button" onClick={() => void syncHrms()} disabled={syncing}>{syncing ? "Syncing…" : "Run HRMS Sync"}</button>
-            <button className="btn" type="button" onClick={() => setDialog("bulk")}>Add Many</button>
-            <button className="btn btn-primary" type="button" onClick={() => setDialog("add")}>Add User</button>
+            {me?.isSuperAdmin && <button className="btn" type="button" onClick={() => setDialog("bulk")}>Add Many</button>}
+            {me?.isSuperAdmin && <button className="btn btn-primary" type="button" onClick={() => setDialog("add")}>Add User</button>}
           </div>
         )}
       </div>

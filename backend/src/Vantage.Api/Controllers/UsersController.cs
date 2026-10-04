@@ -10,7 +10,7 @@ using Vantage.Infrastructure.Services;
 namespace Vantage.Api.Controllers;
 
 [Route("api/admin/users")]
-public sealed class UsersController(CurrentUser current, AppDbContext db, UserService users, JobRunner jobs) : AdminControllerBase(current)
+public sealed class UsersController(CurrentUser current, AppDbContext db, UserService users, JobRunner jobs, OwnerDepartureService departures) : AdminControllerBase(current)
 {
     [HttpGet]
     public async Task<IActionResult> List(string? search, string? type, string? status, int? roleId, int page = 1, int pageSize = 25, CancellationToken ct = default)
@@ -114,6 +114,7 @@ public sealed class UsersController(CurrentUser current, AppDbContext db, UserSe
     public async Task<IActionResult> Create(CreateBody body, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Users, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireSuperAdminAsync("add users", ct) is { } notSuper) return notSuper;
         return await Guard(async () =>
         {
             var u = await users.CreateAsync(new NewUserInput(body.Email, body.FirstName, body.LastName, body.ContactNumber, body.TimeZone,
@@ -129,6 +130,7 @@ public sealed class UsersController(CurrentUser current, AppDbContext db, UserSe
     public async Task<IActionResult> Bulk(BulkBody body, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Users, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireSuperAdminAsync("add users", ct) is { } notSuper) return notSuper;
         var emails = body.Emails.Split(['\n', '\r', ',', ';', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (emails.Length == 0) return BadRequest(new { message = "Paste at least one email address." });
         if (emails.Length > 5000) return BadRequest(new { message = "Up to 5,000 emails at a time." });
@@ -140,6 +142,7 @@ public sealed class UsersController(CurrentUser current, AppDbContext db, UserSe
     public async Task<IActionResult> BulkExcel(IFormFile file, [FromForm] List<int>? roleIds, [FromForm] string? serviceNowReference, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Users, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireSuperAdminAsync("add users", ct) is { } notSuper) return notSuper;
         var rows = new List<(string, string?)>();
         try
         {
@@ -202,6 +205,8 @@ public sealed class UsersController(CurrentUser current, AppDbContext db, UserSe
         {
             await users.UpdateAsync(id, new UpdateUserInput(body.FirstName, body.LastName, body.DisplayName, body.ContactNumber, body.TimeZone,
                 body.TableauUserName, body.ServiceNowReference, body.Status, body.RoleIds ?? []), Current.UserId, ct);
+            // Setting someone Inactive may leave a dashboard with no owner who can act; it then goes Inactive until new owners are named (C43).
+            if (body.Status == UserStatus.Inactive) await departures.ReviewAsync(ct);
             return NoContent();
         });
     }

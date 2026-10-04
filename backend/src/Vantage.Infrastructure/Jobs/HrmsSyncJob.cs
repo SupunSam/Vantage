@@ -9,15 +9,15 @@ using Vantage.Infrastructure.Settings;
 namespace Vantage.Infrastructure.Jobs;
 
 /// <summary>What the HRMS job did, for the caller of Run Now and the Users page.</summary>
-public sealed record HrmsJobResult(HrmsSyncSummary Sync, int LeaversRevoked, int MembershipsEnded, List<RuleRunResult> Rules);
+public sealed record HrmsJobResult(HrmsSyncSummary Sync, int LeaversRevoked, int MembershipsEnded, List<RuleRunResult> Rules, List<OrphanedDashboard> InactivatedForNoOwner);
 
 /// <summary>
 /// The HRMS job (monthly by default): refreshes profiles and marks leavers Inactive (<see cref="HrmsSyncService"/>), then,
 /// when "Leavers lose access" is on, ends the leavers' group memberships, then runs the access group rules so the owners hear about
-/// anyone the fresh data puts inside a rule. It never creates users (people are added in Users; U5 is still open).
+/// anyone the fresh data puts inside a rule. Dashboards left with no active owner are made Inactive (C43). It never creates users (people are added in Users; U5 is still open).
 /// Inactive already stops sign-in at once, so there is no separate session to end.
 /// </summary>
-public sealed class HrmsSyncJob(AppDbContext db, HrmsSyncService sync, AccessGroupRuleService rules, AuditWriter audit, NotificationService notifications,
+public sealed class HrmsSyncJob(AppDbContext db, HrmsSyncService sync, AccessGroupRuleService rules, OwnerDepartureService departures, AuditWriter audit, NotificationService notifications,
     TimeProvider clock, ILogger<HrmsSyncJob> log) : IScheduledJob
 {
     public const string JobName = "hrms-sync";
@@ -34,6 +34,9 @@ public sealed class HrmsSyncJob(AppDbContext db, HrmsSyncService sync, AccessGro
         int revoked = 0, ended = 0;
         if (await JobSettings.GetBoolAsync(db, SettingKeys.LeaverRevokeImmediately, ct))
             (revoked, ended) = await RevokeLeaversAsync(summary.DeactivatedEmails, ct);
+
+        // A dashboard whose owners have both left can't run its owner workflow, so it goes Inactive until a Super Admin names new owners (C43).
+        var orphaned = await departures.ReviewAsync(ct);
 
         // Fresh HRMS data may put new people inside a rule. This sends proposals to the owners; nothing changes until they approve.
         List<RuleRunResult> ruleResults = [];
@@ -55,8 +58,9 @@ public sealed class HrmsSyncJob(AppDbContext db, HrmsSyncService sync, AccessGro
                    + (summary.SkippedManual > 0 ? $" ({summary.SkippedManual} left alone: status set by hand)" : "")
                    + (summary.NotInHrms > 0 ? $", {summary.NotInHrms} not found in HRMS" : "") + ". "
                    + (revoked > 0 ? $"Access ended for {JobRules.Plural(revoked, "leaver")} ({JobRules.Plural(ended, "group membership")}). " : "")
+                   + (orphaned.Count > 0 ? $"{JobRules.Plural(orphaned.Count, "dashboard")} made Inactive because {(orphaned.Count == 1 ? "its owners have" : "their owners have")} left. " : "")
                    + rulesText;
-        return new JobOutcome(text, new HrmsJobResult(summary, revoked, ended, ruleResults));
+        return new JobOutcome(text, new HrmsJobResult(summary, revoked, ended, ruleResults, orphaned));
     }
 
     /// <summary>

@@ -258,7 +258,7 @@ public class ScheduledJobTests(SqlServerFixture fx) : IClassFixture<SqlServerFix
         var email = new EmailOutboxService(db, Options.Create(new EmailOptions()), clock);
         var requests = new GroupAddRequestService(db, access, notifications, email, audit, clock);
         var rules = new AccessGroupRuleService(db, access, requests, audit, clock);
-        var job = new HrmsSyncJob(db, new HrmsSyncService(db, audit, clock), rules, audit, notifications, clock, NullLogger<HrmsSyncJob>.Instance);
+        var job = new HrmsSyncJob(db, new HrmsSyncService(db, audit, clock), rules, new OwnerDepartureService(db, audit, notifications, email, clock), audit, notifications, clock, NullLogger<HrmsSyncJob>.Instance);
         return new HrmsKit(db, job, new JobRunner(db, [job], audit, notifications, clock, NullLogger<JobRunner>.Instance));
     }
 
@@ -323,6 +323,9 @@ public class ScheduledJobTests(SqlServerFixture fx) : IClassFixture<SqlServerFix
 
         Assert.Equal(UserStatus.Inactive, (await db.Users.AsNoTracking().SingleAsync(u => u.Id == ownerLeaver.Id)).Status);
         Assert.True(await LiveAsync(db, group.Id, ownerLeaver.Id));
+        var orphan = await db.Dashboards.AsNoTracking().SingleAsync(x => x.Id == dashboard.Id);     // their only owner left, so it can't run its owner workflow (C43)
+        Assert.Equal(DashboardStatus.Inactive, orphan.Status);
+        Assert.True(orphan.OwnershipPendingReview);
         Assert.Equal(1, await db.Notifications.CountAsync(n => n.UserId == superAdmin.Id && n.Type == "hrms.leaver-owns-dashboards" && n.Body!.Contains(email)));
 
         await k.Runner.RunNowAsync(HrmsSyncJob.JobName, null);                          // no new leaver this time, so no second notice

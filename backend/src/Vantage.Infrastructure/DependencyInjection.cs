@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<TableauTokenService>();
         services.AddScoped<AuditWriter>();
         services.AddScoped<OwnershipService>();
+        services.AddScoped<OwnerDepartureService>();
         services.AddScoped<DashboardFactory>();
         services.Configure<GenAiOptions>(config.GetSection("GenAi"));
         services.AddScoped<GenAiSettings>();
@@ -66,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<AccessGroupRuleService>();
         services.AddScoped<ConfigService>();
         services.AddScoped<AnalyticsService>();
+        services.AddScoped<AdminHomeService>();
         services.AddScoped<PersonalFolderService>();
         // Email: queued in the outbox table and sent by a background worker (Mailpit locally, SES in AWS).
         services.Configure<EmailOptions>(config.GetSection("Email"));

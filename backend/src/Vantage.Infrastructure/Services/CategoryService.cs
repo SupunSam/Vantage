@@ -7,6 +7,9 @@ namespace Vantage.Infrastructure.Services;
 
 public sealed record CategoryNode(int Id, string Name, int? ParentId, int Level, int SortOrder, string Path, int DashboardCount, int ChildCount);
 
+/// <summary>One step of a category's route from its primary category down to itself, in the order the admins set.</summary>
+public sealed record CategoryRef(int Id, string Name, int SortOrder);
+
 /// <summary>
 /// Category Master: a three-level tree (Primary, Secondary, Tertiary). Names are unique within their parent.
 /// A category that still holds dashboards (any status, retired included) or sub-categories can't be deleted.
@@ -40,6 +43,30 @@ public sealed class CategoryService(AppDbContext db, AuditWriter audit, TimeProv
         Walk(null, "");
         return result;
     }
+
+    /// <summary>
+    /// For every category, the route from its primary category down to itself (primary first). The User Portal builds its folder-style
+    /// category browser from these. A cycle or a missing parent (which the data rules prevent) just ends the route early.
+    /// </summary>
+    public static Dictionary<int, List<CategoryRef>> BuildChains(IEnumerable<CategoryNode> nodes)
+    {
+        var byId = nodes.ToDictionary(n => n.Id);
+        var chains = new Dictionary<int, List<CategoryRef>>();
+        foreach (var node in byId.Values)
+        {
+            var chain = new List<CategoryRef>();
+            var current = node;
+            for (var steps = 0; current is not null && steps <= Rules.CategoryLevels; steps++)
+            {
+                chain.Insert(0, new CategoryRef(current.Id, current.Name, current.SortOrder));
+                current = current.ParentId is { } p && byId.TryGetValue(p, out var parent) ? parent : null;
+            }
+            chains[node.Id] = chain;
+        }
+        return chains;
+    }
+
+    public async Task<Dictionary<int, List<CategoryRef>>> ChainsAsync(CancellationToken ct = default) => BuildChains(await ListAsync(ct));
 
     /// <summary>Full path ("Finance / Payroll / Monthly") of every category, keyed by ID.</summary>
     public async Task<Dictionary<int, string>> PathsAsync(CancellationToken ct = default) =>

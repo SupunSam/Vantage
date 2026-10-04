@@ -23,6 +23,14 @@ public abstract class AdminControllerBase(CurrentUser current) : ControllerBase
         return StatusCode(403, new { message = $"You need {level} permission on {name}." });
     }
 
+    /// <summary>Returns an error result unless the signed-in user is a Super Admin. For the few things only Super Admins do (publishing, creating users).</summary>
+    protected async Task<IActionResult?> RequireSuperAdminAsync(string what, CancellationToken ct)
+    {
+        var me = await Current.GetAsync(ct);
+        if (me is null) return Unauthorized();
+        return me.IsSuperAdmin ? null : StatusCode(403, new { message = $"Only Super Admins can {what}." });
+    }
+
     /// <summary>Runs an action and turns rule breaks into 400, missing records into 404 and BI platform errors into 502.</summary>
     protected async Task<IActionResult> Guard(Func<Task<IActionResult>> action)
     {

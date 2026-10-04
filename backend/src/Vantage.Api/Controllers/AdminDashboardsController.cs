@@ -77,7 +77,7 @@ public sealed class AdminDashboardsController(
             tags = x.Tags.Select(t => t.Tag).OrderBy(t => t).ToList(),
             audience = x.Audience.ToString(), dataClassification = x.DataClassification.ToString(),
             x.SharePointFolder, x.SharePointSubFolder, x.ThumbnailKey,
-            x.TenantId, x.TableauViewUrl,
+            x.TenantId, x.TableauViewUrl, x.OwnershipPendingReview,
             x.PowerBiReportId, x.PowerBiDatasetId, x.PublishedAtUtc, x.CreatedAtUtc, x.UpdatedAtUtc,
             groups = x.Groups.OrderByDescending(g => g.IsDefault).ThenBy(g => g.Name).Select(g => new
             {
@@ -102,7 +102,7 @@ public sealed class AdminDashboardsController(
             canPreview = me.IsSuperAdmin,
             canEdit = me.Can(AppModules.DashboardConfig, PermissionLevel.Edit),
             canEditGroups = me.Can(AppModules.Groups, PermissionLevel.Edit),
-            canModify = me.Can(AppModules.Publishing, PermissionLevel.Edit),
+            canModify = me.IsSuperAdmin && me.Can(AppModules.Publishing, PermissionLevel.Edit),   // Super Admins are the publishers (C40)
             isSuperAdmin = me.IsSuperAdmin,
             versionsKept = Rules.VersionsKept,
             noRlsMessage = GroupService.NoRlsMessage,
@@ -180,6 +180,7 @@ public sealed class AdminDashboardsController(
     public async Task<IActionResult> Modify(int id, IFormFile? file, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Publishing, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireSuperAdminAsync("modify a dashboard", ct) is { } notSuper) return notSuper;
         var isGenAi = await IsGenAiAsync(id, ct);
         if (isGenAi && !(await Current.GetAsync(ct))!.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can modify GenAI dashboards." });
         if (file is null || file.Length == 0) return BadRequest(new { message = isGenAi ? "Choose a .html file." : "Choose a .pbix file." });
@@ -280,24 +281,4 @@ public sealed class AdminDashboardsController(
 
     /// <summary>A short token that changes whenever the thumbnail changes, so the browser can cache by it; null when there is none.</summary>
     internal static string? ThumbnailVersion(string? key) => key is null ? null : Path.GetFileNameWithoutExtension(key);
-}
-
-/// <summary>Progress of the setup steps shown on the Admin Portal overview.</summary>
-[Route("api/admin/setup")]
-public sealed class SetupController(CurrentUser current, AppDbContext db) : AdminControllerBase(current)
-{
-    [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken ct)
-    {
-        if (await Current.GetAsync(ct) is null) return Unauthorized();
-        var customRoles = await db.Roles.CountAsync(r => !r.IsSystem, ct);
-        var roles = await db.Roles.CountAsync(ct);
-        var users = await db.Users.CountAsync(ct);
-        var tenants = await db.BiTenants.CountAsync(t => t.IsActive, ct);
-        var verified = await db.BiTenants.CountAsync(t => t.IsActive && t.LastVerifyPassed == true, ct);
-        var categories = await db.Categories.CountAsync(ct);
-        var published = await db.Dashboards.CountAsync(d => d.Status == DashboardStatus.Active, ct);
-        var uncategorised = await db.Dashboards.CountAsync(d => d.Status != DashboardStatus.Retired && d.CategoryId == null, ct);
-        return Ok(new { roles, customRoles, users, tenants, verifiedTenants = verified, categories, activeDashboards = published, uncategorised });
-    }
 }

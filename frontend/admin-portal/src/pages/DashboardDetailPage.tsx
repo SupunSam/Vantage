@@ -13,7 +13,7 @@ type Detail = {
     categoryId: number | null; primaryOwnerId: number | null; backupOwnerId: number | null;
     tenant: string | null; workspace: string | null; owner: string | null; backupOwner: string | null;
     tags: string[]; audience: string; dataClassification: string; sharePointFolder: string | null; sharePointSubFolder: string | null;
-    tenantId: number | null; tableauViewUrl: string | null;
+    tenantId: number | null; tableauViewUrl: string | null; ownershipPendingReview: boolean;
     powerBiReportId: string | null; powerBiDatasetId: string | null; publishedAtUtc: string | null; createdAtUtc: string; updatedAtUtc: string | null;
     groups: Group[];
     versions: Version[];
@@ -302,7 +302,16 @@ function DetailsTab({ data, onSaved, onError }: { data: Detail; onSaved: (t: str
   if (editing) return <DetailsForm data={data} onCancel={() => setEditing(false)} onSaved={(t) => { setEditing(false); onSaved(t); }} onError={onError} />;
 
   return (
-    <div className="detail-grid">
+    <>
+      {d.ownershipPendingReview && d.status === "Inactive" && (
+        <Notice tone="error">
+          <strong>This dashboard has no owner, so it is Inactive.</strong> Its primary and backup owners have left or are no longer active, and owner approvals can't run without one.
+          {data.canEdit
+            ? " Choose Edit Details and name a new owner (and a backup owner). It becomes Active again as soon as you save."
+            : " A Super Admin needs to name a new owner and a backup owner."}
+        </Notice>
+      )}
+      <div className="detail-grid">
       <section className="panel">
         <div className="panel-row">
           <h2>Details</h2>
@@ -359,7 +368,8 @@ function DetailsTab({ data, onSaved, onError }: { data: Detail; onSaved: (t: str
           </section>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

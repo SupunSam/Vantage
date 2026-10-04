@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AppShell, can, DevSignIn, useSession, type NavSection } from "@vantage/shared";
-import { OverviewPage } from "./pages/OverviewPage";
+import { AppShell, can, SignInPage, useSession, type NavSection } from "@vantage/shared";
+import { HomePage } from "./pages/HomePage";
 import { RolesPage } from "./pages/RolesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { TenantsPage } from "./pages/TenantsPage";
@@ -25,11 +25,11 @@ export function App() {
   const { me, loading } = useSession();
 
   if (loading) return <p className="content muted">Loading…</p>;
-  if (!me) return <DevSignIn portalLabel="Admin Portal" />;
+  if (!me) return <SignInPage portalLabel="Admin Portal" />;
 
   const show = (module: string) => can(me, module);
   const sections: NavSection[] = [
-    { items: [{ to: "/", label: "Overview", icon: "home", end: true }] },
+    { items: [{ to: "/", label: "Home", icon: "home", end: true }] },
     {
       title: "Dashboards",
       items: [
@@ -63,7 +63,7 @@ export function App() {
   return (
     <AppShell portalLabel="Admin Portal" sections={sections} otherPortal={{ label: "Open User Portal", href: userPortalUrl }}>
       <Routes>
-        <Route path="/" element={<OverviewPage />} />
+        <Route path="/" element={<HomePage />} />
         {show("roles") && <Route path="/roles" element={<RolesPage />} />}
         {show("users") && <Route path="/users" element={<UsersPage />} />}
         {show("tenants") && <Route path="/tenants" element={<TenantsPage />} />}

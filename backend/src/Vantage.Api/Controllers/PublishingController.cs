@@ -10,7 +10,7 @@ using Vantage.Infrastructure.Services;
 
 namespace Vantage.Api.Controllers;
 
-/// <summary>Publishing (Admin Portal). Needs Edit on the Publishing module (Super Admin, BPI Publisher, …).</summary>
+/// <summary>Publishing (Admin Portal). Only Super Admins publish (C40): Edit actions are refused for everyone else, whatever their role permissions say.</summary>
 [ApiController, Authorize, Route("api/publishing")]
 public sealed class PublishingController(
     AppDbContext db, CurrentUser current, PublishingService publishing, GenAiPublisher genAiPublisher, GenAiService genAi, TableauPublisher tableauPublisher,
@@ -303,6 +303,8 @@ public sealed class PublishingController(
     {
         var me = await current.GetAsync(ct);
         if (me is null) return Unauthorized();
+        // Super Admins are the publishers (C40): anyone else may not publish, whatever their role permissions say.
+        if (level == PermissionLevel.Edit && !me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can publish dashboards." });
         return me.Can(AppModules.Publishing, level) ? null : StatusCode(403, new { message = "You need Publishing permission." });
     }
 }

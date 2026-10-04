@@ -50,17 +50,17 @@ internal static class XlsxResult
 public sealed class AdminAnalyticsController(CurrentUser current, AnalyticsService analytics, AppDbContext db) : AdminControllerBase(current)
 {
     [HttpGet("overview")]
-    public async Task<IActionResult> Overview(int days = 30, CancellationToken ct = default)
+    public async Task<IActionResult> Overview(int days = 30, string? type = null, CancellationToken ct = default)
     {
         if (await RequireAsync(AppModules.Analytics, PermissionLevel.View, ct) is { } denied) return denied;
-        return Ok(await analytics.OverviewAsync(days, null, ct));
+        return await Guard(async () => Ok(await analytics.OverviewAsync(days, await analytics.ScopeAsync(type, null, ct), ct)));
     }
 
     [HttpGet("dashboards")]
-    public async Task<IActionResult> Dashboards(int days = 30, CancellationToken ct = default)
+    public async Task<IActionResult> Dashboards(int days = 30, string? type = null, CancellationToken ct = default)
     {
         if (await RequireAsync(AppModules.Analytics, PermissionLevel.View, ct) is { } denied) return denied;
-        return Ok(await analytics.DashboardsAsync(days, null, ct));
+        return await Guard(async () => Ok(await analytics.DashboardsAsync(days, await analytics.ScopeAsync(type, null, ct), ct)));
     }
 
     [HttpGet("dashboards/{id:int}")]
@@ -71,10 +71,12 @@ public sealed class AdminAnalyticsController(CurrentUser current, AnalyticsServi
     }
 
     [HttpGet("dashboards/export")]
-    public async Task<IActionResult> ExportDashboards(int days = 30, CancellationToken ct = default)
+    public async Task<IActionResult> ExportDashboards(int days = 30, string? type = null, CancellationToken ct = default)
     {
         if (await RequireAsync(AppModules.Analytics, PermissionLevel.View, ct) is { } denied) return denied;
-        var rows = await analytics.DashboardsAsync(days, null, ct);
+        List<DashboardUsage> rows;
+        try { rows = await analytics.DashboardsAsync(days, await analytics.ScopeAsync(type, null, ct), ct); }
+        catch (RuleException ex) { return BadRequest(new { message = ex.Message }); }
         var bytes = XlsxResult.Build("Dashboard Usage", ["Dashboard", "Code", "Type", "Status", "Owner", "Backup Owner", $"Views (last {Math.Clamp(days, 1, AnalyticsService.MaxDays)} days)", "Unique Viewers", "Last Viewed (UTC)", "Members", "Flagged Inactive"],
             [34, 16, 12, 12, 26, 26, 18, 14, 20, 10, 14],
             rows.Select(r => new object?[] { r.Name, r.Code, r.Type, r.Status, r.Owner, r.BackupOwner, r.Views, r.Users, r.LastViewedAtUtc, r.Members, r.Flagged }));
@@ -158,19 +160,21 @@ public sealed class OwnerAnalyticsController(CurrentUser current, AnalyticsServi
     }
 
     [HttpGet("overview")]
-    public async Task<IActionResult> Overview(int days = 30, CancellationToken ct = default)
+    public async Task<IActionResult> Overview(int days = 30, string? type = null, CancellationToken ct = default)
     {
         var (owned, denied) = await OwnedAsync(ct);
         if (denied is not null) return denied;
-        return Ok(new { owns = owned!.Count > 0, overview = await analytics.OverviewAsync(days, owned, ct) });
+        try { return Ok(new { owns = owned!.Count > 0, overview = await analytics.OverviewAsync(days, await analytics.ScopeAsync(type, owned, ct), ct) }); }
+        catch (RuleException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpGet("dashboards")]
-    public async Task<IActionResult> Dashboards(int days = 30, CancellationToken ct = default)
+    public async Task<IActionResult> Dashboards(int days = 30, string? type = null, CancellationToken ct = default)
     {
         var (owned, denied) = await OwnedAsync(ct);
         if (denied is not null) return denied;
-        return Ok(await analytics.DashboardsAsync(days, owned, ct));
+        try { return Ok(await analytics.DashboardsAsync(days, await analytics.ScopeAsync(type, owned, ct), ct)); }
+        catch (RuleException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
     [HttpGet("dashboards/{id:int}")]

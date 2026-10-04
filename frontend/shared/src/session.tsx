@@ -12,8 +12,20 @@ type Session = {
   /** Set when the person was signed out for being idle; the sign-in page shows it. */
   idleNotice: string | null;
   signIn: (email: string) => Promise<void>;
+  /** Ends this portal's session only and returns to the base address, which is the sign-in page. The other portal is not affected. */
   signOut: () => void;
 };
+
+const IDLE_NOTICE_KEY = "rd.idleNotice";
+
+/** The "signed out for being idle" message, kept across the reload that returns to the sign-in page. Cleared on the next sign-in. */
+function readIdleNotice(): string | null {
+  try {
+    return sessionStorage.getItem(IDLE_NOTICE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 const SessionContext = createContext<Session | null>(null);
 
@@ -39,7 +51,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [branding, setBranding] = useState<Branding>({});
   const [settings, setSettings] = useState<UiSettings>({ idleTimeoutMinutes: 30, gridPageSize: 25 });
-  const [idleNotice, setIdleNotice] = useState<string | null>(null);
+  const [idleNotice, setIdleNotice] = useState<string | null>(readIdleNotice);
   const lastActive = useRef(Date.now());
 
   useEffect(() => {
@@ -79,13 +91,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string) => {
     setDevUser(email);
     setIdleNotice(null);
+    try { sessionStorage.removeItem(IDLE_NOTICE_KEY); } catch { /* nothing to clear */ }
     await load();
   }, [load]);
 
-  const signOut = useCallback(() => {
+  // Each portal has its own session (C41). Ending it reloads at the base address, so the next sign-in starts clean on Home.
+  const endSession = useCallback((notice?: string) => {
     setDevUser(null);
+    try {
+      if (notice) sessionStorage.setItem(IDLE_NOTICE_KEY, notice);
+      else sessionStorage.removeItem(IDLE_NOTICE_KEY);   // a manual log-out never shows an old idle message
+    } catch {
+      /* the sign-in page then just shows no notice */
+    }
     setMe(null);
+    window.location.assign("/");
   }, []);
+  const signOut = useCallback(() => endSession(), [endSession]);
 
   // Idle timeout: any click, key press, scroll or pointer move counts as activity; checked every 15 seconds.
   useEffect(() => {
@@ -96,12 +118,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
     const timer = window.setInterval(() => {
       if (Date.now() - lastActive.current >= settings.idleTimeoutMinutes * 60_000) {
-        setIdleNotice(`You were signed out after ${settings.idleTimeoutMinutes} minutes without activity.`);
-        signOut();
+        endSession(`You were signed out after ${settings.idleTimeoutMinutes} minutes without activity.`);
       }
     }, 15_000);
     return () => { events.forEach((e) => window.removeEventListener(e, touch)); window.clearInterval(timer); };
-  }, [me, settings.idleTimeoutMinutes, signOut]);
+  }, [me, settings.idleTimeoutMinutes, endSession]);
 
   return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}>{children}</SessionContext.Provider>;
 }
