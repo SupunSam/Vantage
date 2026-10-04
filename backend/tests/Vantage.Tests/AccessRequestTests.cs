@@ -115,7 +115,14 @@ public class AccessRequestTests(SqlServerFixture fx) : IClassFixture<SqlServerFi
         var r = await k.Requests.CreateAsync(d.Id, k.Requester.Id, null);
 
         await Assert.ThrowsAsync<RuleException>(() => k.Requests.RejectAsync(r.Id, "No", new GroupActor(stranger.Id, false)));
-        await k.Requests.RejectAsync(r.Id, "Use the team dashboard instead", new GroupActor(stranger.Id, IsSuperAdmin: true));
+        var superAdmin = new GroupActor(stranger.Id, IsSuperAdmin: true);
+        var ex = await Assert.ThrowsAsync<RuleException>(() => k.Requests.RejectAsync(r.Id, "Use the team dashboard instead", superAdmin));   // stepping in for the owners needs a reason
+        Assert.Contains("reason", ex.Message);
+        await k.Requests.RejectAsync(r.Id, "Use the team dashboard instead", superAdmin, default, "Both owners are on leave");
+        var saved = await k.Db.AccessRequests.AsNoTracking().SingleAsync(x => x.Id == r.Id);
+        Assert.Equal("Both owners are on leave", saved.OverrideReason);
+        Assert.True(await k.Db.AuditLogs.AnyAsync(a => a.Action == "access-request.rejected" && a.EntityId == r.Id.ToString() && a.Details!.Contains("Both owners are on leave")));
+        Assert.True(await k.Db.Notifications.AnyAsync(n => n.UserId == k.Owner.Id && n.Type == "access-request.overridden" && n.Body!.Contains("Both owners are on leave")));
 
         Assert.Equal(AccessRequestStatus.Rejected, (await k.Db.AccessRequests.AsNoTracking().SingleAsync(x => x.Id == r.Id)).Status);
         Assert.True(await k.Db.Notifications.AnyAsync(n => n.UserId == k.Requester.Id && n.Type == "access-request.rejected"));

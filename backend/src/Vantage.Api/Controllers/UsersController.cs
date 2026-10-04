@@ -9,7 +9,7 @@ using Vantage.Infrastructure.Services;
 namespace Vantage.Api.Controllers;
 
 [Route("api/admin/users")]
-public sealed class UsersController(CurrentUser current, AppDbContext db, UserService users, HrmsSyncService hrms) : AdminControllerBase(current)
+public sealed class UsersController(CurrentUser current, AppDbContext db, UserService users, HrmsSyncService hrms, AccessGroupRuleService accessRules, ILogger<UsersController> log) : AdminControllerBase(current)
 {
     [HttpGet]
     public async Task<IActionResult> List(string? search, string? type, string? status, int? roleId, int page = 1, int pageSize = 25, CancellationToken ct = default)
@@ -225,6 +225,11 @@ public sealed class UsersController(CurrentUser current, AppDbContext db, UserSe
     public async Task<IActionResult> HrmsSync(CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Users, PermissionLevel.Edit, ct) is { } denied) return denied;
-        return Ok(await hrms.RunAsync(ct));
+        var s = await hrms.RunAsync(ct);
+        // Fresh HRMS data may put new people inside a rule: send what the rules find to the owners (nothing changes until they approve).
+        List<RuleRunResult> rules = [];
+        try { rules = await accessRules.RunAllAsync(ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Access group rules failed after the HRMS sync"); }
+        return Ok(new { s.Checked, s.ProfilesUpdated, s.Deactivated, s.SkippedManual, s.NotInHrms, s.DeactivatedEmails, rules });
     }
 }

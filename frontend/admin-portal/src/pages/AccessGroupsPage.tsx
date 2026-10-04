@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, can, Icon, useSession } from "@vantage/shared";
+import { api, can, Icon, Pager, useSession, usePaged } from "@vantage/shared";
 import { errorText, Modal, Notice, StatusPill, useApi } from "../ui";
 
 export type GroupRow = {
@@ -29,6 +29,8 @@ export function AccessGroupsPage() {
       && (!dashboardId || String(g.dashboardId) === dashboardId)
       && (!needle || [g.name, g.dashboard, g.dashboardCode, g.rlsValue].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, status, dashboardId]);
+
+  const paged = usePaged(rows, 25, `${q}|${status}|${dashboardId}`);
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <p className="muted">Loading…</p>;
@@ -76,7 +78,7 @@ export function AccessGroupsPage() {
         <table className="grid grid-rows">
           <thead><tr><th>Access group</th><th>Dashboard</th><th>RLS value</th><th className="num">Members</th><th>Status</th></tr></thead>
           <tbody>
-            {rows.map((g) => (
+            {paged.rows.map((g) => (
               <tr key={g.id} onClick={() => navigate(`/access-groups/${g.id}`)}>
                 <td>
                   <Link to={`/access-groups/${g.id}`} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
@@ -95,6 +97,7 @@ export function AccessGroupsPage() {
         </table>
         {rows.length === 0 && <p className="pop-empty">No access groups match these filters.</p>}
       </div>
+      <Pager {...paged.pager} />
 
       {creating && <NewGroupModal groups={data} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); reload(); navigate(`/access-groups/${id}`); }} />}
     </>
@@ -161,7 +164,7 @@ export function NewGroupModal({ groups, onClose, onCreated, copyFromGroupId, das
                 <input required value={rls} onChange={(e) => setRls(e.target.value)} placeholder="Region_North" />
               </label>
               <label className="field">
-                <span>Copy members from <span className="optional">(optional: clones the members, not the RLS value)</span></span>
+                <span>Copy members from <span className="optional">(optional: clones the members, not the RLS value; they go to the owners for approval)</span></span>
                 <select value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
                   <option value="">Start empty</option>
                   {groups.filter((g) => g.status === "Active" && g.members > 0).map((g) => (

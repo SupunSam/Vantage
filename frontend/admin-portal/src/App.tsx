@@ -11,6 +11,8 @@ import { CategoriesPage } from "./pages/CategoriesPage";
 import { AccessGroupsPage } from "./pages/AccessGroupsPage";
 import { AccessGroupDetailPage } from "./pages/AccessGroupDetailPage";
 import { AccessRequestsPage } from "./pages/AccessRequestsPage";
+import { AuditLogPage } from "./pages/AuditLogPage";
+import { AccessRulesPage } from "./pages/AccessRulesPage";
 import "./admin.css";
 
 /** The User Portal runs next to this one: port 8081 in the local Docker build. */
@@ -39,6 +41,7 @@ export function App() {
         ...(show("users") ? [{ to: "/users", label: "Users", icon: "users" }] : []),
         ...(show("roles") ? [{ to: "/roles", label: "Roles and Permissions", icon: "shield" }] : []),
         ...(show("groups") ? [{ to: "/access-groups", label: "Access Groups", icon: "groups" }] : []),
+        ...(show("groups") ? [{ to: "/access-rules", label: "Access Group Rules", icon: "list" }] : []),
         ...(show("groups") ? [{ to: "/requests", label: "Access Requests", icon: "inbox" }] : []),
       ],
     },
@@ -47,7 +50,7 @@ export function App() {
       items: [
         ...(show("tenants") ? [{ to: "/tenants", label: "Tenants", icon: "server" }] : []),
         ...(show("analytics") ? [{ to: "/analytics", label: "Analytics", icon: "chart", soon: true }] : []),
-        ...(show("audit") ? [{ to: "/audit", label: "Audit Log", icon: "history", soon: true }] : []),
+        ...(show("audit") ? [{ to: "/audit", label: "Audit Log", icon: "history" }] : []),
         ...(show("admin-config") ? [{ to: "/config", label: "Configuration", icon: "settings", soon: true }] : []),
       ],
     },
@@ -64,7 +67,9 @@ export function App() {
         {show("categories") && <Route path="/categories" element={<CategoriesPage />} />}
         {show("groups") && <Route path="/access-groups" element={<AccessGroupsPage />} />}
         {show("groups") && <Route path="/access-groups/:id" element={<AccessGroupDetailPage />} />}
+        {show("groups") && <Route path="/access-rules" element={<AccessRulesPage />} />}
         {show("groups") && <Route path="/requests" element={<AccessRequestsPage />} />}
+        {show("audit") && <Route path="/audit" element={<AuditLogPage />} />}
         {show("dashboard-config") && <Route path="/dashboards" element={<DashboardsPage />} />}
         {show("dashboard-config") && <Route path="/dashboards/:id" element={<DashboardDetailPage />} />}
         <Route path="*" element={<Navigate to="/" />} />

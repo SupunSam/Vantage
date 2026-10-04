@@ -59,7 +59,7 @@ vantage/
     package.json            npm workspaces: shared, user-portal, admin-portal
     shared/src/             Shell (sidebar + top bar), Icon, Thumbnail, api.ts, session, Requests (review cards)
     admin-portal/src/       App.tsx (routes + sidebar), ui.tsx, fields.tsx, pages/*
-    user-portal/src/        App.tsx, pages/ (Home, Catalogue, Viewer, Approvals)
+    user-portal/src/        App.tsx, pages/ (Home, Catalogue, Viewer, Approvals, Folders)
   deploy/
     docker-compose.yml      the whole local stack (project name "vantage")
     api.Dockerfile admin.Dockerfile user.Dockerfile nginx.conf
@@ -70,7 +70,6 @@ vantage/
     requirements.md         snapshot of the requirements and decisions
     handoff.md              where the build stands and what's next
   .github/workflows/ci.yml  backend build and tests (with SQL Server), frontend typecheck and build
-                            (docs/ci.yml is the copy to move there if this folder is missing)
 ```
 
 ## Running it
@@ -128,10 +127,28 @@ depends on them:
   - The value is the Power BI role name (comma-separated for several).
   - The effective identity is sent only when the model requires it (`RlsIdentityBuilder`).
 - **Access Groups only take existing portal users** (C22). Unknown emails are reported, never created.
+- **Adding people to a group needs owner approval** (C26).
+  - `GroupAddRequestService` turns "add these people" (add, copy members, clone) into ONE `GroupAddRequest` per action. Nobody is added until approved.
+  - Owners hold approve and reject only (they have no Access Groups permission). They tick who to approve; unticked people are rejected.
+  - The only override is a Super Admin deciding in the owners' place from the Admin Portal's Access Requests page ("Override Approval"). A reason is required. It goes into the audit log (`overrideReason`) and the group's History, and the owners are notified. The add screens have no override.
+  - `AccessGroupService.AddMembersAsync` is the direct primitive behind it; controllers must not call it for admin adds.
+  - Moves, removals and the default group at publishing stay direct.
+- **Access group rules** (C29).
+  - A rule (HRMS field equals value, all conditions) proposes adding people to, or removing people from, ONE access group. It never changes membership.
+  - `AccessGroupRuleService.RunAsync` sends what it finds to the owners as one `GroupAddRequest` (`Action` Add or Remove, `RuleId`, `RuleName`, no requester). Owners approve in part or in full; only Super Admins manage rules.
+  - Rules run on demand and after each HRMS sync (`UsersController.HrmsSync`). People already waiting, people the owners rejected under the current rule version, owners (for removal) and add/remove conflicts are not proposed.
+  - Anything that changes group membership because of a rule must go through a request, never `AddMembersAsync` or `RemoveMemberAsync` directly.
+- **Every override needs a reason** (C28). A Super Admin deciding an access request, or a group-add request, in the owners' place must give a reason.
+  - It is stored in `OverrideReason`, written to the audit log (`overrideReason`), and the owners are notified (bell and email).
+  - Any new Super Admin step-in that bypasses the normal process must follow the same pattern: required reason, audited, owners told, and hidden behind an explicit "Override…" button in the UI.
+- **Super Admins administer, they don't consume** (C27).
+  - They preview from Dashboards Master (`EmbedService.PreviewAsync`, `GET /api/admin/dashboards/{id}/preview-embed?groupId=`) as a chosen group's members would see it, without membership.
+  - A preview is audited (`dashboard.previewed`) and is not a view: no `DashboardViews` row, no `LastViewedAtUtc`.
+  - There is no way for anyone to join a group without approval. Opening a dashboard in the User Portal (`GetEmbedAsync`) always needs a live membership.
 - **Access requests** (C23).
   - One pending request per user per dashboard. Every request needs owner approval.
   - On RLS dashboards the owner picks the group; otherwise the person joins the default group.
-  - Super Admins can decide on the owner's behalf.
+  - Super Admins can decide on the owner's behalf. (A Super Admin adding themselves to a group goes through C26 approval too.)
   - While `OwnershipPendingReview` is set, only Super Admins can change access, and requests are refused with
     "This dashboard has no owner right now. Please request access again in a few days."
 - **Ownership.** Naming someone owner grants the Dashboard Owner role automatically.
@@ -140,7 +157,7 @@ depends on them:
   - Modify Dashboard replaces the report in place (C21). The last 3 files are kept; Super Admins can download or restore them.
 - **ServiceNow reference.** Optional on admin changes. It is stored on the audit log row, never on the user (C20).
 - **Limits.**
-  - 12 pins and 8 tags (alphanumeric, ≤10 characters each).
+  - 12 pins, 20 personal folders (names ≤60 characters) and 8 tags (alphanumeric, ≤10 characters each).
   - Thumbnails: 16:9 PNG/JPG, ≥640x360, ≤1 MB.
   - Dashboard name unique; group name ≤40 characters and unique.
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
@@ -162,6 +179,7 @@ depends on them:
 - **Frontend.**
   - Call the API with `api<T>()` from `@vantage/shared`. Fetch images and files with `apiObjectUrl` (it adds the dev header).
   - Keep shared UI in `frontend/shared`.
+- **Long lists are paged.** Use `Pager` and `usePaged` from `@vantage/shared` for lists held in the browser, and a `page`/`pageSize` API for lists that can grow without limit (audit log, group history, users). Never render an unbounded list.
 - **UI text.**
   - **Title Case** for menus, page titles, tabs, dialog titles and buttons ("Add Group", "Save Changes", "Request Access").
   - Messages and help text are plain sentences.
@@ -180,7 +198,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C24) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C30) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -191,13 +209,15 @@ Done:
 - Access Groups (members, move, copy, clone, details, history).
 - User Portal home (cards, categories, list, pins), Dashboard Catalogue, Request Access.
 - Owner approvals, Admin Access Requests, notifications (bell) and the email outbox with Mailpit.
+- Access Group Rules (C29): HRMS-based add and remove proposals that the owners confirm.
+- Owner approval for adding people to access groups (C26): one request per add, approve in part or in full, Super Admin override (Access Requests page only) with a reason.
+- Super Admins preview dashboards without joining any group (C27).
+- Admin **Audit Log** viewer (filters, plain-sentence descriptions, before and after values, Excel export).
+- User Portal **Personal Folders** (page plus a folder button on cards).
 
 Next, in order:
-1. Admin **Audit Log** viewer: filters, ServiceNow reference, before and after values, Excel export.
-2. User Portal **personal folders**.
-3. Owner **monthly access reviews**.
-4. **Admin Configuration**: branding, settings, approved CDNs.
-5. Analytics.
+1. **Admin Configuration**: branding, settings, approved CDNs.
+2. Analytics.
 
 Then Tableau and GenAI embedding end to end, then real ADFS/Cognito and the AWS environments.
 

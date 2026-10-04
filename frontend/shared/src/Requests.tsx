@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, ApiError } from "./api";
+import { Pager, usePaged } from "./Pager";
 
 export type RequestGroup = { id: number; name: string; rlsValue: string | null; isDefault: boolean; members: number };
 export type AccessRequestRow = {
@@ -9,6 +10,11 @@ export type AccessRequestRow = {
   comment: string | null;
   decidedAtUtc: string | null;
   decisionNote: string | null;
+  /** Set when a Super Admin decided in place of the owners: why. */
+  overrideReason: string | null;
+  /** The viewer isn't an owner acting normally, so deciding is an override and needs a reason. */
+  needsOverride: boolean;
+  owners: (string | null)[];
   decidedBy: string | null;
   assignedGroup: string | null;
   dashboard: { id: number; name: string; rlsEnabled: boolean; ownershipPendingReview: boolean; owner: string | null };
@@ -38,6 +44,8 @@ export function RequestReviewList({ rows, canDecide, onChanged, dashboardLink, e
 }) {
   const pending = rows.filter((r) => r.status === "Pending");
   const decided = rows.filter((r) => r.status !== "Pending");
+  const pendingPage = usePaged(pending, 10);
+  const decidedPage = usePaged(decided, 10);
 
   return (
     <div className="requests">
@@ -45,9 +53,10 @@ export function RequestReviewList({ rows, canDecide, onChanged, dashboardLink, e
         <p className="requests-empty">{emptyText}</p>
       ) : (
         <ul className="request-cards">
-          {pending.map((r) => <RequestCard key={r.id} row={r} canDecide={canDecide} onChanged={onChanged} dashboardLink={dashboardLink} />)}
+          {pendingPage.rows.map((r) => <RequestCard key={r.id} row={r} canDecide={canDecide} onChanged={onChanged} dashboardLink={dashboardLink} />)}
         </ul>
       )}
+      <Pager {...pendingPage.pager} sizes={[10, 25, 50]} />
 
       {decided.length > 0 && (
         <section className="requests-decided">
@@ -56,11 +65,11 @@ export function RequestReviewList({ rows, canDecide, onChanged, dashboardLink, e
             <table className="requests-table">
               <thead><tr><th>Requester</th><th>Dashboard</th><th>Decision</th><th>Group</th><th>By</th><th>When</th></tr></thead>
               <tbody>
-                {decided.map((r) => (
+                {decidedPage.rows.map((r) => (
                   <tr key={r.id}>
                     <td>{r.requester.displayName ?? r.requester.email}<div className="req-muted">{r.requester.email}</div></td>
                     <td>{r.dashboard.name}</td>
-                    <td><span className={`req-status req-${r.status.toLowerCase()}`}>{r.status === "Cancelled" ? "Withdrawn" : r.status}</span>{r.decisionNote && <div className="req-muted">“{r.decisionNote}”</div>}</td>
+                    <td><span className={`req-status req-${r.status.toLowerCase()}`}>{r.status === "Cancelled" ? "Withdrawn" : r.status}</span>{r.decisionNote && <div className="req-muted">“{r.decisionNote}”</div>}{r.overrideReason && <div className="req-warn">Super Admin decided in place of the owners: {r.overrideReason}</div>}</td>
                     <td>{r.assignedGroup ?? "–"}</td>
                     <td>{r.decidedBy ?? "–"}</td>
                     <td className="req-muted">{whenText(r.decidedAtUtc)}</td>
@@ -69,6 +78,7 @@ export function RequestReviewList({ rows, canDecide, onChanged, dashboardLink, e
               </tbody>
             </table>
           </div>
+          <Pager {...decidedPage.pager} />
         </section>
       )}
     </div>
@@ -81,11 +91,18 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
   const usable = needsChoice ? groups.filter((g) => g.rlsValue) : groups.filter((g) => g.isDefault);
   const [groupId, setGroupId] = useState<string>(needsChoice ? "" : String(usable[0]?.id ?? ""));
   const [note, setNote] = useState("");
+  // A Super Admin deciding in the owners' place is the exception: the decision controls stay hidden until they choose to override.
+  const [overriding, setOverriding] = useState(false);
+  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const who = row.requester.displayName ?? row.requester.email;
 
   async function decide(kind: "approve" | "reject") {
+    if (row.needsOverride && !reason.trim()) {
+      setError("Give a reason for deciding in place of the owners. It is saved in the audit log, and the owners are told.");
+      return;
+    }
     if (kind === "approve" && needsChoice && !groupId) {
       setError("Choose the access group that gives them the right data.");
       return;
@@ -93,7 +110,7 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
     setBusy(kind);
     setError(null);
     try {
-      await api(`/api/access-requests/${row.id}/${kind}`, { method: "POST", body: JSON.stringify({ groupId: groupId ? Number(groupId) : null, note: note || null }) });
+      await api(`/api/access-requests/${row.id}/${kind}`, { method: "POST", body: JSON.stringify({ groupId: groupId ? Number(groupId) : null, note: note || null, overrideReason: row.needsOverride ? reason : null }) });
       onChanged(kind === "approve"
         ? `Approved. ${who} can now open ${row.dashboard.name}.`
         : `Rejected. ${who} has been told${note ? ", with your note" : ""}.`);
@@ -126,8 +143,20 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
         {row.dashboard.ownershipPendingReview && <p className="req-warn">The owners are under review, so only a Super Admin can decide this now.</p>}
       </div>
 
-      {canDecide && (
+      {canDecide && (!row.needsOverride || overriding) && (
         <div className="request-decide">
+          {row.needsOverride && (
+            <>
+              <div className="override-note">
+                <strong>Override of the owners' approval</strong>
+                <span className="req-muted">Only for exceptions. Your reason is saved in the audit log, and the owners are told.</span>
+              </div>
+              <label className="field">
+                <span>Reason for the override (required)</span>
+                <textarea rows={2} value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Both owners are on leave and the person needs it today" />
+              </label>
+            </>
+          )}
           {needsChoice ? (
             <label className="field">
               <span>Access group (decides which data they see)</span>
@@ -145,9 +174,19 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
           </label>
           {error && <p className="req-error">{error}</p>}
           <div className="request-buttons">
-            <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={() => void decide("approve")}>{busy === "approve" ? "Approving…" : "Approve"}</button>
-            <button type="button" className="btn" disabled={busy !== null} onClick={() => void decide("reject")}>{busy === "reject" ? "Rejecting…" : "Reject"}</button>
+            <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={() => void decide("approve")}>{busy === "approve" ? "Approving…" : row.needsOverride ? "Override and Approve" : "Approve"}</button>
+            <button type="button" className="btn" disabled={busy !== null} onClick={() => void decide("reject")}>{busy === "reject" ? "Rejecting…" : row.needsOverride ? "Override and Reject" : "Reject"}</button>
           </div>
+          {row.needsOverride && <button type="button" className="link" onClick={() => { setOverriding(false); setError(null); }}>Cancel the Override</button>}
+        </div>
+      )}
+      {canDecide && row.needsOverride && !overriding && (
+        <div className="request-decide">
+          <p className="req-muted">
+            Waiting for {row.owners.filter(Boolean).length > 0 ? <strong>{row.owners.filter(Boolean).join(" or ")}</strong> : "an owner"} to decide
+            {row.owners.filter(Boolean).length === 0 ? " (this dashboard has no owner right now)" : ""}. They approve it in the User Portal.
+          </p>
+          <button type="button" className="btn" onClick={() => setOverriding(true)}>Override Approval…</button>
         </div>
       )}
     </li>

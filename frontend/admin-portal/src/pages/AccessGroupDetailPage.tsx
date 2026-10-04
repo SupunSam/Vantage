@@ -1,30 +1,41 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, apiObjectUrl, Icon } from "@vantage/shared";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { api, apiObjectUrl, Icon, Pager, usePaged } from "@vantage/shared";
 import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "../ui";
 import { NewGroupModal, type GroupRow, type MemberResult } from "./AccessGroupsPage";
+import { RulesPanel } from "./RulesPanel";
 
 type Member = { userId: number; email: string; displayName: string | null; userType: string; userStatus: string; source: string; addedAtUtc: string; addedBy: string | null };
 type Sibling = { id: number; name: string; rlsValue: string | null; status: string; isDefault: boolean };
 type Detail = {
   group: {
-    id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; createdAtUtc: string; clonedFrom: string | null; createdBy: string | null;
+    id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; createdAtUtc: string; clonedFrom: string | null; createdBy: string | null; ruleCount: number;
     dashboard: { id: number; name: string; code: string; status: string; rlsEnabled: boolean; primaryOwnerId: number | null; backupOwnerId: number | null; ownershipPendingReview: boolean };
     members: Member[];
     siblings: Sibling[];
   };
-  history: { id: number; action: string; details: string | null; occurredAtUtc: string; actor: string | null; serviceNowReference: string | null }[];
+  pendingRequests: { id: number; createdAtUtc: string; serviceNowReference: string | null; note: string | null; requestedById: number | null; action: "Add" | "Remove"; requestedBy: string; count: number; people: string[] }[];
+  myId: number;
   canEdit: boolean;
   isSuperAdmin: boolean;
   noRlsMessage: string;
 };
+/** What adding people did: sent to the owners (Requested), or nothing could be added. */
+type AddOutcome = { mode: "Requested" | "Nothing"; requestId: number | null; results: MemberResult[] };
+
+const tabs = [
+  { key: "members", label: "Members" },
+  { key: "rules", label: "Rules" },
+  { key: "history", label: "History" },
+] as const;
+type Tab = (typeof tabs)[number]["key"];
 
 const sourceLabel: Record<string, string> = {
   Manual: "Added by an admin", BulkUpload: "Added from a list", Clone: "Copied from another group", AccessRequest: "Access request",
-  OwnerAuto: "Owner", SuperAdminSelf: "Added themselves", Migration: "Migrated",
+  OwnerAuto: "Owner", SuperAdminSelf: "Added themselves", Migration: "Migrated", AccessRule: "Proposed by an access rule",
 };
 
-/** One access group: its members (add, move, remove), settings and history. */
+/** One access group: its settings, then tabs for its members (add, move, remove), its rules and its history. */
 export function AccessGroupDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -35,6 +46,8 @@ export function AccessGroupDetailPage() {
   const [adding, setAdding] = useState(false);
   const [dialog, setDialog] = useState<"copy" | "clone" | null>(null);
   const [q, setQ] = useState("");
+  const [search, setSearch] = useSearchParams();
+  const tab: Tab = search.get("tab") === "rules" ? "rules" : search.get("tab") === "history" ? "history" : "members";
 
   useEffect(() => { setMessage(null); setResults(null); setAdding(false); }, [id]);
 
@@ -42,6 +55,7 @@ export function AccessGroupDetailPage() {
     const needle = q.trim().toLowerCase();
     return (data?.group.members ?? []).filter((m) => !needle || `${m.displayName ?? ""} ${m.email}`.toLowerCase().includes(needle));
   }, [data, q]);
+  const memberPage = usePaged(members, 25, q);
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <p className="muted">Loading…</p>;
@@ -60,6 +74,18 @@ export function AccessGroupDetailPage() {
       await api(`/api/admin/access-groups/${g.id}/members/${m.userId}`, { method: "DELETE" });
       ok(`Removed ${m.displayName ?? m.email}.`);
     } catch (e) { fail(e); }
+  }
+
+  function handleOutcome(o: AddOutcome) {
+    const sent = o.results.filter((r) => r.outcome === "Requested").length;
+    if (o.mode === "Requested") setMessage({ ok: true, text: `Sent to the owners of ${d.name} as one request for ${sent} ${sent === 1 ? "person" : "people"}. They are added only when the owners approve.` });
+    else setMessage({ ok: false, text: "Nobody could be added. See the list below for why." });
+    setResults(o.results);
+    reload();
+  }
+
+  async function withdraw(requestId: number) {
+    try { await api(`/api/group-add-requests/${requestId}/cancel`, { method: "POST" }); ok("The request was withdrawn."); } catch (e) { fail(e); }
   }
 
   async function move(m: Member, target: Sibling) {
@@ -102,84 +128,103 @@ export function AccessGroupDetailPage() {
 
       <GroupDetails data={data} editable={editable} onSaved={ok} />
 
-      <section className="panel">
-        <div className="panel-row">
-          <h2>Members <span className="muted count">{g.members.length}</span></h2>
-          <div className="actions">
-            {g.members.length > 8 && (
-              <span className="input-icon input-compact"><Icon name="search" size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a member" aria-label="Find a member" /></span>
-            )}
-            {live && !adding && <button className="btn btn-primary" type="button" onClick={() => { setAdding(true); setResults(null); }}><Icon name="plus" size={18} /> Add People</button>}
+      <div className="tabs" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`tab ${tab === t.key ? "tab-on" : ""}`}
+            onClick={() => { setMessage(null); setSearch(t.key === "members" ? {} : { tab: t.key }, { replace: true }); }}>
+            {t.label}
+            {t.key === "members" && <span className="tab-count">{g.members.length}</span>}
+            {t.key === "rules" && g.ruleCount > 0 && <span className="tab-count">{g.ruleCount}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab === "members" && (
+        <>
+        <section className="panel">
+          <div className="panel-row">
+            <h2>Members <span className="muted count">{g.members.length}</span></h2>
+            <div className="actions">
+              {g.members.length > 8 && (
+                <span className="input-icon input-compact"><Icon name="search" size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a member" aria-label="Find a member" /></span>
+              )}
+              {live && !adding && <button className="btn btn-primary" type="button" onClick={() => { setAdding(true); setResults(null); }}><Icon name="plus" size={18} /> Add People</button>}
+            </div>
           </div>
-        </div>
 
-        {adding && (
-          <AddPeople groupId={g.id} hasSiblings={g.siblings.length > 0}
-            onCancel={() => setAdding(false)}
-            onDone={(r) => { setResults(r); setAdding(false); reload(); }}
-            onError={fail} />
-        )}
-        {results && <ResultSummary results={results} onClose={() => setResults(null)} />}
-
-        {g.members.length === 0 ? (
-          <p className="pop-empty">No members yet.{live ? " Add people by name, a pasted list of emails, or an Excel file." : ""}</p>
-        ) : (
-          <table className="grid member-grid">
-            <thead><tr><th>Person</th><th>Type</th><th>How they were added</th><th>Added</th>{live && <th />}</tr></thead>
-            <tbody>
-              {members.map((m) => (
-                <tr key={m.userId}>
-                  <td>
-                    <span className="person">
-                      <span className="avatar avatar-sm" aria-hidden="true">{initials(m.displayName ?? m.email)}</span>
-                      <span><strong>{m.displayName ?? m.email}</strong>{isOwner(m.userId) && <span className="pill pill-brand pill-xs">Owner</span>}<span className="muted small block">{m.displayName ? m.email : "Name not filled in yet"}</span></span>
-                    </span>
-                  </td>
-                  <td className="small">{m.userType}{m.userStatus === "PendingSetup" && <div className="muted">Setup pending</div>}{m.userStatus === "Inactive" && <div className="warn-text">Inactive user</div>}</td>
-                  <td className="small">{sourceLabel[m.source] ?? m.source}{m.addedBy && m.source !== "SuperAdminSelf" && <div className="muted">by {m.addedBy}</div>}</td>
-                  <td className="small muted">{when(m.addedAtUtc)}</td>
-                  {live && (
-                    <td className="cell-actions"><span className="member-actions">
-                      {moveTargets.length > 0 && (
-                        <MenuButton label="Move" items={moveTargets.map((s) => ({ label: s.name, hint: s.rlsValue ? `RLS ${s.rlsValue}` : s.isDefault ? "Default group" : undefined, onSelect: () => void move(m, s) }))} />
-                      )}
-                      <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" aria-label={`Remove ${m.displayName ?? m.email}`}
-                        title={isOwner(m.userId) ? "Owners keep access. Change the owner in Dashboards Master first." : "Remove from this group"}
-                        disabled={isOwner(m.userId)} onClick={() => void remove(m)}>
-                        <Icon name="trash" size={18} />
-                      </button>
-                    </span></td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>History</h2>
-        {data.history.length === 0 ? <p className="pop-empty">No changes recorded yet.</p> : (
-          <ol className="history">
-            {data.history.map((h) => (
-              <li key={h.id}>
-                <span className="history-dot" aria-hidden="true" />
-                <div>
-                  <p>{describe(h.action, h.details)}</p>
-                  <p className="muted small">{h.actor ?? "System"}, {when(h.occurredAtUtc)}{h.serviceNowReference && <>, ticket <code>{h.serviceNowReference}</code></>}</p>
+          {adding && (
+            <AddPeople groupId={g.id} hasSiblings={g.siblings.length > 0}
+              onCancel={() => setAdding(false)}
+              onDone={(o) => { handleOutcome(o); setAdding(false); }}
+              onError={fail} />
+          )}
+          {results && <ResultSummary results={results} onClose={() => setResults(null)} />}
+          {data.pendingRequests.length > 0 && (
+            <div className="pending-adds" aria-label="Waiting for the owners' approval">
+              {data.pendingRequests.map((p) => (
+                <div key={p.id} className="pending-add">
+                  <span>
+                    <strong>{p.count} {p.count === 1 ? "person" : "people"}</strong> waiting for the owners' approval to {p.action === "Remove" ? "be removed" : "be added"}
+                    <span className="muted small block">{p.people.join(", ")}{p.count > p.people.length ? " and others" : ""} · asked by {p.requestedBy}, {when(p.createdAtUtc)}{p.serviceNowReference && <>, ticket <code>{p.serviceNowReference}</code></>}</span>
+                  </span>
+                  {(p.requestedById === data.myId || data.isSuperAdmin) && <button type="button" className="btn btn-quiet" onClick={() => void withdraw(p.id)}>Withdraw Request</button>}
                 </div>
-              </li>
-            ))}
-          </ol>
-        )}
-        <p className="muted small">Created {when(g.createdAtUtc)}{g.createdBy ? ` by ${g.createdBy}` : ""}. The full audit log comes with the Audit module.</p>
-      </section>
+              ))}
+            </div>
+          )}
+
+          {g.members.length === 0 ? (
+            <p className="pop-empty">No members yet.{live ? " Add people by name, a pasted list of emails, or an Excel file." : ""}</p>
+          ) : (
+            <table className="grid member-grid">
+              <thead><tr><th>Person</th><th>Type</th><th>How they were added</th><th>Added</th>{live && <th />}</tr></thead>
+              <tbody>
+                {memberPage.rows.map((m) => (
+                  <tr key={m.userId}>
+                    <td>
+                      <span className="person">
+                        <span className="avatar avatar-sm" aria-hidden="true">{initials(m.displayName ?? m.email)}</span>
+                        <span><strong>{m.displayName ?? m.email}</strong>{isOwner(m.userId) && <span className="pill pill-brand pill-xs">Owner</span>}<span className="muted small block">{m.displayName ? m.email : "Name not filled in yet"}</span></span>
+                      </span>
+                    </td>
+                    <td className="small">{m.userType}{m.userStatus === "PendingSetup" && <div className="muted">Setup pending</div>}{m.userStatus === "Inactive" && <div className="warn-text">Inactive user</div>}</td>
+                    <td className="small">{sourceLabel[m.source] ?? m.source}{m.addedBy && m.source !== "SuperAdminSelf" && <div className="muted">by {m.addedBy}</div>}</td>
+                    <td className="small muted">{when(m.addedAtUtc)}</td>
+                    {live && (
+                      <td className="cell-actions"><span className="member-actions">
+                        {moveTargets.length > 0 && (
+                          <MenuButton label="Move" items={moveTargets.map((s) => ({ label: s.name, hint: s.rlsValue ? `RLS ${s.rlsValue}` : s.isDefault ? "Default group" : undefined, onSelect: () => void move(m, s) }))} />
+                        )}
+                        <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" aria-label={`Remove ${m.displayName ?? m.email}`}
+                          title={isOwner(m.userId) ? "Owners keep access. Change the owner in Dashboards Master first." : "Remove from this group"}
+                          disabled={isOwner(m.userId)} onClick={() => void remove(m)}>
+                          <Icon name="trash" size={18} />
+                        </button>
+                      </span></td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <Pager {...memberPage.pager} />
+        </section>
+        </>
+      )}
+
+      {tab === "rules" && (
+        <section className="panel">
+          <RulesPanel fixed={{ groupId: g.id, group: g.name, dashboard: d.name, dashboardId: d.id }} onChanged={reload} />
+        </section>
+      )}
+
+      {tab === "history" && <HistoryPanel groupId={g.id} created={`Created ${when(g.createdAtUtc)}${g.createdBy ? ` by ${g.createdBy}` : ""}.`} />}
 
       {dialog === "copy" && allGroups && (
         <CopyDialog groups={allGroups.filter((x) => x.id !== g.id && x.status === "Active" && x.members > 0)} onClose={() => setDialog(null)}
           onCopy={async (sourceId) => {
-            const r = await api<MemberResult[]>(`/api/admin/access-groups/${g.id}/copy-members`, { method: "POST", body: JSON.stringify({ sourceGroupId: sourceId }) });
-            setDialog(null); setResults(r); reload();
+            const o = await api<AddOutcome>(`/api/admin/access-groups/${g.id}/copy-members`, { method: "POST", body: JSON.stringify({ sourceGroupId: sourceId }) });
+            setDialog(null); handleOutcome(o);
           }} />
       )}
       {dialog === "clone" && allGroups && (
@@ -282,12 +327,13 @@ function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boo
 
 type Found = { id: number; email: string; displayName: string | null; userType: string; status: string };
 
-function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupId: number; hasSiblings: boolean; onCancel: () => void; onDone: (r: MemberResult[]) => void; onError: (e: unknown) => void }) {
+function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupId: number; hasSiblings: boolean; onCancel: () => void; onDone: (o: AddOutcome) => void; onError: (e: unknown) => void }) {
   const [mode, setMode] = useState<"one" | "paste" | "excel">("one");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [move, setMove] = useState(false);
   const [ticket, setTicket] = useState("");
+  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Found[]>([]);
@@ -303,7 +349,7 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
   async function submit(emails: string) {
     setBusy(true);
     try {
-      onDone(await api<MemberResult[]>(`/api/admin/access-groups/${groupId}/members`, { method: "POST", body: JSON.stringify({ emails, moveFromOtherGroups: move, serviceNowReference: ticket || null }) }));
+      onDone(await api<AddOutcome>(`/api/admin/access-groups/${groupId}/members`, { method: "POST", body: JSON.stringify({ emails, moveFromOtherGroups: move, serviceNowReference: ticket || null, note: note || null }) }));
     } catch (e) { onError(e); } finally { setBusy(false); }
   }
 
@@ -315,8 +361,9 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
     body.append("file", file);
     body.append("moveFromOtherGroups", String(move));
     if (ticket) body.append("serviceNowReference", ticket);
+    if (note) body.append("note", note);
     try {
-      onDone(await api<MemberResult[]>(`/api/admin/access-groups/${groupId}/members/excel`, { method: "POST", body }));
+      onDone(await api<AddOutcome>(`/api/admin/access-groups/${groupId}/members/excel`, { method: "POST", body }));
     } catch (err) { onError(err); } finally { setBusy(false); }
   }
 
@@ -355,7 +402,7 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
                   <button type="button" disabled={busy || u.status === "Inactive"} onClick={() => void submit(u.email)}>
                     <span className="avatar avatar-sm" aria-hidden="true">{initials(u.displayName ?? u.email)}</span>
                     <span className="pick-text"><strong>{u.displayName ?? u.email}</strong><span className="muted small">{u.email}, {u.userType.toLowerCase()}{u.status === "Inactive" ? ", inactive" : ""}</span></span>
-                    <span className="pick-add">{u.status === "Inactive" ? "Inactive" : "Add"}</span>
+                    <span className="pick-add">{u.status === "Inactive" ? "Inactive" : "Request"}</span>
                   </button>
                 </li>
               ))}
@@ -376,7 +423,7 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
             <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder={"priya.nair@rrd.com\njane.doe@clientcompany.com"} />
           </label>
           <p className="muted small">Only portal users can be added. Anyone who isn't a user yet is listed so you can add them in Users first.</p>
-          <div className="actions"><button className="btn btn-primary" type="button" disabled={busy || pasted === 0} onClick={() => void submit(text)}>{busy ? "Adding…" : `Add ${pasted || ""} ${pasted === 1 ? "Person" : "People"}`}</button></div>
+          <div className="actions"><button className="btn btn-primary" type="button" disabled={busy || pasted === 0} onClick={() => void submit(text)}>{busy ? "Sending…" : `Send for Approval${pasted ? `: ${pasted} ${pasted === 1 ? "Person" : "People"}` : ""}`}</button></div>
         </div>
       )}
 
@@ -387,10 +434,15 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
             <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
           <p className="small"><button type="button" className="link" onClick={() => void template()}>Download a Template</button></p>
-          <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? "Adding…" : "Add from File"}</button></div>
+          <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? "Sending…" : "Send File for Approval"}</button></div>
         </form>
       )}
 
+      <p className="muted small">Nobody is added straight away. Everyone on your list goes to the owners of this dashboard as <strong>one request</strong>; they approve everyone or tick only some, and people are added when they do.</p>
+      <label className="field ticket-field">
+        <span>Note for the owners (optional)</span>
+        <input maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. New starters in the Colombo sales team" />
+      </label>
       <label className="field ticket-field">
         <span>ServiceNow ticket (optional, saved in the audit log)</span>
         <input maxLength={64} value={ticket} onChange={(e) => setTicket(e.target.value)} placeholder="e.g. RITM0012345" />
@@ -408,13 +460,14 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
 
 const outcomeText: Record<string, string> = {
   Added: "Added", Moved: "Moved here", AlreadyHere: "Already in this group",
+  Requested: "Sent for approval", AlreadyWaiting: "Skipped: already waiting for approval",
   InOtherGroup: "Skipped: in another group", NotAUser: "Skipped: not portal users yet", Inactive: "Skipped: inactive", Invalid: "Not valid emails",
 };
 
 function ResultSummary({ results, onClose }: { results: MemberResult[]; onClose: () => void }) {
   const [open, setOpen] = useState(false);
   const counts = Object.entries(results.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.outcome]: (acc[r.outcome] ?? 0) + 1 }), {}));
-  const problems = results.filter((r) => ["InOtherGroup", "NotAUser", "Inactive", "Invalid"].includes(r.outcome));
+  const problems = results.filter((r) => ["InOtherGroup", "NotAUser", "Inactive", "Invalid", "AlreadyWaiting"].includes(r.outcome));
   return (
     <div className={`result-box ${problems.length ? "result-warn" : "result-ok"}`}>
       <div className="panel-row">
@@ -458,9 +511,9 @@ function CopyDialog({ groups, onClose, onCopy }: { groups: GroupRow[]; onClose: 
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.dashboard}, {g.members})</option>)}
           </select>
         </label>
-        <p className="muted small">Only the people are copied. Anyone already in a group of this dashboard is skipped and listed.</p>
+        <p className="muted small">Only the people are copied, and they go to the owners for approval as one request. Anyone already in a group of this dashboard is skipped and listed.</p>
         {error && <Notice tone="error">{error}</Notice>}
-        <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !source}>{busy ? "Copying…" : "Copy Members"}</button><button className="btn btn-quiet" type="button" onClick={onClose}>Cancel</button></div>
+        <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !source}>{busy ? "Sending…" : "Send for Approval"}</button><button className="btn btn-quiet" type="button" onClick={onClose}>Cancel</button></div>
       </form>
     </Modal>
   );
@@ -470,21 +523,37 @@ function initials(name: string) {
   return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
 }
 
-function describe(action: string, details: string | null): string {
-  let d: Record<string, unknown> = {};
-  try { d = details ? JSON.parse(details) : {}; } catch { /* plain text */ }
-  const s = (k: string) => String(d[k] ?? "");
-  switch (action) {
-    case "group.created": return `Group created${d.RlsValue ? ` with RLS value ${s("RlsValue")}` : ""}.`;
-    case "group.members-added": return `${s("count")} ${Number(d.count) === 1 ? "person" : "people"} added${Number(d.moved) ? `, ${s("moved")} of them moved from other groups` : ""}${Array.isArray(d.emails) && d.emails.length <= 3 ? `: ${(d.emails as string[]).join(", ")}` : ""}.`;
-    case "group.member-removed": return `${s("email")} removed.`;
-    case "group.member-moved": return `${s("email")} moved from ${s("from")} to ${s("to")}.`;
-    case "group.members-copied": return `${s("copied")} members copied from another group.`;
-    case "group.rls-changed": return `RLS value changed from ${s("from") || "none"} to ${s("to") || "none"}.`;
-    case "group.renamed": return `Renamed from ${s("from")} to ${s("to")}.`;
-    case "group.activated": return "Activated.";
-    case "group.deactivated": return "Deactivated.";
-    case "group.self-joined": return "A Super Admin added themselves.";
-    default: return action;
-  }
+// ---------------------------------------------------------------- History
+
+type HistoryPage = { total: number; page: number; pageSize: number; rows: { id: number; occurredAtUtc: string; actor: string | null; description: string; serviceNowReference: string | null }[] };
+
+/** Everything that has changed in this group, newest first, a page at a time. */
+function HistoryPanel({ groupId, created }: { groupId: number; created: string }) {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(20);
+  const { data, error } = useApi<HistoryPage>(`/api/admin/access-groups/${groupId}/history?page=${page}&pageSize=${size}`);
+  if (error) return <Notice tone="error">{error}</Notice>;
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  return (
+    <section className="panel">
+      <div className="panel-row">
+        <h2>History {data && <span className="muted count">{data.total}</span>}</h2>
+        <span className="muted small">{created}</span>
+      </div>
+      {!data ? <p className="muted">Loading…</p> : data.rows.length === 0 ? <p className="pop-empty">No changes recorded yet.</p> : (
+        <ol className="history">
+          {data.rows.map((h) => (
+            <li key={h.id}>
+              <span className="history-dot" aria-hidden="true" />
+              <div>
+                <p>{h.description}</p>
+                <p className="muted small">{h.actor ?? "System"}, {when(h.occurredAtUtc)}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {data && <Pager page={data.page} pages={pages} size={data.pageSize} total={data.total} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} sizes={[10, 20, 50, 100]} />}
+    </section>
+  );
 }

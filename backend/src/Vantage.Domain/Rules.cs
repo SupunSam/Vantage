@@ -12,6 +12,8 @@ public static partial class Rules
     public const int TagMax = 10;
     public const int TagsPerDashboardMax = 8;
     public const int PinsPerUserMax = 12;
+    public const int FoldersPerUserMax = 20;
+    public const int FolderNameMax = 60;
     public const int VersionsKept = 3;
     public const int ThumbnailWidth = 640;
     public const int ThumbnailHeight = 360;

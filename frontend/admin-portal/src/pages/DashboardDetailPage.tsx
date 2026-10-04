@@ -20,8 +20,7 @@ type Detail = {
   };
   categoryPath: string | null;
   thumbnail: string | null;
-  myGroupId: number | null;
-  canJoin: boolean;
+  canPreview: boolean;
   canEdit: boolean;
   canEditGroups: boolean;
   canModify: boolean;
@@ -125,7 +124,7 @@ export function DashboardDetailPage() {
 
       {tab === "details" && <DetailsTab data={data} onSaved={(t) => { say(true, t); reload(); }} onError={(t) => say(false, t)} />}
       {tab === "groups" && <GroupsTab data={data} onChanged={(t) => { say(true, t); reload(); }} onError={(t) => say(false, t)} />}
-      {tab === "preview" && <PreviewTab data={data} onJoined={(t) => { say(true, t); reload(); }} onError={(t) => say(false, t)} />}
+      {tab === "preview" && <PreviewTab data={data} />}
       {tab === "versions" && (
         <VersionsTab data={data}
           onRestored={(v) => { setMessage({ ok: true, text: `Restoring: version ${v} is being imported into Power BI.` }); reload(); }}
@@ -491,7 +490,7 @@ function GroupsTab({ data, onChanged, onError }: { data: Detail; onChanged: (t: 
         <div>
           <h2>Access Groups</h2>
           <p className="muted small">
-            Being in a group is the only way to open a dashboard, for Super Admins too. Each person is in one group per dashboard.
+            Being in a group is the only way to use a dashboard in the User Portal. Super Admins administer rather than consume, so they check dashboards from the Preview tab without joining any group. Each person is in one group per dashboard.
             {d.rlsEnabled
               ? " This report uses row-level security: each group's RLS value is the Power BI role its members see, exactly as named in the .pbix (several roles with commas)."
               : " This report has no row-level security, so everyone sees the same data and the dashboard needs only its default group. RLS values are kept but not used."}
@@ -507,7 +506,7 @@ function GroupsTab({ data, onChanged, onError }: { data: Detail; onChanged: (t: 
       {adding && <AddGroupForm dashboardId={d.id} onCancel={() => setAdding(false)} onAdded={(t) => { setAdding(false); onChanged(t); }} />}
 
       <table className="grid">
-        <thead><tr><th>Group</th><th>RLS value</th><th>Members</th><th /></tr></thead>
+        <thead><tr><th>Group</th><th>RLS value</th><th>Members</th></tr></thead>
         <tbody>
           {d.groups.map((g) => (
             <tr key={g.id}>
@@ -528,10 +527,6 @@ function GroupsTab({ data, onChanged, onError }: { data: Detail; onChanged: (t: 
                   </span>
                 )}
               </td>
-              <td className="cell-actions">
-                {data.myGroupId === g.id ? <span className="pill pill-ok">You're in this group</span>
-                  : data.canJoin && <JoinButton dashboardId={d.id} group={g} moving={!!data.myGroupId} onJoined={onChanged} onError={onError} />}
-              </td>
             </tr>
           ))}
         </tbody>
@@ -539,18 +534,6 @@ function GroupsTab({ data, onChanged, onError }: { data: Detail; onChanged: (t: 
       <p className="muted small" style={{ marginTop: 12 }}>Open a group to add, move or remove its members.</p>
     </section>
   );
-}
-
-function JoinButton({ dashboardId, group, moving, onJoined, onError }: { dashboardId: number; group: Group; moving: boolean; onJoined: (t: string) => void; onError: (t: string) => void }) {
-  async function join() {
-    try {
-      const r = await api<{ group: string }>(`/api/admin/dashboards/${dashboardId}/groups/${group.id}/join`, { method: "POST" });
-      onJoined(`You're now in ${r.group}. The preview uses that group's RLS value.`);
-    } catch (e) {
-      onError(errorText(e));
-    }
-  }
-  return <button className="btn" type="button" onClick={() => void join()}>{moving ? "Move Me Here" : "Add Me"}</button>;
 }
 
 function RlsCell({ dashboardId, group, rlsEnabled, canEdit, onSaved }: { dashboardId: number; group: Group; rlsEnabled: boolean; canEdit: boolean; onSaved: (t: string) => void }) {
@@ -617,13 +600,17 @@ function AddGroupForm({ dashboardId, onCancel, onAdded }: { dashboardId: number;
 
 // ---------------------------------------------------------------- Preview
 
-function PreviewTab({ data, onJoined, onError }: { data: Detail; onJoined: (t: string) => void; onError: (t: string) => void }) {
+function PreviewTab({ data }: { data: Detail }) {
   const d = data.dashboard;
+  // Groups a preview can go through: with RLS on, only those that have an RLS value (the token needs one).
+  const usable = d.groups.filter((g) => g.status !== "Retired" && (!d.rlsEnabled || g.rlsValue));
+  const [groupId, setGroupId] = useState<number | null>(usable.find((g) => g.isDefault)?.id ?? usable[0]?.id ?? null);
   const [show, setShow] = useState(false);
-  const myGroup = d.groups.find((g) => g.id === data.myGroupId);
-  const defaultGroup = d.groups.find((g) => g.isDefault);
+  const group = usable.find((g) => g.id === groupId);
 
   if (d.status !== "Active") return <div className="empty"><h2>Preview Is Available Once the Dashboard Is Active</h2><p>It's {d.status.toLowerCase()} right now.</p></div>;
+  if (!data.canPreview) return <div className="empty"><h2>Previews Are for Super Admins</h2><p>Open the dashboards you have access to in the User Portal.</p></div>;
+  if (usable.length === 0) return <div className="empty"><h2>No Group to Preview Through</h2><p>This report uses row-level security and none of its groups has an RLS value yet. Set one on the Access Groups tab.</p></div>;
 
   return (
     <section className="panel">
@@ -631,20 +618,27 @@ function PreviewTab({ data, onJoined, onError }: { data: Detail; onJoined: (t: s
         <div>
           <h2>Preview</h2>
           <p className="muted small">
-            {myGroup
-              ? <>Shows the dashboard exactly as a member of <strong>{myGroup.name}</strong> sees it{d.rlsEnabled && myGroup.rlsValue ? <> (RLS value {myGroup.rlsValue})</> : null}, with a fresh embed token.</>
-              : "You need to be in one of this dashboard's groups to preview it."}
+            Check that the dashboard works, without being in any access group: it opens as a member of the group you choose would see it.
+            {d.rlsEnabled ? " The group's RLS role decides the data; roles that filter on the signed-in email use yours." : ""}
+            {" "}A preview isn't counted as usage, and each one is recorded in the audit log.
           </p>
         </div>
-        {myGroup && !show && <button className="btn btn-primary" type="button" onClick={() => setShow(true)}>Open Preview</button>}
-        {!myGroup && data.canJoin && defaultGroup && <JoinButton dashboardId={d.id} group={defaultGroup} moving={false} onJoined={onJoined} onError={onError} />}
       </div>
-      {show && myGroup && <Preview key={myGroup.id} dashboardId={d.id} />}
+      <div className="filters">
+        <label className="field">
+          <span>Preview as a member of</span>
+          <select value={groupId ?? ""} onChange={(e) => { setGroupId(Number(e.target.value)); setShow(false); }}>
+            {usable.map((g) => <option key={g.id} value={g.id}>{g.name}{d.rlsEnabled && g.rlsValue ? ` (RLS ${g.rlsValue})` : ""}{g.status !== "Active" ? ` – ${g.status.toLowerCase()}` : ""}</option>)}
+          </select>
+        </label>
+        {!show && <button className="btn btn-primary" type="button" onClick={() => setShow(true)}>Open Preview</button>}
+      </div>
+      {show && group && <Preview key={group.id} dashboardId={d.id} groupId={group.id} />}
     </section>
   );
 }
 
-function Preview({ dashboardId }: { dashboardId: number }) {
+function Preview({ dashboardId, groupId }: { dashboardId: number; groupId: number }) {
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState("Getting an embed token…");
@@ -652,7 +646,7 @@ function Preview({ dashboardId }: { dashboardId: number }) {
   useEffect(() => {
     let cancelled = false;
     const el = host.current!;
-    api<EmbedInfo>(`/api/dashboards/${dashboardId}/embed`)
+    api<EmbedInfo>(`/api/admin/dashboards/${dashboardId}/preview-embed?groupId=${groupId}`)
       .then((info) => {
         if (cancelled || !info.token || !info.embedUrl) return;
         setState("Loading the report…");
@@ -671,7 +665,7 @@ function Preview({ dashboardId }: { dashboardId: number }) {
       cancelled = true;
       powerbiService.reset(el);
     };
-  }, [dashboardId]);
+  }, [dashboardId, groupId]);
 
   return (
     <>

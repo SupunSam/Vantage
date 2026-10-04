@@ -288,3 +288,23 @@ fieldset.plain > .btn { align-self: flex-start; }
 .ticket-field { max-width: 360px; }
 .plain-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
 .detail-hero .grow { flex: 1; }
+
+/* ---------- Audit Log ---------- */
+.json-box { margin: 0; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-sm); font-size: 0.85rem; overflow: auto; max-height: 320px; white-space: pre-wrap; word-break: break-word; }
+.audit-description { font-size: 1rem; margin: 0 0 14px; }
+.audit-grid td:nth-child(3) { min-width: 320px; }
+
+.pending-adds { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.pending-add { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--surface); }
+
+/* Access Group Rules */
+.rule-conditions { display: flex; flex-direction: column; gap: 8px; }
+.rule-conditions h3, .rule-people h3 { font-size: 0.95rem; margin: 0; }
+.rule-condition { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rule-condition select, .rule-condition input { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; }
+.rule-condition input { flex: 1 1 220px; min-width: 0; }
+.rule-preview-box { border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--paper); }
+.rule-preview p { margin: 10px 0; }
+.rule-people ul { list-style: none; margin: 6px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow: auto; }
+
+.rules-head { align-items: flex-start; gap: 16px; margin-bottom: 12px; }

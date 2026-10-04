@@ -1,4 +1,3 @@
-# Move this file to .github/workflows/ci.yml (GitHub only runs workflows from that folder).
 name: CI
 
 on:

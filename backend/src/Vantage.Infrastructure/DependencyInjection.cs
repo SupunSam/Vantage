@@ -53,6 +53,10 @@ public static class DependencyInjection
         services.AddScoped<AccessGroupService>();
         services.AddScoped<DashboardVersionService>();
         services.AddScoped<AccessRequestService>();
+        services.AddScoped<AuditLogService>();
+        services.AddScoped<GroupAddRequestService>();
+        services.AddScoped<AccessGroupRuleService>();
+        services.AddScoped<PersonalFolderService>();
         // Email: queued in the outbox table and sent by a background worker (Mailpit locally, SES in AWS).
         services.Configure<EmailOptions>(config.GetSection("Email"));
         services.AddScoped<EmailOutboxService>();

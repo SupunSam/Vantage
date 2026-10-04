@@ -4,6 +4,7 @@ import { HomePage } from "./pages/HomePage";
 import { ViewerPage } from "./pages/ViewerPage";
 import { CataloguePage } from "./pages/CataloguePage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
+import { FoldersPage } from "./pages/FoldersPage";
 
 /** The Admin Portal runs next to this one: port 8080 in the local Docker build. */
 const adminPortalUrl = `${window.location.protocol}//${window.location.hostname}:8080`;
@@ -22,10 +23,10 @@ export function App() {
       title: "Find More",
       items: [
         { to: "/catalogue", label: "Dashboard Catalogue", icon: "search" },
-        { to: "/folders", label: "Personal Folders", icon: "folder", soon: true },
+        { to: "/folders", label: "Personal Folders", icon: "folder" },
       ],
     },
-    ...(isOwner ? [{ title: "As an Owner", items: [{ to: "/approvals", label: "Access Requests", icon: "inbox" }, { to: "/reviews", label: "Monthly Reviews", icon: "history", soon: true }] }] : []),
+    ...(isOwner ? [{ title: "As an Owner", items: [{ to: "/approvals", label: "Access Requests", icon: "inbox" }] }] : []),
   ];
   const showAdmin = adminModules.some((m) => can(me, m));
 
@@ -35,6 +36,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/dashboards/:id" element={<ViewerPage />} />
         <Route path="/catalogue" element={<CataloguePage />} />
+        <Route path="/folders" element={<FoldersPage />} />
         {isOwner && <Route path="/approvals" element={<ApprovalsPage />} />}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

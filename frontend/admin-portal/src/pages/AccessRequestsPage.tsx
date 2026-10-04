@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RequestReviewList, type AccessRequestRow } from "@vantage/shared";
+import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow } from "@vantage/shared";
 import { Notice, useApi } from "../ui";
 
 type Data = { pending: number; canDecide: boolean; rows: AccessRequestRow[] };
@@ -15,6 +15,7 @@ const filters = [
 export function AccessRequestsPage() {
   const [status, setStatus] = useState("Pending");
   const { data, error, reload } = useApi<Data>(`/api/admin/access-requests${status ? `?status=${status}` : ""}`);
+  const adds = useApi<{ pending: number; rows: GroupAddRow[] }>(`/api/admin/group-add-requests${status ? `?status=${status}` : ""}`);
   const [message, setMessage] = useState<string | null>(null);
 
   if (error) return <Notice tone="error">{error}</Notice>;
@@ -33,11 +34,22 @@ export function AccessRequestsPage() {
       <div className="tabs" role="tablist">
         {filters.map((f) => (
           <button key={f.key} type="button" role="tab" aria-selected={status === f.key} className={`tab ${status === f.key ? "tab-on" : ""}`} onClick={() => { setStatus(f.key); setMessage(null); }}>
-            {f.label}{f.key === "Pending" && data && <span className="tab-count">{data.pending}</span>}
+            {f.label}{f.key === "Pending" && data && <span className="tab-count">{data.pending + (adds.data?.pending ?? 0)}</span>}
           </button>
         ))}
       </div>
       {message && <Notice tone="ok">{message}</Notice>}
+      {adds.data && adds.data.rows.length > 0 && (
+        <>
+          <h2 className="requests-sub">Access Group Additions</h2>
+          <p className="muted small">
+            Admins' requests to add people to an access group. The dashboard's owners approve them in the User Portal, all at once or person by person.
+            {data?.canDecide ? " As a Super Admin you can use Override Approval in an exception, but you must give a reason: it goes into the audit log and the group's history, and the owners are told." : ""}
+          </p>
+          <GroupAddReviewList rows={adds.data.rows} groupLink={(id) => `/access-groups/${id}`} onChanged={(m) => { setMessage(m); adds.reload(); reload(); }} />
+          <h2 className="requests-sub">Requests From People</h2>
+        </>
+      )}
       {!data ? <p className="muted">Loading…</p> : (
         <RequestReviewList rows={data.rows} canDecide={data.canDecide} onChanged={(m) => { setMessage(m); reload(); }}
           dashboardLink={(id) => `/dashboards/${id}`}

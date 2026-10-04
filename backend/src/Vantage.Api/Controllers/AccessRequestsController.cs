@@ -105,17 +105,17 @@ public sealed class AccessRequestsController(AppDbContext db, CurrentUser curren
         var query = db.AccessRequests.AsNoTracking()
             .Where(r => (r.Dashboard.PrimaryOwnerId == me.Id || r.Dashboard.BackupOwnerId == me.Id)
                         && (r.Status == AccessRequestStatus.Pending || r.DecidedAtUtc >= since));
-        return Ok(await RequestRows(db, query, ct));
+        return Ok(await RequestRows(db, query, me.Id, ct));
     }
 
-    public sealed record DecisionBody(int? GroupId, string? Note);
+    public sealed record DecisionBody(int? GroupId, string? Note, string? OverrideReason);
 
     [HttpPost("access-requests/{id:int}/approve")]
     public async Task<IActionResult> Approve(int id, DecisionBody body, CancellationToken ct)
     {
         var me = await current.GetAsync(ct);
         if (me is null) return Unauthorized();
-        try { await requests.ApproveAsync(id, body.GroupId, body.Note, new GroupActor(me.Id, me.IsSuperAdmin), ct); return NoContent(); }
+        try { await requests.ApproveAsync(id, body.GroupId, body.Note, new GroupActor(me.Id, me.IsSuperAdmin), ct, body.OverrideReason); return NoContent(); }
         catch (RuleException ex) { return BadRequest(new { message = ex.Message }); }
         catch (KeyNotFoundException) { return NotFound(); }
     }
@@ -125,20 +125,22 @@ public sealed class AccessRequestsController(AppDbContext db, CurrentUser curren
     {
         var me = await current.GetAsync(ct);
         if (me is null) return Unauthorized();
-        try { await requests.RejectAsync(id, body.Note, new GroupActor(me.Id, me.IsSuperAdmin), ct); return NoContent(); }
+        try { await requests.RejectAsync(id, body.Note, new GroupActor(me.Id, me.IsSuperAdmin), ct, body.OverrideReason); return NoContent(); }
         catch (RuleException ex) { return BadRequest(new { message = ex.Message }); }
         catch (KeyNotFoundException) { return NotFound(); }
     }
 
     /// <summary>Request rows with what an approver needs: requester details and the dashboard's groups to choose from.</summary>
-    internal static async Task<object> RequestRows(AppDbContext db, IQueryable<AccessRequest> query, CancellationToken ct)
+    internal static async Task<object> RequestRows(AppDbContext db, IQueryable<AccessRequest> query, int viewerId, CancellationToken ct)
     {
         var rows = await query
             .OrderBy(r => r.Status == AccessRequestStatus.Pending ? 0 : 1).ThenByDescending(r => r.RequestedAtUtc)
             .Take(300)
             .Select(r => new
             {
-                r.Id, status = r.Status.ToString(), r.RequestedAtUtc, comment = r.RequesterComment, r.DecidedAtUtc, r.DecisionNote,
+                r.Id, status = r.Status.ToString(), r.RequestedAtUtc, comment = r.RequesterComment, r.DecidedAtUtc, r.DecisionNote, r.OverrideReason,
+                needsOverride = !((r.Dashboard.PrimaryOwnerId == viewerId || r.Dashboard.BackupOwnerId == viewerId) && !r.Dashboard.OwnershipPendingReview),
+                owners = new[] { r.Dashboard.PrimaryOwner != null ? r.Dashboard.PrimaryOwner.DisplayName ?? r.Dashboard.PrimaryOwner.Email : null, r.Dashboard.BackupOwner != null ? r.Dashboard.BackupOwner.DisplayName ?? r.Dashboard.BackupOwner.Email : null },
                 decidedBy = r.DecidedByUserId != null ? db.Users.Where(u => u.Id == r.DecidedByUserId).Select(u => u.DisplayName ?? u.Email).FirstOrDefault() : null,
                 assignedGroup = r.AssignedGroup != null ? r.AssignedGroup.Name : null,
                 dashboard = new
@@ -176,6 +178,6 @@ public sealed class AdminAccessRequestsController(CurrentUser current, AppDbCont
         var query = db.AccessRequests.AsNoTracking();
         if (Enum.TryParse<AccessRequestStatus>(status, true, out var s)) query = query.Where(r => r.Status == s);
         var pending = await db.AccessRequests.CountAsync(r => r.Status == AccessRequestStatus.Pending, ct);
-        return Ok(new { pending, canDecide = me.IsSuperAdmin, rows = await AccessRequestsController.RequestRows(db, query, ct) });
+        return Ok(new { pending, canDecide = me.IsSuperAdmin, rows = await AccessRequestsController.RequestRows(db, query, me.Id, ct) });
     }
 }

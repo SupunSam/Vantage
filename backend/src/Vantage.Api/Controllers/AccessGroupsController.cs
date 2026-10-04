@@ -13,7 +13,7 @@ namespace Vantage.Api.Controllers;
 /// Membership of an active group on an active dashboard is the only way to open a dashboard.
 /// </summary>
 [Route("api/admin/access-groups")]
-public sealed class AccessGroupsController(CurrentUser current, AppDbContext db, AccessGroupService access, GroupService groups) : AdminControllerBase(current)
+public sealed class AccessGroupsController(CurrentUser current, AppDbContext db, AccessGroupService access, GroupService groups, GroupAddRequestService addRequests) : AdminControllerBase(current)
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -65,6 +65,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
         var g = await db.DashboardGroups.AsNoTracking().Where(x => x.Id == id).Select(x => new
         {
             x.Id, x.Name, x.RlsValue, x.IsDefault, status = x.Status.ToString(), x.CreatedAtUtc, x.ClonedFromGroupId,
+            ruleCount = db.AccessGroupRules.Count(r => r.GroupId == x.Id),
             clonedFrom = x.ClonedFromGroupId != null ? db.DashboardGroups.Where(s => s.Id == x.ClonedFromGroupId).Select(s => s.Name).FirstOrDefault() : null,
             createdBy = x.CreatedByUserId != null ? db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName ?? u.Email).FirstOrDefault() : null,
             dashboard = new
@@ -83,24 +84,59 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
         }).SingleOrDefaultAsync(ct);
         if (g is null) return NotFound();
 
-        var idText = id.ToString();
-        var history = await db.AuditLogs.AsNoTracking()
-            .Where(a => a.EntityType == "DashboardGroup" && a.EntityId == idText)
-            .OrderByDescending(a => a.OccurredAtUtc).ThenByDescending(a => a.Id).Take(30)
-            .Select(a => new
+        var pendingRequests = await db.GroupAddRequests.AsNoTracking()
+            .Where(r => r.GroupId == id && r.Status == GroupAddRequestStatus.Pending)
+            .OrderByDescending(r => r.CreatedAtUtc)
+            .Select(r => new
             {
-                a.Id, a.Action, a.Details, a.OccurredAtUtc, a.ServiceNowReference,
-                actor = a.ActorUserId != null ? db.Users.Where(u => u.Id == a.ActorUserId).Select(u => u.DisplayName ?? u.Email).FirstOrDefault() : null,
+                r.Id, r.CreatedAtUtc, r.ServiceNowReference, r.Note, requestedById = r.RequestedByUserId, action = r.Action.ToString(),
+                requestedBy = r.RequestedBy != null ? r.RequestedBy.DisplayName ?? r.RequestedBy.Email : "Access rule “" + r.RuleName + "”",
+                count = r.Items.Count(i => i.Decision == GroupAddItemDecision.Pending),
+                people = r.Items.OrderBy(i => i.User.DisplayName ?? i.User.Email).Take(3).Select(i => i.User.DisplayName ?? i.User.Email).ToList(),
             })
             .ToListAsync(ct);
 
         return Ok(new
         {
             group = g,
-            history,
+            pendingRequests,
+            myId = me.Id,
             canEdit = me.Can(AppModules.Groups, PermissionLevel.Edit),
             isSuperAdmin = me.IsSuperAdmin,
             noRlsMessage = GroupService.NoRlsMessage,
+        });
+    }
+
+    /// <summary>
+    /// The group's history, newest first, a page at a time. Each line is a plain sentence built from the audit log
+    /// (the same wording as the Audit Log page), so rules, requests and overrides all read the same way.
+    /// </summary>
+    [HttpGet("{id:int}/history")]
+    public async Task<IActionResult> History(int id, int page = 1, int pageSize = 20, CancellationToken ct = default)
+    {
+        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        var info = await db.DashboardGroups.AsNoTracking().Where(g => g.Id == id).Select(g => new { g.Name, Dashboard = g.Dashboard.Name }).SingleOrDefaultAsync(ct);
+        if (info is null) return NotFound();
+        var size = Math.Clamp(pageSize, 5, 100);
+        var idText = id.ToString();
+        var query = db.AuditLogs.AsNoTracking().Where(a => a.EntityType == "DashboardGroup" && a.EntityId == idText);
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(a => a.OccurredAtUtc).ThenByDescending(a => a.Id)
+            .Skip((Math.Max(1, page) - 1) * size).Take(size)
+            .Select(a => new
+            {
+                a.Id, a.Action, a.Details, a.OccurredAtUtc, a.ServiceNowReference,
+                actor = a.ActorUserId != null ? db.Users.Where(u => u.Id == a.ActorUserId).Select(u => u.DisplayName ?? u.Email).FirstOrDefault() : null,
+            }).ToListAsync(ct);
+        return Ok(new
+        {
+            total, page = Math.Max(1, page), pageSize = size,
+            rows = rows.Select(a => new
+            {
+                a.Id, a.OccurredAtUtc, a.actor, a.ServiceNowReference,
+                // On the group's own page the group is obvious, so the sentences say "this group".
+                description = AuditDescriber.Describe(a.Action, "DashboardGroup", idText, a.Details, info.Name, null, null).Replace($"group {info.Name}", "this group"),
+            }),
         });
     }
 
@@ -113,8 +149,12 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
         var actor = await ActorAsync(ct);
         return await Guard(async () =>
         {
-            var (g, copied) = await access.CreateAsync(body.DashboardId, body.Name, body.RlsValue, body.CopyFromGroupId, actor, ct);
-            return Ok(new { g.Id, g.Name, copied });
+            // The group itself is created now; the people copied into it go to the owners for approval like any other add.
+            var (g, _) = await access.CreateAsync(body.DashboardId, body.Name, body.RlsValue, body.CopyFromGroupId, actor, ct, copyMembers: false);
+            AddOutcome? outcome = null;
+            if (body.CopyFromGroupId is { } src && await db.GroupMembers.AnyAsync(m => m.GroupId == src && m.RemovedAtUtc == null, ct))
+                outcome = await addRequests.CopyAsync(src, g.Id, actor, null, ct);
+            return Ok(new { g.Id, g.Name, copied = outcome?.Results ?? [], mode = outcome?.Mode, requestId = outcome?.RequestId });
         });
     }
 
@@ -163,7 +203,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
         return await Guard(async () => { await access.SetActiveAsync(id, body.Active, actor, ct); return NoContent(); });
     }
 
-    public sealed record MembersBody(string Emails, bool MoveFromOtherGroups, string? ServiceNowReference);
+    public sealed record MembersBody(string Emails, bool MoveFromOtherGroups, string? ServiceNowReference, string? Note);
 
     /// <summary>Adds people from pasted emails (one per line, or separated by commas, semicolons or spaces), or a single email.</summary>
     [HttpPost("{id:int}/members")]
@@ -173,12 +213,12 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
         var actor = await ActorAsync(ct);
         var emails = SplitEmails(body.Emails);
         var source = emails.Count == 1 ? MembershipSource.Manual : MembershipSource.BulkUpload;
-        return await Guard(async () => Ok(await access.AddMembersAsync(id, emails, body.MoveFromOtherGroups, source, actor, ct, body.ServiceNowReference)));
+        return await Guard(async () => Ok(await addRequests.SubmitAsync(id, emails, body.MoveFromOtherGroups, source, actor, body.ServiceNowReference, body.Note, ct)));
     }
 
     /// <summary>Adds people from an Excel file: emails under an "Email" heading (or in the first column).</summary>
     [HttpPost("{id:int}/members/excel"), RequestSizeLimit(10 * 1024 * 1024)]
-    public async Task<IActionResult> AddMembersExcel(int id, IFormFile file, [FromForm] bool moveFromOtherGroups, [FromForm] string? serviceNowReference, CancellationToken ct)
+    public async Task<IActionResult> AddMembersExcel(int id, IFormFile file, [FromForm] bool moveFromOtherGroups, [FromForm] string? serviceNowReference, [FromForm] string? note, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
@@ -193,7 +233,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
             return BadRequest(new { message = "That file couldn't be read as an Excel workbook (.xlsx)." });
         }
         if (emails.Count == 0) return BadRequest(new { message = "No email addresses found. Put them under an 'Email' heading in the first sheet." });
-        return await Guard(async () => Ok(await access.AddMembersAsync(id, emails, moveFromOtherGroups, MembershipSource.BulkUpload, actor, ct, serviceNowReference)));
+        return await Guard(async () => Ok(await addRequests.SubmitAsync(id, emails, moveFromOtherGroups, MembershipSource.BulkUpload, actor, serviceNowReference, note, ct)));
     }
 
     [HttpGet("members-template")]
@@ -230,14 +270,14 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
         return await Guard(async () => { await access.MoveMemberAsync(id, userId, body.TargetGroupId, actor, ct); return NoContent(); });
     }
 
-    public sealed record CopyBody(int SourceGroupId);
+    public sealed record CopyBody(int SourceGroupId, string? ServiceNowReference);
 
     [HttpPost("{id:int}/copy-members")]
     public async Task<IActionResult> CopyMembers(int id, CopyBody body, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
-        return await Guard(async () => Ok(await access.CopyMembersAsync(body.SourceGroupId, id, actor, ct)));
+        return await Guard(async () => Ok(await addRequests.CopyAsync(body.SourceGroupId, id, actor, body.ServiceNowReference, ct)));
     }
 
     private async Task<GroupActor> ActorAsync(CancellationToken ct)

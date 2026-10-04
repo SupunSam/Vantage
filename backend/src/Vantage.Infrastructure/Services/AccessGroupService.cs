@@ -22,26 +22,27 @@ public sealed class AccessGroupService(
     public const int MaxBatch = 5000;
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 
+    /// <summary>One person from a list of emails, checked against the group but not yet added.</summary>
+    public sealed record AddCandidate(string Email, int? UserId, string Outcome, string? Detail, GroupMember? Current);
+
     /// <summary>
-    /// Adds portal users by email. Only existing users can be added: anyone who isn't a user yet is listed as
-    /// NotAUser and must be added in Users first. People already in another group of the same dashboard are
-    /// skipped, or moved here when <paramref name="moveFromOtherGroups"/>.
+    /// Checks a list of emails against a group without changing anything. Outcomes: Added (would be added), Moved (would
+    /// move from another group, only when <paramref name="moveFromOtherGroups"/>), AlreadyHere, InOtherGroup, NotAUser,
+    /// Inactive, Invalid. Only existing portal users can be added: anyone else is NotAUser and must be added in Users first.
     /// </summary>
-    public async Task<List<MemberResult>> AddMembersAsync(int groupId, IEnumerable<string> emails, bool moveFromOtherGroups,
-        MembershipSource source, GroupActor actor, CancellationToken ct = default, string? serviceNowReference = null, bool notify = true)
+    public async Task<List<AddCandidate>> ClassifyAsync(DashboardGroup group, IEnumerable<string> emails, bool moveFromOtherGroups, CancellationToken ct = default)
     {
-        var group = await LoadEditableAsync(groupId, actor, ct);
         var list = emails.Select(e => e?.Trim() ?? "").Where(e => e.Length > 0).ToList();
         if (list.Count == 0) throw new RuleException("Enter at least one email address.");
         if (list.Count > MaxBatch) throw new RuleException($"Up to {MaxBatch:N0} people at a time.");
 
-        var results = new List<MemberResult>();
+        var results = new List<AddCandidate>();
         var seen = new HashSet<string>();
         var valid = new List<string>();
         foreach (var raw in list)
         {
             var email = UserService.NormaliseEmail(raw);
-            if (email is null) { results.Add(new(raw, "Invalid", "Not a valid email address.")); continue; }
+            if (email is null) { results.Add(new(raw, null, "Invalid", "Not a valid email address.", null)); continue; }
             if (seen.Add(email)) valid.Add(email);
         }
 
@@ -51,33 +52,55 @@ public sealed class AccessGroupService(
             .Where(m => m.DashboardId == group.DashboardId && m.RemovedAtUtc == null && ids.Contains(m.UserId))
             .ToListAsync(ct);
 
-        var addedIds = new List<int>();
-        var grantedIds = new List<int>();
         foreach (var email in valid)
         {
             var u = known.SingleOrDefault(k => k.Email == email);
-            if (u is null) { results.Add(new(email, "NotAUser", "Not a portal user yet. Add them in Users first, then add them here.")); continue; }
-            if (u.Status == UserStatus.Inactive) { results.Add(new(email, "Inactive", "This user is inactive.")); continue; }
+            if (u is null) { results.Add(new(email, null, "NotAUser", "Not a portal user yet. Add them in Users first, then add them here.", null)); continue; }
+            if (u.Status == UserStatus.Inactive) { results.Add(new(email, u.Id, "Inactive", "This user is inactive.", null)); continue; }
             var current = live.SingleOrDefault(m => m.UserId == u.Id);
-            if (current?.GroupId == groupId) { results.Add(new(email, "AlreadyHere", null)); continue; }
+            if (current?.GroupId == group.Id) { results.Add(new(email, u.Id, "AlreadyHere", null, current)); continue; }
             if (current is not null && !moveFromOtherGroups)
             {
-                results.Add(new(email, "InOtherGroup", $"Already in {current.Group.Name}. Tick \"Move people from other groups\" or use Move."));
+                results.Add(new(email, u.Id, "InOtherGroup", $"Already in {current.Group.Name}. Tick \"Move people from other groups\" or use Move.", current));
                 continue;
             }
-            if (current is not null)
+            results.Add(current is not null
+                ? new(email, u.Id, "Moved", $"Moved from {current.Group.Name}.", current)
+                : new(email, u.Id, "Added", null, null));
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Adds portal users by email straight away. This is the primitive used when an owner has approved a request, or
+    /// a Super Admin has overridden the approval; admins adding people go through <see cref="GroupAddRequestService"/>.
+    /// People already in another group of the same dashboard are skipped, or moved here when <paramref name="moveFromOtherGroups"/>.
+    /// </summary>
+    /// <param name="addedBy">Who the memberships say added them (the admin who asked, when an owner approved).</param>
+    /// <param name="overrideReason">Why a Super Admin skipped the owners' approval; saved in the audit log and the group's history.</param>
+    /// <param name="requestId">The approved request this add belongs to, if any.</param>
+    public async Task<List<MemberResult>> AddMembersAsync(int groupId, IEnumerable<string> emails, bool moveFromOtherGroups,
+        MembershipSource source, GroupActor actor, CancellationToken ct = default, string? serviceNowReference = null, bool notify = true,
+        int? addedBy = null, string? overrideReason = null, int? requestId = null)
+    {
+        var group = await LoadEditableAsync(groupId, actor, ct);
+        var candidates = await ClassifyAsync(group, emails, moveFromOtherGroups, ct);
+
+        var results = new List<MemberResult>();
+        var addedIds = new List<int>();
+        var grantedIds = new List<int>();
+        foreach (var c in candidates)
+        {
+            if (c.Outcome is not ("Added" or "Moved")) { results.Add(new(c.Email, c.Outcome, c.Detail)); continue; }
+            if (c.Current is not null)
             {
-                End(current, actor.UserId, $"Moved to {group.Name}");
+                End(c.Current, actor.UserId, $"Moved to {group.Name}");
                 await db.SaveChangesAsync(ct); // free the one-live-group slot first
-                results.Add(new(email, "Moved", $"Moved from {current.Group.Name}."));
             }
-            else
-            {
-                results.Add(new(email, "Added", null));
-                grantedIds.Add(u.Id);
-            }
-            db.GroupMembers.Add(new GroupMember { GroupId = groupId, DashboardId = group.DashboardId, UserId = u.Id, Source = source, AddedAtUtc = Now, AddedByUserId = actor.UserId });
-            addedIds.Add(u.Id);
+            else grantedIds.Add(c.UserId!.Value);
+            results.Add(new(c.Email, c.Outcome, c.Detail));
+            db.GroupMembers.Add(new GroupMember { GroupId = groupId, DashboardId = group.DashboardId, UserId = c.UserId!.Value, Source = source, AddedAtUtc = Now, AddedByUserId = addedBy ?? actor.UserId });
+            addedIds.Add(c.UserId!.Value);
         }
 
         if (addedIds.Count > 0)
@@ -86,6 +109,7 @@ public sealed class AccessGroupService(
             {
                 group = group.Name, count = addedIds.Count, moved = results.Count(r => r.Outcome == "Moved"),
                 emails = results.Where(r => r.Outcome is "Added" or "Moved").Select(r => r.Email).Take(50).ToList(),
+                overrideReason, requestId,
             }, serviceNowReference);
             if (notify) NotifyGranted(group, grantedIds);
         }
@@ -94,15 +118,22 @@ public sealed class AccessGroupService(
     }
 
     /// <summary>Removes someone from the group (their membership is ended, not deleted). Owners can't be removed while they own the dashboard.</summary>
-    public async Task RemoveMemberAsync(int groupId, int userId, GroupActor actor, CancellationToken ct = default)
+    /// <param name="reason">Saved on the ended membership; defaults to "Removed".</param>
+    /// <param name="requestId">The approved request this removal belongs to, if any.</param>
+    /// <param name="overrideReason">Why a Super Admin approved it in the owners' place.</param>
+    /// <param name="notify">Tell the person they no longer have access.</param>
+    public async Task RemoveMemberAsync(int groupId, int userId, GroupActor actor, CancellationToken ct = default, string? reason = null, int? requestId = null,
+        string? overrideReason = null, bool notify = false)
     {
         var group = await LoadEditableAsync(groupId, actor, ct);
         var member = await db.GroupMembers.Include(m => m.User)
             .SingleOrDefaultAsync(m => m.GroupId == groupId && m.UserId == userId && m.RemovedAtUtc == null, ct) ?? throw new KeyNotFoundException();
         if (group.Dashboard.PrimaryOwnerId == userId || group.Dashboard.BackupOwnerId == userId)
             throw new RuleException($"{member.User.DisplayName ?? member.User.Email} owns this dashboard, so they keep access. Change the owner in Dashboards Master first, or move them to another group.");
-        End(member, actor.UserId, "Removed");
-        audit.Add("group.member-removed", "DashboardGroup", groupId, group.DashboardId, new { group = group.Name, email = member.User.Email });
+        End(member, actor.UserId, reason ?? "Removed");
+        audit.Add("group.member-removed", "DashboardGroup", groupId, group.DashboardId, new { group = group.Name, email = member.User.Email, requestId, overrideReason });
+        if (notify && group.Dashboard.Status == DashboardStatus.Active)
+            notifications.Notify([userId], "access.removed", $"Your access to {group.Dashboard.Name} was removed", "You were removed from the access group.", "/catalogue");
         await db.SaveChangesAsync(ct);
     }
 
@@ -177,7 +208,7 @@ public sealed class AccessGroupService(
 
     /// <summary>Creates a group on an RLS dashboard, optionally copying the members of an existing group (clone: members only).</summary>
     public async Task<(DashboardGroup Group, List<MemberResult> Copied)> CreateAsync(int dashboardId, string? name, string? rlsValue, int? copyFromGroupId,
-        GroupActor actor, CancellationToken ct = default)
+        GroupActor actor, CancellationToken ct = default, bool copyMembers = true)
     {
         var dashboard = await db.Dashboards.SingleOrDefaultAsync(d => d.Id == dashboardId, ct) ?? throw new KeyNotFoundException();
         EnsureNotPaused(dashboard, actor);
@@ -188,14 +219,14 @@ public sealed class AccessGroupService(
             group.ClonedFromGroupId = src;
             await db.SaveChangesAsync(ct);
             var hasMembers = await db.GroupMembers.AnyAsync(m => m.GroupId == src && m.RemovedAtUtc == null, ct);
-            if (hasMembers) copied = await CopyMembersAsync(src, group.Id, actor, ct);
+            if (hasMembers && copyMembers) copied = await CopyMembersAsync(src, group.Id, actor, ct);
         }
         return (group, copied);
     }
 
     // ---------------------------------------------------------------- helpers
 
-    private async Task<DashboardGroup> LoadEditableAsync(int groupId, GroupActor actor, CancellationToken ct, bool allowInactive = false)
+    public async Task<DashboardGroup> LoadEditableAsync(int groupId, GroupActor actor, CancellationToken ct, bool allowInactive = false)
     {
         var group = await db.DashboardGroups.Include(g => g.Dashboard).SingleOrDefaultAsync(g => g.Id == groupId, ct) ?? throw new KeyNotFoundException();
         if (group.Status == GroupStatus.Retired || group.Dashboard.Status == DashboardStatus.Retired)

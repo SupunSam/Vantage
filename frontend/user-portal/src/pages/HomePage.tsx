@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, Icon, Thumbnail, useSession } from "@vantage/shared";
+import { FolderMenu } from "./FolderMenu";
 
 type MyDashboard = {
   id: number;
@@ -207,6 +208,7 @@ function Cards({ rows, onPin }: { rows: MyDashboard[]; onPin: (d: MyDashboard) =
                 {!d.linked && <p className="card-warn">Not linked to a report yet</p>}
               </div>
             </Link>
+            <FolderMenu dashboardId={d.id} name={d.name} />
             <button type="button" className={`card-pin ${d.pinned ? "card-pin-on" : ""}`} onClick={() => onPin(d)}
               aria-pressed={d.pinned} aria-label={d.pinned ? `Unpin ${d.name}` : `Pin ${d.name}`} title={d.pinned ? "Unpin" : "Pin to the top"}>
               <Icon name="pin" size={18} />

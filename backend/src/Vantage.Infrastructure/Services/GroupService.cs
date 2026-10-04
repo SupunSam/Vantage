@@ -50,26 +50,6 @@ public sealed class GroupService(AppDbContext db, AuditWriter audit, TimeProvide
         return group;
     }
 
-    /// <summary>A Super Admin puts themselves in a group (moving out of any other group of the same dashboard). No approval.</summary>
-    public async Task<DashboardGroup> JoinAsync(int dashboardId, int groupId, int userId, CancellationToken ct = default)
-    {
-        var group = await db.DashboardGroups.SingleOrDefaultAsync(g => g.Id == groupId && g.DashboardId == dashboardId, ct) ?? throw new KeyNotFoundException();
-        var now = clock.GetUtcNow().UtcDateTime;
-        var current = await db.GroupMembers.SingleOrDefaultAsync(m => m.DashboardId == dashboardId && m.UserId == userId && m.RemovedAtUtc == null, ct);
-        if (current?.GroupId == groupId) return group;
-        if (current is not null)
-        {
-            current.RemovedAtUtc = now;
-            current.RemovedByUserId = userId;
-            current.RemovedReason = $"Moved to {group.Name}";
-            await db.SaveChangesAsync(ct); // free the one-live-group slot before adding the new row
-        }
-        db.GroupMembers.Add(new GroupMember { GroupId = groupId, DashboardId = dashboardId, UserId = userId, Source = MembershipSource.SuperAdminSelf, AddedAtUtc = now, AddedByUserId = userId });
-        audit.Add("group.self-joined", "DashboardGroup", groupId, dashboardId, new { group = group.Name });
-        await db.SaveChangesAsync(ct);
-        return group;
-    }
-
     private static string? CleanRls(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;

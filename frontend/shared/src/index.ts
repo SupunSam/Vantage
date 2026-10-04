@@ -7,3 +7,5 @@ export * from "./Shell";
 export * from "./Thumbnail";
 export * from "./Requests";
 import "./base.css";
+export * from "./GroupAddRequests";
+export * from "./Pager";

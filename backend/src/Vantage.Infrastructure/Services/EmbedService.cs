@@ -15,7 +15,9 @@ public sealed class NoAccessException(int dashboardId, string reason) : Exceptio
 
 /// <summary>
 /// Decides whether a user may open a dashboard and builds the embed details.
-/// Group membership is the only route in, for every user including Super Admins.
+/// Group membership is the only route in for consuming a dashboard, for every user including Super Admins.
+/// Super Admins administer rather than consume, so they preview through <see cref="PreviewAsync"/> instead, which
+/// needs no membership and leaves no trace in usage.
 /// </summary>
 public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, TableauTokenService tableau, AuditWriter audit, TimeProvider clock)
 {
@@ -38,13 +40,7 @@ public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, Tableau
         if (membership is null)
             throw new NoAccessException(dashboardId, "no-group");
 
-        EmbedInfo info = dashboard.Type switch
-        {
-            DashboardType.PowerBi => await PowerBiAsync(dashboard, membership.Email, membership.RlsValue, ct),
-            DashboardType.Tableau => await TableauAsync(dashboard, membership.TableauUserName, ct),
-            DashboardType.GenAi => new EmbedInfo("genai", dashboard.Id, dashboard.Name, $"/api/dashboards/{dashboard.Id}/genai-content", null, null, null, null),
-            _ => throw new EmbedException("not-configured", "Unknown dashboard type."),
-        };
+        var info = await BuildAsync(dashboard, membership.Email, membership.TableauUserName, membership.RlsValue, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
         dashboard.LastViewedAtUtc = now;
@@ -55,6 +51,37 @@ public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, Tableau
         await db.SaveChangesAsync(ct);
         return info;
     }
+
+    /// <summary>
+    /// Embed details for a Super Admin checking that a dashboard works, as a member of the chosen group would see it
+    /// (that group's RLS role, with the Super Admin's own email as the identity). No membership is needed and none is
+    /// created. It is not a view: it doesn't count in usage or reset the inactivity flag. Each preview is audited.
+    /// </summary>
+    public async Task<EmbedInfo> PreviewAsync(int dashboardId, int groupId, int adminUserId, CancellationToken ct)
+    {
+        var dashboard = await db.Dashboards.Include(d => d.Tenant).Include(d => d.Workspace).SingleOrDefaultAsync(d => d.Id == dashboardId, ct)
+            ?? throw new KeyNotFoundException($"Dashboard {dashboardId} not found.");
+        if (dashboard.Status != DashboardStatus.Active) throw new RuleException("A preview is available once the dashboard is Active.");
+        var group = await db.DashboardGroups.SingleOrDefaultAsync(g => g.Id == groupId && g.DashboardId == dashboardId && g.Status != GroupStatus.Retired, ct)
+            ?? throw new KeyNotFoundException();
+        if (dashboard.RlsEnabled && string.IsNullOrWhiteSpace(group.RlsValue))
+            throw new RuleException($"{group.Name} has no RLS value, so a preview through it would fail. Set its RLS value first, or preview as another group.");
+        var admin = await db.Users.Where(u => u.Id == adminUserId).Select(u => new { u.Email, u.TableauUserName }).SingleAsync(ct);
+
+        var info = await BuildAsync(dashboard, admin.Email, admin.TableauUserName, group.RlsValue, ct);
+        audit.Add("dashboard.previewed", "Dashboard", dashboard.Id, dashboard.Id,
+            new { groupId = group.Id, group = group.Name, rls = dashboard.RlsEnabled ? group.RlsValue : null, expiresAt = info.ExpiresAt });
+        await db.SaveChangesAsync(ct);
+        return info;
+    }
+
+    private async Task<EmbedInfo> BuildAsync(Dashboard dashboard, string email, string? tableauUserName, string? rlsValue, CancellationToken ct) => dashboard.Type switch
+    {
+        DashboardType.PowerBi => await PowerBiAsync(dashboard, email, rlsValue, ct),
+        DashboardType.Tableau => await TableauAsync(dashboard, tableauUserName, ct),
+        DashboardType.GenAi => new EmbedInfo("genai", dashboard.Id, dashboard.Name, $"/api/dashboards/{dashboard.Id}/genai-content", null, null, null, null),
+        _ => throw new EmbedException("not-configured", "Unknown dashboard type."),
+    };
 
     private async Task<EmbedInfo> PowerBiAsync(Dashboard d, string email, string? rlsValue, CancellationToken ct)
     {

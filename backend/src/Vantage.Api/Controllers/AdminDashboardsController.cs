@@ -9,13 +9,13 @@ namespace Vantage.Api.Controllers;
 
 /// <summary>
 /// Dashboards Master (Admin Portal): the grid of every dashboard, editing details after publishing, the thumbnail,
-/// the dashboard's groups, and a preview. Previewing follows the same rule as everyone else: you must be in one of
-/// the dashboard's groups. Super Admins can put themselves in any group directly, without an access request.
+/// the dashboard's groups, and a preview. Super Admins administer rather than consume: they preview as the members
+/// of any group would see it without being in that group, and there is no way to add oneself without approval.
 /// </summary>
 [Route("api/admin/dashboards")]
 public sealed class AdminDashboardsController(
     CurrentUser current, AppDbContext db, CategoryService categories, DashboardMasterService master, GroupService groups,
-    DashboardVersionService versions) : AdminControllerBase(current)
+    DashboardVersionService versions, EmbedService embed) : AdminControllerBase(current)
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -89,15 +89,13 @@ public sealed class AdminDashboardsController(
             }).ToList(),
         }).SingleOrDefaultAsync(ct);
         if (d is null) return NotFound();
-        var myGroupId = await db.GroupMembers.Where(m => m.DashboardId == id && m.UserId == me.Id && m.RemovedAtUtc == null).Select(m => (int?)m.GroupId).SingleOrDefaultAsync(ct);
         var paths = await categories.PathsAsync(ct);
         return Ok(new
         {
             dashboard = d,
             categoryPath = d.CategoryId is { } c ? paths.GetValueOrDefault(c) : null,
             thumbnail = ThumbnailVersion(d.ThumbnailKey),
-            myGroupId,
-            canJoin = me.IsSuperAdmin,
+            canPreview = me.IsSuperAdmin,
             canEdit = me.Can(AppModules.DashboardConfig, PermissionLevel.Edit),
             canEditGroups = me.Can(AppModules.Groups, PermissionLevel.Edit),
             canModify = me.Can(AppModules.Publishing, PermissionLevel.Edit),
@@ -236,18 +234,17 @@ public sealed class AdminDashboardsController(
         });
     }
 
-    /// <summary>A Super Admin puts themselves in a group of this dashboard (moving out of any other group on it). No approval.</summary>
-    [HttpPost("{id:int}/groups/{groupId:int}/join")]
-    public async Task<IActionResult> Join(int id, int groupId, CancellationToken ct)
+    /// <summary>
+    /// Embed details for a Super Admin's preview as the members of one group would see it. Needs no membership, is not
+    /// counted as a view, and is audited.
+    /// </summary>
+    [HttpGet("{id:int}/preview-embed")]
+    public async Task<IActionResult> PreviewEmbed(int id, int groupId, CancellationToken ct)
     {
-        var me = await Current.GetAsync(ct);
-        if (me is null) return Unauthorized();
-        if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can add themselves without approval." });
-        return await Guard(async () =>
-        {
-            var g = await groups.JoinAsync(id, groupId, me.Id, ct);
-            return Ok(new { group = g.Name });
-        });
+        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
+        var me = (await Current.GetAsync(ct))!;
+        if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can preview dashboards from here. Everyone else opens dashboards in the User Portal." });
+        return await Guard(async () => Ok(await embed.PreviewAsync(id, groupId, me.Id, ct)));
     }
 
     private static object Limits => new

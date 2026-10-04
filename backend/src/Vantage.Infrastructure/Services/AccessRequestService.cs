@@ -67,9 +67,9 @@ public sealed class AccessRequestService(
     /// it is used when no group is given. On RLS dashboards the approver must choose (the default group usually
     /// carries the owners' see-everything role).
     /// </summary>
-    public async Task ApproveAsync(int requestId, int? groupId, string? note, GroupActor actor, CancellationToken ct = default)
+    public async Task ApproveAsync(int requestId, int? groupId, string? note, GroupActor actor, CancellationToken ct = default, string? overrideReason = null)
     {
-        var r = await LoadDecidableAsync(requestId, actor, ct);
+        var (r, reason) = await LoadDecidableAsync(requestId, actor, overrideReason, ct);
         var d = r.Dashboard;
         DashboardGroup group;
         if (groupId is { } gid)
@@ -93,7 +93,9 @@ public sealed class AccessRequestService(
         r.DecidedByUserId = actor.UserId;
         r.DecidedAtUtc = Now;
         r.DecisionNote = Clean(note);
-        audit.Add("access-request.approved", "AccessRequest", r.Id, d.Id, new { requester = r.Requester.Email, group = group.Name, note = r.DecisionNote, onBehalf = !IsOwner(d, actor.UserId) });
+        r.OverrideReason = reason;
+        audit.Add("access-request.approved", "AccessRequest", r.Id, d.Id, new { requester = r.Requester.Email, group = group.Name, note = r.DecisionNote, onBehalf = reason is not null, overrideReason = reason });
+        await TellOwnersAsync(r, actor, "approved", reason, ct);
         notifications.Notify([r.RequesterUserId], "access-request.approved", $"You can now open {d.Name}", r.DecisionNote ?? "Your access request was approved.", $"/dashboards/{d.Id}");
         await email.QueueAsync([r.RequesterUserId], "access-request.approved", $"Access to {d.Name} approved", "Your access request was approved",
             $"<p>You can now open <strong>{EmailOutboxService.Encode(d.Name)}</strong>.</p>"
@@ -102,15 +104,17 @@ public sealed class AccessRequestService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task RejectAsync(int requestId, string? note, GroupActor actor, CancellationToken ct = default)
+    public async Task RejectAsync(int requestId, string? note, GroupActor actor, CancellationToken ct = default, string? overrideReason = null)
     {
-        var r = await LoadDecidableAsync(requestId, actor, ct);
+        var (r, reason) = await LoadDecidableAsync(requestId, actor, overrideReason, ct);
         var d = r.Dashboard;
         r.Status = AccessRequestStatus.Rejected;
         r.DecidedByUserId = actor.UserId;
         r.DecidedAtUtc = Now;
         r.DecisionNote = Clean(note);
-        audit.Add("access-request.rejected", "AccessRequest", r.Id, d.Id, new { requester = r.Requester.Email, note = r.DecisionNote, onBehalf = !IsOwner(d, actor.UserId) });
+        r.OverrideReason = reason;
+        audit.Add("access-request.rejected", "AccessRequest", r.Id, d.Id, new { requester = r.Requester.Email, note = r.DecisionNote, onBehalf = reason is not null, overrideReason = reason });
+        await TellOwnersAsync(r, actor, "rejected", reason, ct);
         notifications.Notify([r.RequesterUserId], "access-request.rejected", $"Your request for {d.Name} wasn't approved", r.DecisionNote, "/catalogue");
         await email.QueueAsync([r.RequesterUserId], "access-request.rejected", $"Access to {d.Name} not approved", "Your access request wasn't approved",
             $"<p>The owner of <strong>{EmailOutboxService.Encode(d.Name)}</strong> didn't approve your request.</p>"
@@ -129,7 +133,12 @@ public sealed class AccessRequestService(
 
     public static bool IsOwner(Dashboard d, int userId) => d.PrimaryOwnerId == userId || d.BackupOwnerId == userId;
 
-    private async Task<AccessRequest> LoadDecidableAsync(int requestId, GroupActor actor, CancellationToken ct)
+    /// <summary>
+    /// Loads a pending request the actor may decide. Owners decide as themselves. A Super Admin deciding in their place
+    /// (or while the owners are under review) is stepping outside the normal process, so must give a reason, which is
+    /// returned to be saved with the decision; for an owner it is null.
+    /// </summary>
+    private async Task<(AccessRequest Request, string? OverrideReason)> LoadDecidableAsync(int requestId, GroupActor actor, string? overrideReason, CancellationToken ct)
     {
         var r = await db.AccessRequests.Include(x => x.Dashboard).Include(x => x.Requester).SingleOrDefaultAsync(x => x.Id == requestId, ct)
             ?? throw new KeyNotFoundException();
@@ -137,7 +146,23 @@ public sealed class AccessRequestService(
         if (r.Status != AccessRequestStatus.Pending) throw new RuleException($"This request was already {r.Status.ToString().ToLowerInvariant()}.");
         if (r.Dashboard.OwnershipPendingReview && !actor.IsSuperAdmin)
             throw new RuleException("This dashboard's owners are being reviewed, so approvals are paused until a Super Admin confirms them.");
-        return r;
+        if (IsOwner(r.Dashboard, actor.UserId) && !r.Dashboard.OwnershipPendingReview) return (r, null);
+        var reason = Clean(overrideReason);
+        if (reason is null) throw new RuleException("Give a reason for deciding in place of the owners. It is saved in the audit log, and the owners are told.");
+        return (r, reason);
+    }
+
+    /// <summary>Tells the owners that a Super Admin decided one of their requests, and why.</summary>
+    private async Task TellOwnersAsync(AccessRequest r, GroupActor actor, string verdict, string? reason, CancellationToken ct)
+    {
+        if (reason is null) return;
+        var admin = await db.Users.Where(u => u.Id == actor.UserId).Select(u => u.DisplayName ?? u.Email).SingleAsync(ct);
+        var who = r.Requester.DisplayName ?? r.Requester.Email;
+        var owners = Owners(r.Dashboard);
+        notifications.Notify(owners, "access-request.overridden", $"{admin} {verdict} {who}'s request for {r.Dashboard.Name} in your place", $"Reason: {reason}", "/approvals");
+        await email.QueueAsync(owners, "access-request.overridden", $"A Super Admin decided a request for {r.Dashboard.Name} in your place", "Decided by a Super Admin",
+            $"<p><strong>{EmailOutboxService.Encode(admin)}</strong> {verdict} the request from <strong>{EmailOutboxService.Encode(who)}</strong> for <strong>{EmailOutboxService.Encode(r.Dashboard.Name)}</strong> instead of you.</p>"
+            + $"<p>Reason given: <em>{EmailOutboxService.Encode(reason)}</em></p>", null, null, ct);
     }
 
     private static IEnumerable<int> Owners(Dashboard d) => new[] { d.PrimaryOwnerId, d.BackupOwnerId }.OfType<int>();

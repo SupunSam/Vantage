@@ -260,21 +260,6 @@ public class CatalogueTests(SqlServerFixture fx) : IClassFixture<SqlServerFixtur
         await Assert.ThrowsAsync<RuleException>(() => k.Groups.SetRlsAsync(d.Id, north.Id, ""));
     }
 
-    [SqlFact]
-    public async Task Joining_a_group_moves_a_super_admin_out_of_their_previous_one()
-    {
-        await using var k = Arrange();
-        var owner = await UserAsync(k.Db);
-        var d = await DashboardAsync(k, owner, rls: true);
-        var north = await k.Groups.AddAsync(d.Id, Unique("North"), "Region_North", owner.Id);
-
-        await k.Groups.JoinAsync(d.Id, north.Id, owner.Id);
-
-        var live = await k.Db.GroupMembers.Where(m => m.DashboardId == d.Id && m.UserId == owner.Id && m.RemovedAtUtc == null).ToListAsync();
-        Assert.Single(live);
-        Assert.Equal(north.Id, live[0].GroupId);
-    }
-
     // ------------------------------------------------------------ Notifications
 
     [SqlFact]

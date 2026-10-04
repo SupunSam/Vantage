@@ -26,6 +26,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DashboardGroup> DashboardGroups => Set<DashboardGroup>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<AccessRequest> AccessRequests => Set<AccessRequest>();
+    public DbSet<GroupAddRequest> GroupAddRequests => Set<GroupAddRequest>();
+    public DbSet<GroupAddRequestItem> GroupAddRequestItems => Set<GroupAddRequestItem>();
+    public DbSet<AccessGroupRule> AccessGroupRules => Set<AccessGroupRule>();
+    public DbSet<AccessGroupRuleCondition> AccessGroupRuleConditions => Set<AccessGroupRuleCondition>();
     public DbSet<AccessReview> AccessReviews => Set<AccessReview>();
     public DbSet<AccessReviewItem> AccessReviewItems => Set<AccessReviewItem>();
     public DbSet<Pin> Pins => Set<Pin>();
@@ -243,10 +247,53 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasDatabaseName("IX_AccessRequests_OnePending");
             e.Property(x => x.RequesterComment).HasMaxLength(1000);
             e.Property(x => x.DecisionNote).HasMaxLength(1000);
+            e.Property(x => x.OverrideReason).HasMaxLength(1000);
             e.HasOne(x => x.Dashboard).WithMany().HasForeignKey(x => x.DashboardId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Requester).WithMany().HasForeignKey(x => x.RequesterUserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.AssignedGroup).WithMany().HasForeignKey(x => x.AssignedGroupId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<User>().WithMany().HasForeignKey(x => x.DecidedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        m.Entity<GroupAddRequest>(e =>
+        {
+            e.HasIndex(x => new { x.DashboardId, x.Status });
+            e.HasIndex(x => new { x.GroupId, x.Status });
+            e.Property(x => x.ServiceNowReference).HasMaxLength(64);
+            e.Property(x => x.Note).HasMaxLength(1000);
+            e.Property(x => x.DecisionNote).HasMaxLength(1000);
+            e.Property(x => x.OverrideReason).HasMaxLength(1000);
+            e.Property(x => x.RuleName).HasMaxLength(100);
+            e.HasIndex(x => x.RuleId);
+            e.HasOne(x => x.Dashboard).WithMany().HasForeignKey(x => x.DashboardId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RequestedBy).WithMany().HasForeignKey(x => x.RequestedByUserId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<AccessGroupRule>().WithMany().HasForeignKey(x => x.RuleId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.DecidedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        m.Entity<AccessGroupRule>(e =>
+        {
+            e.HasIndex(x => x.GroupId);
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.LastRunSummary).HasMaxLength(500);
+            e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        m.Entity<AccessGroupRuleCondition>(e =>
+        {
+            e.Property(x => x.Field).HasMaxLength(30);
+            e.Property(x => x.Value).HasMaxLength(200);
+            e.HasOne(x => x.Rule).WithMany(x => x.Conditions).HasForeignKey(x => x.RuleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        m.Entity<GroupAddRequestItem>(e =>
+        {
+            e.HasIndex(x => new { x.RequestId, x.UserId }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.Decision });
+            e.Property(x => x.Result).HasMaxLength(300);
+            e.HasOne(x => x.Request).WithMany(x => x.Items).HasForeignKey(x => x.RequestId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         m.Entity<AccessReview>(e =>
