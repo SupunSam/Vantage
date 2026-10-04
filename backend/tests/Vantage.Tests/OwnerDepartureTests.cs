@@ -61,7 +61,7 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
 
     private static string Unique(string prefix) => prefix + Guid.NewGuid().ToString("N")[..8];
 
-    private sealed record Kit(AppDbContext Db, OwnerDepartureService Departures, DashboardMasterService Master, DashboardFactory Factory, User SuperAdmin) : IAsyncDisposable
+    private sealed record Kit(AppDbContext Db, OwnerDepartureService Departures, DashboardMasterService Master, DashboardFactory Factory, User SuperAdmin, int CategoryId) : IAsyncDisposable
     {
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
@@ -79,8 +79,10 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
         var admin = await PersonAsync(db);
         var role = await db.Roles.SingleAsync(r => r.Name == SystemRoles.SuperAdmin);
         db.UserRoles.Add(new UserRole { UserId = admin.Id, RoleId = role.Id, AssignedAtUtc = DateTime.UtcNow });
+        var category = new Category { Name = Unique("Cat "), Level = 1, CreatedAtUtc = DateTime.UtcNow };   // every dashboard sits in a category, and saving details checks it
+        db.Categories.Add(category);
         await db.SaveChangesAsync();
-        return new Kit(db, new OwnerDepartureService(db, audit, notifications, email, clock), master, new DashboardFactory(db, ownership, audit, clock), admin);
+        return new Kit(db, new OwnerDepartureService(db, audit, notifications, email, clock), master, new DashboardFactory(db, ownership, audit, clock), admin, category.Id);
     }
 
     private sealed class NoTokens : IPowerBiTokenProvider
@@ -103,7 +105,7 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
     {
         var d = await k.Factory.CreateAsync(new Dashboard
         {
-            Code = "OD", Name = Unique("Own dash "), Type = type, Status = status, PrimaryOwnerId = primary.Id, BackupOwnerId = backup?.Id,
+            Code = "OD", Name = Unique("Own dash "), Type = type, Status = status, PrimaryOwnerId = primary.Id, BackupOwnerId = backup?.Id, CategoryId = k.CategoryId,
         }, null, primary.Id);
         k.Db.ChangeTracker.Clear();
         return d;
@@ -190,7 +192,7 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
     }
 
     private static DashboardDetailsInput Details(Dashboard d, int primaryOwnerId) =>
-        new(d.Name, null, null, primaryOwnerId, null, null, d.Audience, d.DataClassification, null, null);
+        new(d.Name, null, d.CategoryId, primaryOwnerId, null, null, d.Audience, d.DataClassification, null, null);
 
     // ------------------------------------------------------------ Analytics type filter
 
