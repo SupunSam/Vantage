@@ -14,6 +14,13 @@ public class AuditDescriberTests
     }
 
     [Fact]
+    public void A_genai_replace_and_restore_read_as_page_changes()
+    {
+        Assert.Equal("Replaced the page of Sales Page with version 4.", AuditDescriber.Describe("dashboard.replaced", "Dashboard", "1", """{"version":4,"type":"GenAi"}""", null, "Sales Page", null));
+        Assert.Equal("Restored version 1 of Sales Page; it is live again as version 5.", AuditDescriber.Describe("dashboard.restored", "Dashboard", "1", """{"fromVersion":1,"version":5,"type":"GenAi"}""", null, "Sales Page", null));
+    }
+
+    [Fact]
     public void Role_change_shows_before_and_after()
     {
         var text = AuditDescriber.Describe("user.updated", "User", "3", """{"rolesBefore":["Dashboard User"],"rolesAfter":["Dashboard User","Dashboard Owner"]}""", "priya@rrd.com", null, null);

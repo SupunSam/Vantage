@@ -3,6 +3,7 @@ using Vantage.Domain;
 using Vantage.Domain.Entities;
 using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.Embedding;
+using Vantage.Infrastructure.GenAi;
 
 namespace Vantage.Infrastructure.Services;
 
@@ -19,7 +20,7 @@ public sealed class NoAccessException(int dashboardId, string reason) : Exceptio
 /// Super Admins administer rather than consume, so they preview through <see cref="PreviewAsync"/> instead, which
 /// needs no membership and leaves no trace in usage.
 /// </summary>
-public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, TableauTokenService tableau, AuditWriter audit, TimeProvider clock)
+public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, TableauTokenService tableau, GenAiService genAi, AuditWriter audit, TimeProvider clock)
 {
     public async Task<EmbedInfo> GetEmbedAsync(int dashboardId, int userId, CancellationToken ct)
     {
@@ -79,9 +80,16 @@ public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, Tableau
     {
         DashboardType.PowerBi => await PowerBiAsync(dashboard, email, rlsValue, ct),
         DashboardType.Tableau => await TableauAsync(dashboard, tableauUserName, ct),
-        DashboardType.GenAi => new EmbedInfo("genai", dashboard.Id, dashboard.Name, $"/api/dashboards/{dashboard.Id}/genai-content", null, null, null, null),
+        DashboardType.GenAi => await GenAiAsync(dashboard, ct),
         _ => throw new EmbedException("not-configured", "Unknown dashboard type."),
     };
+
+    /// <summary>A signed link to the file on the separate GenAI origin; the viewer puts it in a sandboxed frame.</summary>
+    private async Task<EmbedInfo> GenAiAsync(Dashboard d, CancellationToken ct)
+    {
+        var (url, expires) = await genAi.LinkAsync(d, ct);
+        return new EmbedInfo("genai", d.Id, d.Name, url, null, expires, null, null);
+    }
 
     private async Task<EmbedInfo> PowerBiAsync(Dashboard d, string email, string? rlsValue, CancellationToken ct)
     {

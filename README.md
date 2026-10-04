@@ -73,6 +73,7 @@ committed. `deploy/.env.example` shows the format.
 | --- | --- |
 | 8080 | Admin Portal (and the API under /api) |
 | 8081 | User Portal (and the API under /api) |
+| 8082 | GenAI dashboards (framed by the portals; signed links only) |
 | 8025 | Mailpit: the emails Vantage has sent |
 | 1433 | SQL Server, for SSMS or Azure Data Studio: `localhost,1433`, login `sa` or `rd_app` with the passwords in `deploy/.env` |
 

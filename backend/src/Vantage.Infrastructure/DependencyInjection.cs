@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.Email;
 using Vantage.Infrastructure.Embedding;
+using Vantage.Infrastructure.GenAi;
 using Vantage.Infrastructure.Secrets;
 using Vantage.Infrastructure.Services;
 using Vantage.Infrastructure.Storage;
@@ -46,6 +47,8 @@ public static class DependencyInjection
         services.AddScoped<AuditWriter>();
         services.AddScoped<OwnershipService>();
         services.AddScoped<DashboardFactory>();
+        services.Configure<GenAiOptions>(config.GetSection("GenAi"));
+        services.AddScoped<GenAiService>();
         services.AddScoped<EmbedService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<DashboardMasterService>();

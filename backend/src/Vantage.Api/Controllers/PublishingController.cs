@@ -5,6 +5,7 @@ using Vantage.Api.Auth;
 using Vantage.Domain;
 using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.Embedding;
+using Vantage.Infrastructure.GenAi;
 using Vantage.Infrastructure.Services;
 
 namespace Vantage.Api.Controllers;
@@ -12,7 +13,8 @@ namespace Vantage.Api.Controllers;
 /// <summary>Publishing (Admin Portal). Needs Edit on the Publishing module (Super Admin, BPI Publisher, …).</summary>
 [ApiController, Authorize, Route("api/publishing")]
 public sealed class PublishingController(
-    AppDbContext db, CurrentUser current, PublishingService publishing, CategoryService categoryService, DashboardMasterService master) : ControllerBase
+    AppDbContext db, CurrentUser current, PublishingService publishing, GenAiPublisher genAiPublisher, GenAiService genAi,
+    CategoryService categoryService, DashboardMasterService master) : ControllerBase
 {
     /// <summary>Choices for the publish form: Power BI tenants with their workspaces, categories, users for owner pickers.</summary>
     [HttpGet("options")]
@@ -46,6 +48,11 @@ public sealed class PublishingController(
             {
                 nameMax = Rules.DashboardNameMax, codeMax = Rules.DashboardCodeMax, descriptionMax = Rules.DescriptionMax, pbixMaxMb = 1024,
                 tagsMax = Rules.TagsPerDashboardMax, tagMax = Rules.TagMax, thumbnailMaxBytes = Rules.ThumbnailMaxBytes,
+            },
+            genAi = new
+            {
+                maxBytes = Rules.GenAiMaxBytes, warnBytes = Rules.GenAiWarnBytes, versionsKept = Rules.VersionsKept,
+                approvedHosts = await genAi.ApprovedHostsAsync(ct),
             },
         });
     }
@@ -109,6 +116,85 @@ public sealed class PublishingController(
         {
             return StatusCode(502, new { code = ex.Code, message = ex.Message });
         }
+    }
+
+    public sealed class PublishGenAiForm
+    {
+        public string Name { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string? Description { get; set; }
+        public int? PrimaryOwnerId { get; set; }
+        public int? BackupOwnerId { get; set; }
+        public int? CategoryId { get; set; }
+        /// <summary>Comma-separated, up to 8.</summary>
+        public string? Tags { get; set; }
+        public Audience Audience { get; set; } = Audience.Internal;
+        public DataClassification DataClassification { get; set; } = DataClassification.Internal;
+        public IFormFile? File { get; set; }
+        public IFormFile? Thumbnail { get; set; }
+    }
+
+    /// <summary>
+    /// Uploads a GenAI dashboard (one .html file made from the approved template). The file is checked first; if it
+    /// passes, the dashboard is created and is live straight away (there is no import step).
+    /// </summary>
+    [HttpPost("genai")]
+    [RequestSizeLimit(20L * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 20L * 1024 * 1024)]
+    public async Task<IActionResult> PublishGenAi([FromForm] PublishGenAiForm form, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.Edit, ct) is { } denied) return denied;
+        var me = (await current.GetAsync(ct))!;
+        if (form.File is null || form.File.Length == 0) return BadRequest(new { message = "Choose a .html file." });
+
+        try
+        {
+            var thumbnail = await ReadThumbnailAsync(form.Thumbnail, ct);
+            await using var stream = form.File.OpenReadStream();
+            var status = await genAiPublisher.PublishAsync(new PublishGenAiRequest(
+                form.Name, form.Code, form.Description, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId, form.CategoryId, form.File.FileName,
+                Rules.NormalizeTags([form.Tags ?? ""]), form.Audience, form.DataClassification), stream, me.Id, ct);
+            if (thumbnail is not null) await master.SetThumbnailAsync(status.DashboardId, thumbnail, ct);
+            return Ok(status);
+        }
+        catch (Exception ex) when (ex is ArgumentException or RuleException)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Checks a file against the template rules without publishing it, so authors can fix problems before the real upload.</summary>
+    [HttpPost("genai/check")]
+    [RequestSizeLimit(20L * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 20L * 1024 * 1024)]
+    public async Task<IActionResult> CheckGenAi(IFormFile? file, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.View, ct) is { } denied) return denied;
+        if (file is null || file.Length == 0) return BadRequest(new { message = "Choose a .html file." });
+        var ext = Path.GetExtension(file.FileName);
+        if (!ext.Equals(".html", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { message = "Choose a single .html file." });
+        await using var stream = file.OpenReadStream();
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms, ct);
+        var result = GenAiChecker.Check(ms.ToArray(), await genAi.ApprovedHostsAsync(ct));
+        return Ok(new { passed = result.Passed, result.Errors, result.Warnings, result.Libraries, result.SizeBytes });
+    }
+
+    /// <summary>The approved starter template, to give to whoever (or whatever AI tool) builds the dashboard.</summary>
+    [HttpGet("genai/template")]
+    public async Task<IActionResult> GenAiStarterTemplate(CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.View, ct) is { } denied) return denied;
+        return File(GenAiTemplate.Read(), "text/html", GenAiTemplate.FileName);
+    }
+
+    private static async Task<byte[]?> ReadThumbnailAsync(IFormFile? file, CancellationToken ct)
+    {
+        if (file is not { Length: > 0 }) return null;
+        if (file.Length > Rules.ThumbnailMaxBytes) throw new RuleException("The thumbnail is larger than 1 MB.");
+        var bytes = new byte[file.Length];
+        await using (var t = file.OpenReadStream()) await t.ReadExactlyAsync(bytes, ct);
+        Thumbnails.Validate(bytes);
+        return bytes;
     }
 
     [HttpGet("{id:int}/status")]

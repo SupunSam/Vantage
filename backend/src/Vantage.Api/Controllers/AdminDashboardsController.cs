@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Vantage.Api.Auth;
 using Vantage.Domain;
 using Vantage.Infrastructure.Data;
+using Vantage.Infrastructure.GenAi;
 using Vantage.Infrastructure.Services;
 
 namespace Vantage.Api.Controllers;
@@ -15,7 +16,7 @@ namespace Vantage.Api.Controllers;
 [Route("api/admin/dashboards")]
 public sealed class AdminDashboardsController(
     CurrentUser current, AppDbContext db, CategoryService categories, DashboardMasterService master, GroupService groups,
-    DashboardVersionService versions, EmbedService embed) : AdminControllerBase(current)
+    DashboardVersionService versions, GenAiService genAi, EmbedService embed) : AdminControllerBase(current)
 {
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
@@ -162,10 +163,13 @@ public sealed class AdminDashboardsController(
     public async Task<IActionResult> Modify(int id, IFormFile? file, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Publishing, PermissionLevel.Edit, ct) is { } denied) return denied;
-        if (file is null || file.Length == 0) return BadRequest(new { message = "Choose a .pbix file." });
+        var isGenAi = await IsGenAiAsync(id, ct);
+        if (file is null || file.Length == 0) return BadRequest(new { message = isGenAi ? "Choose a .html file." : "Choose a .pbix file." });
         return await Guard(async () =>
         {
             await using var stream = file.OpenReadStream();
+            // GenAI files are checked and go live at once; Power BI files are imported in the background.
+            if (isGenAi) return Ok(await genAi.ReplaceAsync(id, stream, file.FileName, Current.UserId!.Value, ct));
             return Ok(await versions.ReplaceAsync(id, stream, file.FileName, Current.UserId!.Value, ct));
         });
     }
@@ -203,6 +207,7 @@ public sealed class AdminDashboardsController(
         var me = await Current.GetAsync(ct);
         if (me is null) return Unauthorized();
         if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can restore file versions." });
+        if (await IsGenAiAsync(id, ct)) return await Guard(async () => Ok(await genAi.RestoreAsync(id, number, me.Id, ct)));
         return await Guard(async () => Ok(await versions.RestoreAsync(id, number, me.Id, ct)));
     }
 
@@ -246,6 +251,8 @@ public sealed class AdminDashboardsController(
         if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can preview dashboards from here. Everyone else opens dashboards in the User Portal." });
         return await Guard(async () => Ok(await embed.PreviewAsync(id, groupId, me.Id, ct)));
     }
+
+    private Task<bool> IsGenAiAsync(int id, CancellationToken ct) => db.Dashboards.AnyAsync(d => d.Id == id && d.Type == DashboardType.GenAi, ct);
 
     private static object Limits => new
     {

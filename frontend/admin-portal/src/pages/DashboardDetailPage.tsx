@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import * as pbi from "powerbi-client";
-import { api, ApiError, apiObjectUrl, Icon, Thumbnail } from "@vantage/shared";
+import { api, ApiError, apiObjectUrl, GenAiFrame, Icon, Thumbnail } from "@vantage/shared";
 import { errorText, Modal, Notice, StatusPill, useApi, when } from "../ui";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
 import type { CategoryNode } from "./CategoriesPage";
@@ -31,7 +31,7 @@ type Detail = {
 type Version = { versionNumber: number; fileName: string; sizeBytes: number; isCurrent: boolean; uploadedAtUtc: string; note: string | null; uploadedBy: string | null };
 type ReplaceStatus = { dashboardId: number; state: "Idle" | "Replacing" | "Succeeded" | "Failed"; versionNumber: number | null; message: string | null };
 type FormOptions = { users: { id: number; email: string; displayName: string | null }[]; categories: CategoryNode[]; limits: { nameMax: number; descriptionMax: number; tagsMax: number; tagMax: number } };
-type EmbedInfo = { type: string; embedUrl: string | null; token: string | null; expiresAt: string | null; reportId: string | null };
+type EmbedInfo = { type: string; name?: string; embedUrl: string | null; token: string | null; expiresAt: string | null; reportId: string | null };
 
 const powerbiService = new pbi.service.Service(pbi.factories.hpmFactory, pbi.factories.wpmpFactory, pbi.factories.routerFactory);
 const tabs = [
@@ -95,7 +95,7 @@ export function DashboardDetailPage() {
             {needsRls && <span className="pill pill-warn">A group needs an RLS value</span>}
           </div>
         </div>
-        {d.type === "PowerBi" && data.canModify && ["Active", "Inactive"].includes(d.status) && (
+        {(d.type === "PowerBi" || d.type === "GenAi") && data.canModify && ["Active", "Inactive"].includes(d.status) && (
           <button className="btn btn-primary" type="button" disabled={replacing != null} onClick={() => setModifying(true)}>
             <Icon name="upload" size={18} /> Modify Dashboard
           </button>
@@ -107,7 +107,12 @@ export function DashboardDetailPage() {
       )}
       {modifying && (
         <ModifyDialog dashboard={d} onClose={() => setModifying(false)}
-          onStarted={(v) => { setModifying(false); setMessage({ ok: true, text: `Version ${v} uploaded. Power BI is importing it now.` }); reload(); }} />
+          onDone={(r) => {
+            setModifying(false);
+            // A GenAI file goes live at once; a Power BI file is imported in the background and the page keeps checking.
+            setMessage({ ok: true, text: r.state === "Succeeded" ? `${r.message ?? "Updated."} Details, access groups and owners are unchanged.` : `Version ${r.versionNumber ?? ""} uploaded. Power BI is importing it now.` });
+            reload();
+          }} />
       )}
 
       <div className="tabs" role="tablist">
@@ -127,7 +132,7 @@ export function DashboardDetailPage() {
       {tab === "preview" && <PreviewTab data={data} />}
       {tab === "versions" && (
         <VersionsTab data={data}
-          onRestored={(v) => { setMessage({ ok: true, text: `Restoring: version ${v} is being imported into Power BI.` }); reload(); }}
+          onRestored={(r) => { setMessage({ ok: true, text: r.state === "Succeeded" ? (r.message ?? "Restored.") : `Restoring: version ${r.versionNumber} is being imported into Power BI.` }); reload(); }}
           onError={(t) => say(false, t)} />
       )}
     </>
@@ -136,7 +141,8 @@ export function DashboardDetailPage() {
 
 // ---------------------------------------------------------------- Modify Dashboard and file versions
 
-function ModifyDialog({ dashboard, onClose, onStarted }: { dashboard: Detail["dashboard"]; onClose: () => void; onStarted: (version: number) => void }) {
+function ModifyDialog({ dashboard, onClose, onDone }: { dashboard: Detail["dashboard"]; onClose: () => void; onDone: (r: ReplaceStatus) => void }) {
+  const genAi = dashboard.type === "GenAi";
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +156,7 @@ function ModifyDialog({ dashboard, onClose, onStarted }: { dashboard: Detail["da
     body.append("file", file);
     try {
       const r = await api<ReplaceStatus>(`/api/admin/dashboards/${dashboard.id}/modify`, { method: "POST", body });
-      onStarted(r.versionNumber ?? 0);
+      onDone(r);
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -160,20 +166,33 @@ function ModifyDialog({ dashboard, onClose, onStarted }: { dashboard: Detail["da
   return (
     <Modal title={`Modify ${dashboard.name}`} onClose={onClose}>
       <form className="stack" onSubmit={upload}>
-        <p>Upload a new .pbix to replace this report in its Power BI workspace ({dashboard.workspace ?? "–"}).</p>
-        <ul className="plain-list small">
-          <li>Everything in the portal stays as it is: name, category, owners, thumbnail, access groups, RLS values and pins.</li>
-          <li>The current version stays live until Power BI finishes importing the new one. If the import fails, nothing changes.</li>
-          <li>The new file's RLS roles are read again afterwards. Keep the role names the groups use, or update the groups' RLS values.</li>
-          <li>The last three files are kept, so you can go back to an earlier one under File Versions.</li>
-        </ul>
+        {genAi ? (
+          <>
+            <p>Upload a new .html file to replace this dashboard's page. It must still be built from the approved template.</p>
+            <ul className="plain-list small">
+              <li>The file is checked first. If it fails, nothing changes and the checks tell you what to fix.</li>
+              <li>A file that passes goes live straight away. Name, category, owners, thumbnail, access groups and pins stay as they are.</li>
+              <li>The last three files are kept, so you can go back to an earlier one under File Versions.</li>
+            </ul>
+          </>
+        ) : (
+          <>
+            <p>Upload a new .pbix to replace this report in its Power BI workspace ({dashboard.workspace ?? "–"}).</p>
+            <ul className="plain-list small">
+              <li>Everything in the portal stays as it is: name, category, owners, thumbnail, access groups, RLS values and pins.</li>
+              <li>The current version stays live until Power BI finishes importing the new one. If the import fails, nothing changes.</li>
+              <li>The new file's RLS roles are read again afterwards. Keep the role names the groups use, or update the groups' RLS values.</li>
+              <li>The last three files are kept, so you can go back to an earlier one under File Versions.</li>
+            </ul>
+          </>
+        )}
         <label className="field">
-          <span>New .pbix file</span>
-          <input type="file" accept=".pbix" required onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <span>{genAi ? "New .html file" : "New .pbix file"}</span>
+          <input type="file" accept={genAi ? ".html,.htm" : ".pbix"} required onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
         {error && <Notice tone="error">{error}</Notice>}
         <div className="actions">
-          <button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? "Uploading…" : "Upload and Replace"}</button>
+          <button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? (genAi ? "Checking…" : "Uploading…") : "Upload and Replace"}</button>
           <button className="btn btn-quiet" type="button" onClick={onClose}>Cancel</button>
         </div>
       </form>
@@ -181,7 +200,7 @@ function ModifyDialog({ dashboard, onClose, onStarted }: { dashboard: Detail["da
   );
 }
 
-function VersionsTab({ data, onRestored, onError }: { data: Detail; onRestored: (v: number) => void; onError: (t: string) => void }) {
+function VersionsTab({ data, onRestored, onError }: { data: Detail; onRestored: (r: ReplaceStatus) => void; onError: (t: string) => void }) {
   const d = data.dashboard;
   const [downloading, setDownloading] = useState<number | null>(null);
   const busy = d.replaceVersionNumber != null;
@@ -205,10 +224,11 @@ function VersionsTab({ data, onRestored, onError }: { data: Detail; onRestored: 
   }
 
   async function restore(v: Version) {
-    if (!window.confirm(`Restore version ${v.versionNumber} (${v.fileName})? Power BI re-imports that file over the live report. It becomes the newest version; the current file stays available as a version.`)) return;
+    const what = d.type === "GenAi" ? "That file goes live again" : "Power BI re-imports that file over the live report";
+    if (!window.confirm(`Restore version ${v.versionNumber} (${v.fileName})? ${what}. It becomes the newest version; the current file stays available as a version.`)) return;
     try {
       const r = await api<ReplaceStatus>(`/api/admin/dashboards/${d.id}/versions/${v.versionNumber}/restore`, { method: "POST" });
-      onRestored(r.versionNumber ?? v.versionNumber);
+      onRestored(r);
     } catch (e) {
       onError(errorText(e));
     }
@@ -240,7 +260,7 @@ function VersionsTab({ data, onRestored, onError }: { data: Detail; onRestored: 
                       <button className="btn btn-sm" type="button" disabled={downloading === v.versionNumber} onClick={() => void download(v)}>
                         <Icon name="arrowDown" size={16} /> {downloading === v.versionNumber ? "Downloading…" : "Download"}
                       </button>
-                      {!v.isCurrent && !pending && d.type === "PowerBi" && (
+                      {!v.isCurrent && !pending && (d.type === "PowerBi" || d.type === "GenAi") && (
                         <button className="btn btn-sm" type="button" disabled={busy} onClick={() => void restore(v)}><Icon name="refresh" size={16} /> Restore</button>
                       )}
                     </span>
@@ -307,6 +327,16 @@ function DetailsTab({ data, onSaved, onError }: { data: Detail; onSaved: (t: str
 
       <div className="stack">
         <ThumbnailPanel data={data} onSaved={onSaved} onError={onError} />
+        {d.type === "GenAi" && (
+          <section className="panel">
+            <div className="panel-row"><h2>GenAI Page</h2></div>
+            <dl className="facts">
+              <dt>Live file</dt><dd>{(() => { const v = d.versions.find((x) => x.isCurrent); return v ? `${v.fileName} (v${v.versionNumber}, ${size(v.sizeBytes)})` : "–"; })()}</dd>
+              <dt>How it runs</dt><dd>On its own web address, in a sandbox, with scripts only from the approved CDNs and no network calls. It can't reach the portal.</dd>
+              <dt>Published</dt><dd>{when(d.publishedAtUtc)}</dd>
+            </dl>
+          </section>
+        )}
         {d.type === "PowerBi" && (
           <section className="panel">
             <div className="panel-row">
@@ -642,13 +672,20 @@ function Preview({ dashboardId, groupId }: { dashboardId: number; groupId: numbe
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState("Getting an embed token…");
+  const [genAi, setGenAi] = useState<EmbedInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const el = host.current!;
     api<EmbedInfo>(`/api/admin/dashboards/${dashboardId}/preview-embed?groupId=${groupId}`)
       .then((info) => {
-        if (cancelled || !info.token || !info.embedUrl) return;
+        if (cancelled) return;
+        if (info.type === "genai" && info.embedUrl) {
+          setGenAi(info);
+          setState(`Loaded. The link is valid until ${when(info.expiresAt)}.`);
+          return;
+        }
+        if (!info.token || !info.embedUrl) return;
         setState("Loading the report…");
         const report = powerbiService.embed(el, {
           type: "report", id: info.reportId ?? undefined, embedUrl: info.embedUrl, accessToken: info.token,
@@ -670,7 +707,7 @@ function Preview({ dashboardId, groupId }: { dashboardId: number; groupId: numbe
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : <p className="muted small">{state}</p>}
-      <div ref={host} className="embed-host" />
+      {genAi?.embedUrl ? <div className="embed-host"><GenAiFrame url={genAi.embedUrl} title="Preview" /></div> : <div ref={host} className="embed-host" />}
     </>
   );
 }

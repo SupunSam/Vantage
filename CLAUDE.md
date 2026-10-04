@@ -31,7 +31,8 @@ Requirements:
 | 7 | **Shared web library** | `frontend/shared` (`@vantage/shared`) | Layout shell, icons, API client, session, request review UI | built into both portals |
 | 8 | **Database** | `deploy/db/init.sql` and EF migrations | SQL Server 2022, schema `app` (+ `hrms`) | `vantage-db` on localhost:1433 |
 | 9 | **Mail catcher** | `deploy/docker-compose.yml` | Mailpit | `vantage-mail` at http://localhost:8025 |
-| 10 | **Background worker** | `Infrastructure/Email/EmailSenderWorker` | `BackgroundService` in the API | sends the email outbox every 10 s |
+| 10 | **GenAI origin** | `deploy/genai.nginx.conf` | nginx, passes signed links to the API's `/genai/{token}` | `vantage-genai` at http://localhost:8082 |
+| 11 | **Background worker** | `Infrastructure/Email/EmailSenderWorker` | `BackgroundService` in the API | sends the email outbox every 10 s |
 
 Target production (not built yet): both SPAs plus the API on AWS. The API runs on EC2, SQL Server on RDS
 Multi-AZ, files on S3, email through SES, secrets in Secrets Manager. Sign-in is ADFS SAML with Duo federated
@@ -82,7 +83,7 @@ docker compose -f deploy/docker-compose.yml down               # stop, keep data
 docker compose -f deploy/docker-compose.yml down -v            # stop and wipe data
 ```
 
-- Admin Portal: http://localhost:8080. User Portal: http://localhost:8081. Emails: http://localhost:8025.
+- Admin Portal: http://localhost:8080. User Portal: http://localhost:8081. Emails: http://localhost:8025. GenAI dashboards load from http://localhost:8082 inside the portals' frame (nothing to open by hand).
 - Local sign-in is a user picker (the `X-Dev-User` header, `DevAuthHandler`), standing in for ADFS/Cognito.
   Nimal Perera is the bootstrap Super Admin.
 - Migrations apply automatically when the API starts (`Database:MigrateOnStartup`). The seeder adds roles,
@@ -162,6 +163,12 @@ depends on them:
   - 12 pins, 20 personal folders (names ≤60 characters) and 8 tags (alphanumeric, ≤10 characters each).
   - Thumbnails: 16:9 PNG/JPG, ≥640x360, ≤1 MB.
   - Dashboard name unique; group name ≤40 characters and unique.
+- **GenAI dashboards** (C32).
+  - One `.html` file from the approved starter template (marker `vantage-template`/`genai-1`), 5 MB max, warning from 2 MB.
+  - `GenAiChecker` is the upload check (approved active CDNs over HTTPS only, nothing relative, no frames/objects/base/redirects). Publishing, Modify and Restore all run it; a failure changes nothing. `GenAiService` keeps the versions and signs the links; `GenAiPublisher` creates the dashboard.
+  - They are served only from the separate origin (`GenAi:BaseUrl`) via `GenAiContentController`, with the strict CSP and `sandbox allow-scripts` from `GenAiService.PolicyFor`. Never serve the file from the portals' origin or through `/api`.
+  - The portals frame it with `GenAiFrame` (`sandbox="allow-scripts"`, never `allow-same-origin`). Don't widen the sandbox, the CSP or `GenAi:FrameAncestors` without a recorded decision.
+  - A link is issued only after the normal membership check (or Super Admin preview) and is the only way in. The view row is written when the link is issued, as for Power BI. Not Active means not served.
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
 ## Conventions
@@ -200,7 +207,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C32) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C33) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -217,11 +224,12 @@ Done:
 - Super Admins preview dashboards without joining any group (C27).
 - Admin **Audit Log** viewer (filters, plain-sentence descriptions, before and after values, Excel export).
 - User Portal **Personal Folders** (page plus a folder button on cards).
+- GenAI dashboards (C32): starter template, upload check, publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
 
 Next, in order:
 1. **Scheduled jobs**: HRMS monthly sync, inactivity flag and owner emails, new-hire digest (their settings already exist in Admin Configuration).
 
-Then Tableau and GenAI embedding end to end, then real ADFS/Cognito and the AWS environments.
+Then Tableau embedding end to end, then real ADFS/Cognito and the AWS environments.
 
 Open questions (still unanswered):
 - U5: internal users who sign in before they've been added.
