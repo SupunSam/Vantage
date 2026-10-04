@@ -49,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<DashboardFactory>();
         services.Configure<GenAiOptions>(config.GetSection("GenAi"));
         services.AddScoped<GenAiService>();
+        services.AddScoped<GenAiPublisher>();
         services.AddScoped<EmbedService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<DashboardMasterService>();
