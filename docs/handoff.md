@@ -49,4 +49,4 @@ Key services: CategoryService, DashboardMasterService, GroupService, AccessGroup
 Keep it simple and go step by step: finish one module end to end, let me test it in the browser, then move on. Explain anything I need to do on Power BI/Azure in plain steps. Never ask me to paste secrets into chat. Keep the tests passing. UI should look professional and consistent with the layout.
 
 ## Next step
-1. Scheduled jobs (HRMS monthly sync, inactivity flag and owner emails, new-hire digest), then Tableau and GenAI embedding, then real sign-in and AWS.
+1. Scheduled jobs (HRMS monthly sync, inactivity flag and owner emails, new-hire digest), then Tableau embedding, then real sign-in and AWS. (GenAI dashboards are done: decision C32.)

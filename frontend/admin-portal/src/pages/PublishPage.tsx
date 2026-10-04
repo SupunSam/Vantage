@@ -4,6 +4,7 @@ import { api, can, useSession } from "@vantage/shared";
 import { errorText, Notice, useApi } from "../ui";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
 import type { CategoryNode } from "./CategoriesPage";
+import { PublishGenAiPage } from "./PublishGenAiPage";
 
 type Options = {
   tenants: { id: number; name: string; verified: boolean; lastVerifiedAtUtc: string | null; workspaces: { id: number; name: string; workspaceId: string; servicePrincipalAccess: string | null; onDedicatedCapacity: boolean | null }[] }[];
@@ -13,11 +14,30 @@ type Options = {
 };
 type PublishStatus = { dashboardId: number; name: string; status: string; error: string | null; reportId: string | null; defaultGroup: string | null; warning: string | null };
 
+/** Publish Dashboard: choose the type, then the matching form. */
+export function PublishPage() {
+  const { me } = useSession();
+  const [type, setType] = useState<"powerbi" | "genai">("powerbi");
+  // GenAI pages are code, so only Super Admins vet and publish them.
+  const showGenAi = me?.isSuperAdmin === true;
+  return (
+    <>
+      {showGenAi && (
+        <div className="tabs" role="tablist" aria-label="Dashboard type">
+          <button type="button" role="tab" aria-selected={type === "powerbi"} className={`tab ${type === "powerbi" ? "tab-on" : ""}`} onClick={() => setType("powerbi")}>Power BI</button>
+          <button type="button" role="tab" aria-selected={type === "genai"} className={`tab ${type === "genai" ? "tab-on" : ""}`} onClick={() => setType("genai")}>GenAI</button>
+        </div>
+      )}
+      {type === "powerbi" || !showGenAi ? <PublishPowerBiPage /> : <PublishGenAiPage />}
+    </>
+  );
+}
+
 /**
  * Publish a Power BI dashboard: upload the .pbix, the service principal imports it into the chosen workspace,
  * and the dashboard goes live with its default group (the owners). Only verified tenants can be chosen.
  */
-export function PublishPage() {
+function PublishPowerBiPage() {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 

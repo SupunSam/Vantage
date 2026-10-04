@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- REQUIRED: this line marks the file as built from the Vantage GenAI starter template. Keep it as it is. -->
+<meta name="vantage-template" content="genai-1">
+<title>Dashboard Title</title>
+
+<!--
+  VANTAGE GENAI DASHBOARD: STARTER TEMPLATE
+
+  Rules (the portal checks them when you publish):
+  1. One file. Put your HTML, CSS, JavaScript and data in this file. No links to other files or images;
+     use inline SVG, or data: URLs for small images.
+  2. Libraries only from the approved CDNs (see Admin Configuration > Approved CDNs), over HTTPS. The URL must
+     name an exact version (chart.js@4.4.7, not @latest or @4), and every script and stylesheet needs an
+     integrity="sha384-..." hash with crossorigin="anonymous", as the Chart.js line below has. Get the hash
+     from the CDN's page for that file (jsdelivr and cdnjs show it) or compute it from the file you reviewed.
+  3. Maximum 5 MB (a warning appears at 2 MB). Big data tables are the usual reason files grow.
+  4. No network requests: anything the page tries to fetch while it runs is blocked. Put the data in the
+     file (see DATA below). No nested frames, plug-in objects, base-URL tags, page redirects or links to other
+     sites.
+  5. Not allowed in the code: running text as code, changing the page's address, opening windows, reaching the
+     parent window, background threads, binary modules, dynamic imports and cookies. The upload check lists any it finds.
+  6. The page runs in a sandbox: no cookies, no local storage, no pop-ups. It can't reach the portal.
+  7. Only Super Admins publish the file. It is checked, and malware-scanned where a scanner is set up.
+
+  How to use it with an AI tool: give the AI this whole file and say "keep the template marker, the CSS
+  variables and the DATA block, and change the content to <what you want to show>".
+-->
+
+<!-- Approved library example: Chart.js (cdn.jsdelivr.net). Replace or remove as you need. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js"
+        integrity="sha384-zYPBGXwO4633CABX/5Spf6emCKUJCfoOkhOMYyxMsatqQZPnDblmmOewfjsIVWCM" crossorigin="anonymous"></script>
+
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --ink: #1c2733; --muted: #66758a; --line: #e1e6ed;
+    --accent: #1f6feb; --accent-2: #12a594; --accent-3: #e5953b; --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11161d; --card: #1a212b; --ink: #e8edf3; --muted: #93a1b3; --line: #2a3340; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { margin: 0 0 20px; color: var(--muted); }
+  .grid { display: grid; gap: 16px; }
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 16px; }
+  .charts { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); margin-bottom: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 28px; font-weight: 650; margin-top: 4px; }
+  .card h2 { margin: 0 0 12px; font-size: 15px; }
+  .chart-box { position: relative; height: 260px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <h1 id="title">Dashboard Title</h1>
+  <p class="sub" id="subtitle">What this dashboard shows and the period it covers.</p>
+
+  <div class="grid kpis" id="kpis"></div>
+
+  <div class="grid charts">
+    <div class="card"><h2>Revenue by Month</h2><div class="chart-box"><canvas id="chart-trend"></canvas></div></div>
+    <div class="card"><h2>Revenue by Region</h2><div class="chart-box"><canvas id="chart-region"></canvas></div></div>
+  </div>
+
+  <div class="card">
+    <h2>Detail</h2>
+    <table>
+      <thead><tr><th>Region</th><th class="num">Revenue</th><th class="num">Orders</th><th class="num">Avg. Order</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <p class="note" id="note">Data as of the date shown in the subtitle. Edit the DATA block to change what is shown.</p>
+
+<script>
+  // ------------------------------------------------------------------ DATA: replace with your own numbers
+  const DATA = {
+    title: "Regional Sales Overview",
+    subtitle: "Sample data for the first half of the year",
+    months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+    revenueByMonth: [412, 398, 455, 489, 520, 561],
+    regions: [
+      { name: "North", revenue: 780, orders: 3120 },
+      { name: "South", revenue: 640, orders: 2710 },
+      { name: "East",  revenue: 590, orders: 2380 },
+      { name: "West",  revenue: 835, orders: 3450 }
+    ]
+  };
+
+  // ------------------------------------------------------------------ Rendering
+  const fmt = (n) => n.toLocaleString("en-US");
+  const total = DATA.regions.reduce((a, r) => a + r.revenue, 0);
+  const orders = DATA.regions.reduce((a, r) => a + r.orders, 0);
+
+  document.getElementById("title").textContent = DATA.title;
+  document.getElementById("subtitle").textContent = DATA.subtitle;
+  document.title = DATA.title;
+
+  const kpis = [
+    ["Total Revenue (k)", fmt(total)],
+    ["Orders", fmt(orders)],
+    ["Avg. Order", (total * 1000 / orders).toFixed(0)],
+    ["Best Region", DATA.regions.slice().sort((a, b) => b.revenue - a.revenue)[0].name]
+  ];
+  document.getElementById("kpis").innerHTML = kpis
+    .map(([label, value]) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${value}</div></div>`)
+    .join("");
+
+  document.getElementById("rows").innerHTML = DATA.regions
+    .map((r) => `<tr><td>${r.name}</td><td class="num">${fmt(r.revenue)}</td><td class="num">${fmt(r.orders)}</td><td class="num">${(r.revenue * 1000 / r.orders).toFixed(0)}</td></tr>`)
+    .join("");
+
+  // Charts need the library from the CDN. If it didn't load, say so instead of showing empty boxes.
+  if (typeof Chart === "undefined") {
+    document.querySelectorAll(".chart-box").forEach((el) => { el.textContent = "The chart library didn't load."; });
+  } else {
+    const css = getComputedStyle(document.documentElement);
+    const accent = css.getPropertyValue("--accent").trim();
+    const palette = [accent, css.getPropertyValue("--accent-2").trim(), css.getPropertyValue("--accent-3").trim(), "#8b5cf6"];
+    Chart.defaults.color = css.getPropertyValue("--muted").trim();
+    Chart.defaults.borderColor = css.getPropertyValue("--line").trim();
+    Chart.defaults.maintainAspectRatio = false;
+
+    new Chart(document.getElementById("chart-trend"), {
+      type: "line",
+      data: { labels: DATA.months, datasets: [{ label: "Revenue (k)", data: DATA.revenueByMonth, borderColor: accent, backgroundColor: accent + "22", fill: true, tension: .3 }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+    new Chart(document.getElementById("chart-region"), {
+      type: "bar",
+      data: { labels: DATA.regions.map((r) => r.name), datasets: [{ label: "Revenue (k)", data: DATA.regions.map((r) => r.revenue), backgroundColor: palette }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+  }
+</script>
+</body>
+</html>

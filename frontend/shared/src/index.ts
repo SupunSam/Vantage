@@ -5,6 +5,7 @@ export * from "./TypeGlyph";
 export * from "./Icon";
 export * from "./Shell";
 export * from "./Thumbnail";
+export * from "./GenAiFrame";
 export * from "./Requests";
 import "./base.css";
 export * from "./GroupAddRequests";

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import * as pbi from "powerbi-client";
-import { api, ApiError } from "@vantage/shared";
+import { api, ApiError, GenAiFrame } from "@vantage/shared";
 
 type EmbedInfo = {
   type: "powerbi" | "tableau" | "genai";
@@ -161,11 +161,8 @@ export function ViewerPage() {
 
       {!failure && !info && <p className="muted">Loading…</p>}
 
-      {!failure && info?.type === "genai" && (
-        <div className="state">
-          <h2>GenAI Dashboards Open in a Sandbox</h2>
-          <p className="muted">Upload, scanning and the sandboxed viewer are built in step 6.</p>
-        </div>
+      {!failure && info?.type === "genai" && info.embedUrl && (
+        <div className="embed-host"><GenAiFrame url={info.embedUrl} title={info.name} /></div>
       )}
 
       {!failure && (info?.type === "powerbi" || info?.type === "tableau") && <div ref={hostRef} className="embed-host" />}

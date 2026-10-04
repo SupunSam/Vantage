@@ -73,6 +73,7 @@ committed. `deploy/.env.example` shows the format.
 | --- | --- |
 | 8080 | Admin Portal (and the API under /api) |
 | 8081 | User Portal (and the API under /api) |
+| 8082 | GenAI dashboards (framed by the portals; signed links only) |
 | 8025 | Mailpit: the emails Vantage has sent |
 | 1433 | SQL Server, for SSMS or Azure Data Studio: `localhost,1433`, login `sa` or `rd_app` with the passwords in `deploy/.env` |
 
@@ -96,3 +97,20 @@ company's root certificate (.crt) in `deploy/certs` and run the start command ag
 Tests: `cd backend && dotnet test Vantage.slnx`. The SQL Server tests run when `VANTAGE_TEST_SQL` is set, for
 example `Server=localhost,1433;User Id=sa;Password=<MSSQL_SA_PASSWORD>;TrustServerCertificate=True`; each creates
 and drops its own database. GitHub Actions (`.github/workflows/ci.yml`) runs the same on every push and pull request.
+
+## GenAI settings and the malware scan (optional)
+
+Every GenAI file is always checked against the template and security rules. These settings live in the Admin Portal, under **Configuration, GenAI Config** (Super Admins only), and apply at once with no restart:
+
+- **Serving:** the GenAI web address, the portals allowed to show GenAI dashboards, and how long a dashboard's link works. Blank address fields use this environment's defaults (`GenAi__BaseUrl` and `GenAi__FrameAncestors`).
+- **Upload checks:** the file size that triggers a "loads slowly" warning.
+- **Malware scan:** the scanner host and port. Leave the host blank for no scan.
+- **Approved CDNs:** the hosts a GenAI page may load scripts and stylesheets from.
+
+To also scan uploads for malware with ClamAV locally:
+
+1. Start with `docker compose -f deploy/docker-compose.yml --profile scan up -d --build`.
+2. The first start downloads virus signatures and takes a few minutes.
+3. In the Admin Portal open **Configuration, GenAI Config**, set **Malware scanner host** to `clamav`, and save.
+
+Once a host is set, GenAI uploads are refused until the scanner is ready ("The malware scanner couldn't be reached"). With the host blank no scan runs and each file version shows no scan note. In AWS, set the host to the scanner service.

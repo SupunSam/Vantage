@@ -81,7 +81,7 @@ public class EmbedPreviewTests(SqlServerFixture fx) : IClassFixture<SqlServerFix
 
         var fake = new FakePowerBi(Guid.NewGuid());
         var powerBi = new PowerBiClient(new HttpClient(fake), new Tokens(), NullLogger<PowerBiClient>.Instance);
-        return new Kit(db, new EmbedService(db, powerBi, new TableauTokenService(null!, clock), audit, clock), fake, admin, d, north);
+        return new Kit(db, new EmbedService(db, powerBi, new TableauTokenService(null!, clock), GenAiTestKit.Service(db, audit, clock), audit, clock), fake, admin, d, north);
     }
 
     [SqlFact]
