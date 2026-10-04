@@ -125,7 +125,7 @@ public class TableauTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
 
     private static string Unique(string prefix) => prefix + Guid.NewGuid().ToString("N")[..8];
 
-    private sealed record Kit(AppDbContext Db, TableauPublisher Publisher, EmbedService Embed, DashboardMasterService Master, ISecretStore Secrets, User Owner, User Member, User Admin) : IAsyncDisposable
+    private sealed record Kit(AppDbContext Db, TableauPublisher Publisher, EmbedService Embed, DashboardMasterService Master, ISecretStore Secrets, User Owner, User Member, User Admin, int CategoryId) : IAsyncDisposable
     {
         public ValueTask DisposeAsync() => Db.DisposeAsync();
     }
@@ -140,6 +140,8 @@ public class TableauTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         var member = Person("m", memberTableauName);
         var admin = Person("a", "admin.tableau");
         db.Users.AddRange(owner, member, admin);
+        var category = new Category { Name = Unique("Cat "), Level = 1, CreatedAtUtc = DateTime.UtcNow };   // every dashboard sits in a category
+        db.Categories.Add(category);
         await db.SaveChangesAsync();
 
         var ownership = new OwnershipService(db, clock);
@@ -149,11 +151,11 @@ public class TableauTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         var publisher = new TableauPublisher(db, new DashboardFactory(db, ownership, audit, clock), master, audit, new NotificationService(db, clock), clock);
         var secrets = new DbSecretStore(db, new EphemeralDataProtectionProvider(), clock);
         var embed = new EmbedService(db, powerBi, new TableauTokenService(secrets, clock), GenAiTestKit.Service(db, audit, clock), audit, clock);
-        return new Kit(db, publisher, embed, master, secrets, owner, member, admin);
+        return new Kit(db, publisher, embed, master, secrets, owner, member, admin, category.Id);
     }
 
     private static PublishTableauRequest Public(Kit k, DataClassification c = DataClassification.Public, string? url = null) =>
-        new(Unique("Tab "), "TB", null, null, url ?? "https://public.tableau.com/views/Sales2026/Overview?:language=en-US", k.Owner.Id, null, null, null, Audience.Internal, c);
+        new(Unique("Tab "), "TB", null, null, url ?? "https://public.tableau.com/views/Sales2026/Overview?:language=en-US", k.Owner.Id, null, k.CategoryId, null, Audience.Internal, c);
 
     private async Task<BiTenant> TenantAsync(AppDbContext db, string? site = "", bool withSecret = true, Kit? k = null)
     {
@@ -238,7 +240,7 @@ public class TableauTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         var dashboard = await k.Db.Dashboards.AsNoTracking().SingleAsync(x => x.Id == d.DashboardId);
 
         await Assert.ThrowsAsync<RuleException>(() => k.Master.UpdateAsync(d.DashboardId, new DashboardDetailsInput(
-            dashboard.Name, null, null, k.Owner.Id, null, null, Audience.Internal, DataClassification.Confidential, null, null), k.Admin.Id));
+            dashboard.Name, null, k.CategoryId, k.Owner.Id, null, null, Audience.Internal, DataClassification.Confidential, null, null), k.Admin.Id));
 
         var tenant = await TenantAsync(k.Db, "", false);
         await Assert.ThrowsAsync<RuleException>(() => k.Master.SetTableauViewAsync(d.DashboardId, tenant.Id, "https://public.tableau.com/views/A/B", k.Admin.Id));   // not on that server
