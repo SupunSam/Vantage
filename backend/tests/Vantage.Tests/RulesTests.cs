@@ -105,3 +105,33 @@ public class TableauTokenTests
         }, out _);
     }
 }
+
+/// <summary>The category routes the User Portal's folder-style browser is built from. Pure code, runs everywhere.</summary>
+public class CategoryChainTests
+{
+    private static Vantage.Infrastructure.Services.CategoryNode Node(int id, string name, int? parent, int order = 0) =>
+        new(id, name, parent, parent is null ? 1 : 2, order, name, 0, 0);
+
+    [Fact]
+    public void Every_category_gets_its_route_from_the_primary_category_down()
+    {
+        var chains = Vantage.Infrastructure.Services.CategoryService.BuildChains([Node(1, "Finance", null, 2), Node(2, "Payroll", 1, 1), Node(3, "Monthly", 2, 5), Node(4, "Sales", null, 1)]);
+
+        Assert.Equal(["Finance"], chains[1].Select(c => c.Name));
+        Assert.Equal(["Finance", "Payroll"], chains[2].Select(c => c.Name));
+        Assert.Equal(["Finance", "Payroll", "Monthly"], chains[3].Select(c => c.Name));
+        Assert.Equal([1, 2, 3], chains[3].Select(c => c.Id));
+        Assert.Equal([2, 1, 5], chains[3].Select(c => c.SortOrder));      // the admins' order travels with each step
+        Assert.Equal(["Sales"], chains[4].Select(c => c.Name));
+    }
+
+    [Fact]
+    public void A_missing_parent_or_a_cycle_ends_the_route_instead_of_hanging()
+    {
+        var chains = Vantage.Infrastructure.Services.CategoryService.BuildChains([Node(1, "Orphan", 99), Node(2, "A", 3), Node(3, "B", 2)]);
+
+        Assert.Equal(["Orphan"], chains[1].Select(c => c.Name));
+        Assert.InRange(chains[2].Count, 1, Vantage.Domain.Rules.CategoryLevels + 1);   // bounded
+        Assert.InRange(chains[3].Count, 1, Vantage.Domain.Rules.CategoryLevels + 1);
+    }
+}

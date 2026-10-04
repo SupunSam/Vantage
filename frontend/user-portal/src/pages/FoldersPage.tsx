@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, Icon, Thumbnail } from "@vantage/shared";
+import { Crumbs, FolderGrid, plural } from "./FolderGrid";
 
 export type Folder = { id: number; name: string; dashboardIds: number[] };
 type Mine = { id: number; name: string; description: string | null; type: "PowerBi" | "Tableau" | "GenAi"; categoryPath: string | null; thumbnail: string | null };
@@ -15,7 +16,7 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
   const [mine, setMine] = useState<Mine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [search, setSearch] = useSearchParams();
   const [newName, setNewName] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -31,7 +32,10 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const selected = folders?.find((f) => f.id === selectedId) ?? folders?.[0] ?? null;
+  // Which folder is open is kept in the address (?tab=folders&folder=3), so Back and a refresh work. None means the grid of all folders.
+  const folderParam = Number(search.get("folder"));
+  const selected = folders?.find((f) => f.id === folderParam) ?? null;
+  const openFolder = (id: number | null) => { setSearch(id === null ? { tab: "folders" } : { tab: "folders", folder: String(id) }); setRenaming(null); setConfirmDelete(false); setAdding(false); setNotice(null); };
   const byId = useMemo(() => new Map((mine ?? []).map((d) => [d.id, d])), [mine]);
 
   async function run(action: () => Promise<unknown>, after?: () => void) {
@@ -45,8 +49,8 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
     try {
       const f = await api<Folder>("/api/folders", { method: "POST", body: JSON.stringify({ name: newName }) });
       setNewName("");
-      setSelectedId(f.id);
       await load();
+      openFolder(f.id);
     } catch (err) { setNotice(message(err)); }
   }
 
@@ -74,10 +78,15 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
           {folders.length >= MAX_FOLDERS && <p className="muted small">You have reached {MAX_FOLDERS} folders.</p>}
           {folders.length === 0 ? <p className="muted small">No folders yet. Name one above to start.</p> : (
             <ul className="folders-list">
+              <li>
+                <button type="button" className={`folders-item ${!selected ? "folders-item-on" : ""}`} aria-current={!selected} onClick={() => openFolder(null)}>
+                  <Icon name="dashboards" size={18} /><span className="folders-name">All Folders</span><span className="folders-count">{folders.length}</span>
+                </button>
+              </li>
               {folders.map((f) => (
                 <li key={f.id}>
                   <button type="button" className={`folders-item ${selected?.id === f.id ? "folders-item-on" : ""}`} aria-current={selected?.id === f.id}
-                    onClick={() => { setSelectedId(f.id); setRenaming(null); setConfirmDelete(false); setAdding(false); setNotice(null); }}>
+                    onClick={() => openFolder(f.id)}>
                     <Icon name="folder" size={18} /><span className="folders-name">{f.name}</span><span className="folders-count">{f.dashboardIds.length}</span>
                   </button>
                 </li>
@@ -88,9 +97,17 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
 
         <section className="folders-main">
           {!selected ? (
-            <div className="state"><h2>No Folder Selected</h2><p className="muted">Create a folder on the left, then add dashboards to it.</p></div>
+            folders.length === 0
+              ? <div className="state"><h2>No Folders Yet</h2><p className="muted">Name a folder on the left to create it, then add dashboards to it.</p></div>
+              : (
+                <>
+                  <Crumbs trail={[{ label: "All Folders" }]} />
+                  <FolderGrid tiles={folders.map((f) => ({ key: String(f.id), name: f.name, sub: plural(f.dashboardIds.filter((id) => byId.has(id)).length, "dashboard"), onOpen: () => openFolder(f.id) }))} />
+                </>
+              )
           ) : (
             <>
+              <Crumbs trail={[{ label: "All Folders", onClick: () => openFolder(null) }, { label: selected.name }]} />
               <div className="folders-head">
                 {renaming === null ? <h2>{selected.name}</h2> : (
                   <form className="folders-new" onSubmit={(e) => { e.preventDefault(); void run(() => api(`/api/folders/${selected.id}`, { method: "PUT", body: JSON.stringify({ name: renaming }) }), () => setRenaming(null)); }}>
@@ -105,7 +122,7 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
                     <button className="btn" type="button" onClick={() => { setRenaming(selected.name); setConfirmDelete(false); }}><Icon name="edit" size={16} /> Rename</button>
                     {confirmDelete ? (
                       <>
-                        <button className="btn btn-danger" type="button" onClick={() => void run(() => api(`/api/folders/${selected.id}`, { method: "DELETE" }), () => { setConfirmDelete(false); setSelectedId(null); })}>Delete Folder</button>
+                        <button className="btn btn-danger" type="button" onClick={() => void run(() => api(`/api/folders/${selected.id}`, { method: "DELETE" }), () => openFolder(null))}>Delete Folder</button>
                         <button className="btn" type="button" onClick={() => setConfirmDelete(false)}>Keep It</button>
                       </>
                     ) : <button className="btn" type="button" onClick={() => setConfirmDelete(true)}><Icon name="trash" size={16} /> Delete</button>}

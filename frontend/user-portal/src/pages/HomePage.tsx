@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, Icon, Thumbnail, useSession } from "@vantage/shared";
 import { FolderMenu } from "./FolderMenu";
 import { FoldersPage } from "./FoldersPage";
+import { Crumbs, FolderGrid, plural } from "./FolderGrid";
 
 type MyDashboard = {
   id: number;
@@ -12,6 +13,8 @@ type MyDashboard = {
   type: "PowerBi" | "Tableau" | "GenAi";
   categoryId: number | null;
   categoryPath: string | null;
+  /** The route from the primary category down to this dashboard's own category; empty when it has none. */
+  categoryChain: { id: number; name: string; sortOrder: number }[];
   owner: string | null;
   tags: string[];
   thumbnail: string | null;
@@ -69,6 +72,8 @@ export function HomePage() {
 
 /** The dashboards this person can open, as thumbnail cards (newest first), by category, or as a sortable list. */
 function MyDashboards() {
+  const [search, setSearch] = useSearchParams();
+  const cat = search.get("cat");                       // the category folder we are inside, or none for the top level
   const [rows, setRows] = useState<MyDashboard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -82,6 +87,7 @@ function MyDashboards() {
 
   function setPref(p: Partial<typeof prefs>) {
     const next = { ...prefs, ...p };
+    if (p.grouping && p.grouping !== prefs.grouping) setSearch({}, { replace: true });   // leaving or entering category browsing starts at the top
     setPrefs(next);
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify(next));
@@ -151,7 +157,7 @@ function MyDashboards() {
             <ListView rows={filtered} sort={sort} onSort={(key) => setSort((s) => ({ key, desc: s.key === key ? !s.desc : key === "published" }))} onPin={togglePin} />
           ) : (
             <>
-              {pinned.length > 0 && !q && (
+              {pinned.length > 0 && !q && !(prefs.grouping === "category" && cat) && (
                 <section className="home-section">
                   <h2>Pinned <span className="muted">{pinned.length} of {MAX_PINS}</span></h2>
                   <Cards rows={pinned} onPin={togglePin} />
@@ -164,8 +170,11 @@ function MyDashboards() {
                     <Cards rows={[...filtered].sort((a, b) => time(b.publishedAtUtc) - time(a.publishedAtUtc))} onPin={togglePin} />
                   </section>
                 )
+              ) : q ? (
+                // A search looks across every category, so show the matches together instead of folders.
+                filtered.length > 0 && <section className="home-section"><Cards rows={filtered} onPin={togglePin} /></section>
               ) : (
-                <CategoryView rows={filtered} onPin={togglePin} />
+                <CategoryBrowser rows={filtered} cat={cat} onOpen={(id) => setSearch(id === null ? {} : { cat: String(id) })} onPin={togglePin} />
               )}
             </>
           )}
@@ -175,31 +184,76 @@ function MyDashboards() {
   );
 }
 
-function CategoryView({ rows, onPin }: { rows: MyDashboard[]; onPin: (d: MyDashboard) => void }) {
-  // One section per primary category; each card shows the rest of its path. Not categorised goes last.
-  const groups = useMemo(() => {
-    const map = new Map<string, MyDashboard[]>();
-    for (const r of rows) {
-      const key = r.categoryPath?.split(" / ")[0] ?? "";
-      map.set(key, [...(map.get(key) ?? []), r]);
+type CatNode = { id: number; name: string; sortOrder: number; children: Map<number, CatNode>; direct: MyDashboard[]; total: number };
+const NO_CATEGORY = -1;   // the folder for dashboards that have no category
+
+const newNode = (id: number, name: string, sortOrder: number): CatNode => ({ id, name, sortOrder, children: new Map(), direct: [], total: 0 });
+
+/** The categories that hold dashboards this person can open, as a tree. Each dashboard sits in the deepest category it was filed under. */
+function buildCategoryTree(rows: MyDashboard[]) {
+  const root = newNode(0, "All Categories", 0);
+  const index = new Map<number, { node: CatNode; trail: CatNode[] }>();
+  const uncategorised: MyDashboard[] = [];
+  for (const r of rows) {
+    if (r.categoryChain.length === 0) { uncategorised.push(r); continue; }
+    let node = root;
+    root.total++;
+    for (const ref of r.categoryChain) {
+      let child = node.children.get(ref.id);
+      if (!child) { child = newNode(ref.id, ref.name, ref.sortOrder); node.children.set(ref.id, child); }
+      child.total++;
+      node = child;
     }
-    return [...map.entries()]
-      .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)))
-      .map(([key, items]) => [key, items.sort((x, y) => (x.categoryPath ?? "").localeCompare(y.categoryPath ?? "") || time(y.publishedAtUtc) - time(x.publishedAtUtc))] as const);
-  }, [rows]);
+    node.direct.push(r);
+  }
+  if (uncategorised.length > 0) {
+    const none = newNode(NO_CATEGORY, "Not Categorised", Number.MAX_SAFE_INTEGER);
+    none.direct = uncategorised;
+    none.total = uncategorised.length;
+    root.children.set(NO_CATEGORY, none);
+    root.total += uncategorised.length;
+  }
+  const walk = (node: CatNode, trail: CatNode[]) => {
+    for (const child of node.children.values()) {
+      index.set(child.id, { node: child, trail: [...trail, child] });
+      walk(child, [...trail, child]);
+    }
+  };
+  walk(root, []);
+  return { root, index };
+}
+
+const byOrder = (a: CatNode, b: CatNode) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+
+/**
+ * Categories as folders. The top level shows the primary categories; open one to see its secondary categories (as folders again)
+ * and the dashboards filed directly in it. Where you are is kept in the address (?cat=), so Back and a refresh work.
+ */
+function CategoryBrowser({ rows, cat, onOpen, onPin }: { rows: MyDashboard[]; cat: string | null; onOpen: (id: number | null) => void; onPin: (d: MyDashboard) => void }) {
+  const { root, index } = useMemo(() => buildCategoryTree(rows), [rows]);
+  const here = cat !== null && /^-?\d+$/.test(cat) ? index.get(Number(cat)) : undefined;
+  const node = here?.node ?? root;
+  const trail = here?.trail ?? [];
+  const folders = [...node.children.values()].sort(byOrder);
+  const tile = (c: CatNode) => ({
+    key: String(c.id), name: c.name, onOpen: () => onOpen(c.id),
+    sub: plural(c.total, "dashboard") + (c.children.size > 0 ? `, ${plural(c.children.size, "sub-category", "sub-categories")}` : ""),
+  });
 
   return (
-    <>
-      {groups.map(([primary, items]) => (
-        <section key={primary || "-"} className="home-section">
-          <h2 className="cat-head">
-            <span className="cat-primary">{primary || "Not Categorised"}</span>
-            <span className="muted cat-count">{items.length} dashboard{items.length === 1 ? "" : "s"}</span>
-          </h2>
-          <Cards rows={items} onPin={onPin} />
-        </section>
-      ))}
-    </>
+    <section className="home-section">
+      {trail.length > 0 && (
+        <Crumbs trail={[{ label: "All Categories", onClick: () => onOpen(null) }, ...trail.map((t) => ({ label: t.name, onClick: () => onOpen(t.id) }))]} />
+      )}
+      {folders.length > 0 && <FolderGrid tiles={folders.map(tile)} />}
+      {node.direct.length > 0 && (
+        <>
+          {folders.length > 0 && <h2 className="cat-inside">Dashboards in {node.name}</h2>}
+          <Cards rows={[...node.direct].sort((a, b) => time(b.publishedAtUtc) - time(a.publishedAtUtc))} onPin={onPin} />
+        </>
+      )}
+      {folders.length === 0 && node.direct.length === 0 && <p className="muted">Nothing is filed here.</p>}
+    </section>
   );
 }
 

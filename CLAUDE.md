@@ -189,7 +189,7 @@ depends on them:
   - Only Super Admins publish, modify and restore dashboards of any type. There is no publisher role, and role permissions can't grant it. Owners see only the dashboards they own, in the Owner Workspace.
   - The Admin Portal and User Portal never share a session. Don't build anything that signs one in or out through the other.
 - **Owners leaving** (C43). `OwnerDepartureService.ReviewAsync` makes an Active dashboard Inactive (and sets `OwnershipPendingReview`) when neither owner is an Active user, tells the Super Admins and audits it. It runs after the HRMS job and when a user is set Inactive by hand. A Super Admin naming a new active owner in Dashboards Master (`DashboardMasterService.UpdateAsync`) reactivates it. The portal never picks owners.
-- **Sign-in, Home and log out** (C45). Both portals show `SignInPage` (Login as Internal User / External User) before sign-in and land on Home after it. `signOut` ends only that portal's session and reloads at `/`; don't route a sign-out through the other portal. The Admin Home is `AdminHomeService` (`GET /api/admin/home`), which fills only the parts the role may see; its charts use a fixed colour per dashboard type. Personal Folders is a tab on the User Portal Home (`/folders` redirects there).
+- **Sign-in, Home and log out** (C45). Both portals show `SignInPage` (Login as Internal User / External User) before sign-in and land on Home after it. `signOut` ends only that portal's session and reloads at `/`; don't route a sign-out through the other portal. The Admin Home is `AdminHomeService` (`GET /api/admin/home`), which fills only the parts the role may see; its charts use a fixed colour per dashboard type. Personal Folders is a tab on the User Portal Home (`/folders` redirects there). By Category and Personal Folders both browse as a folder grid with breadcrumbs (C46): `FolderGrid`/`Crumbs`, the place is kept in the address (`?cat=`, `?folder=`), and the category tree is built in the browser from each dashboard's `categoryChain` (`CategoryService.BuildChains`).
 - **Analytics type filter** (C42). Admin and owner analytics take an optional `type` (blank = all). Build the scope with `AnalyticsService.ScopeAsync` and never parse the type yourself (`ParseType` refuses unknown values).
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
@@ -229,7 +229,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C46) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C47) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 

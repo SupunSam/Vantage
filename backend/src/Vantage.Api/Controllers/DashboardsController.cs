@@ -46,10 +46,13 @@ public sealed class DashboardsController(
             .ToListAsync(ct);
 
         var paths = await categories.PathsAsync(ct);
+        var chains = await categories.ChainsAsync(ct);
         return Ok(rows.Select(r => new
         {
             r.Id, r.Code, r.Name, r.Description, r.Type, r.CategoryId,
             categoryPath = r.CategoryId is { } c ? paths.GetValueOrDefault(c) : null,
+            // The route from the primary category down to this dashboard's own, so the portal can show categories as folders to open.
+            categoryChain = r.CategoryId is { } cc ? chains.GetValueOrDefault(cc) ?? [] : new List<CategoryRef>(),
             r.Owner, r.Tags, thumbnail = AdminDashboardsController.ThumbnailVersion(r.ThumbnailKey),
             r.PublishedAtUtc, r.GrantedAtUtc, r.Linked, pinned = r.PinOrder != null, r.PinOrder, r.LastViewedAtUtc,
         }));
