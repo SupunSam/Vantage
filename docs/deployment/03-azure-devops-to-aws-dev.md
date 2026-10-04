@@ -54,6 +54,8 @@ Approved sheet (Dev, Mumbai region, `ap-south-1`): about **$260.45 per month, $3
 | **Outbound internet** | The API calls Power BI, Azure AD and Tableau | Put the instance in a public subnet with a public IP and a security group that allows inbound traffic only from the ALB. A NAT gateway (not costed) is needed if you use private subnets |
 | **Malware scanner (optional)** | GenAI upload scanning with ClamAV | A fifth service, only if the owner wants scanning in Dev |
 
+The proposed costing that adds these items is in section 9.
+
 All 3 ECR repositories are enough for API, Admin Portal and User Portal. The GenAI nginx can use the public
 `nginx` image or a fourth repository.
 
@@ -366,3 +368,69 @@ accounts' clusters, each with its own environment and approvals, secrets and dom
 6. ADFS metadata, domains and whether a Cognito user pool already exists (needed for the sign-in work).
 
 When these are agreed they will be recorded as decisions C48 onwards in the requirements log.
+
+## 9. Proposed AWS Dev costing for the current build
+
+This extends the approved Dev sheet (rows 1 to 10, copied unchanged) with what the current build needs and the
+approved sheet leaves out (rows 11 to 18, marked **Proposed**). Same columns as the approved sheet.
+
+**How the new figures were worked out.** From AWS's own published price list files for the Mumbai region
+(`ap-south-1`), downloaded on 4 Oct 2026: on-demand, USD, 730 hours a month, annual (ARC) = monthly x 12, before
+tax and AWS support. Nothing is reserved or discounted. The approved rows are the sheet's numbers and were not
+recalculated (for example, the list price of a `t3.xlarge` in Mumbai is $0.1792 an hour, the sheet says $0.17).
+Sizes for the new rows are assumptions for a Dev environment and are stated in the comments.
+Please confirm the final figures in the AWS Pricing Calculator before submitting for approval.
+
+| S.no | Application | Environment | Region | Component Type | Instance Type | CPU | RAM | Qty | unit / per hour cost | Total cost / Month | ARC Total | OTC | Comments |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Cognito | Dev | Mumbai | Cognito User | NA | NA | NA | NA | NA | $16.00 | $192.05 | | Approved |
+| 2 | ECS | Dev | Mumbai | Admin Portal & Dashboard Portal Webapp & webapi | t3.xlarge | 4 | 16 | 1 | $0.17 | $160.69 | $1,928.33 | | Approved. 2 Webapps & 1 Webapi |
+| 3 | Secrets Manager | Dev | Mumbai | Secrets Store | NA | NA | NA | 2 | NA | $2.66 | $31.93 | | Approved |
+| 4 | ECR | Dev | Mumbai | Elastic Container Registry | NA | NA | NA | 3 | NA | $5.78 | $69.31 | | Approved. API, Admin Portal, User Portal images |
+| 5 | SES | Dev | Mumbai | Email Service | NA | NA | NA | NA | NA | $10.81 | $129.75 | | Approved |
+| 6 | Inspector | Dev | Mumbai | Amazon Inspector | NA | NA | NA | 3 | NA | $5.76 | $69.16 | | Approved |
+| 7 | ALB & Data Transfer | Dev | Mumbai | ALB/ALB Data transfer | NA | NA | NA | 30GB | NA | $21.05 | $252.64 | | Approved |
+| 8 | VPC Data | Dev | Mumbai | VPC Data Traffic | NA | NA | NA | 30GB | NA | $10.64 | $127.72 | | Approved |
+| 9 | Cloudfront | Dev | Mumbai | CDN Layer | NA | NA | NA | 30GB | NA | $11.03 | $132.40 | | Approved |
+| 10 | Cloudwatch | Dev | Mumbai | Monitoring Service | NA | NA | NA | 3 | NA | $16.00 | $192.05 | | Approved |
+| 11 | RDS for SQL Server | Dev | Mumbai | Database `RDDashboard` (license included, Express edition, single-AZ) | db.t3.medium | 2 | 4 | 1 | $0.092 | $67.16 | $805.92 | | **Proposed.** Express edition has a 10 GB database limit and no Multi-AZ; fine for Dev, not for UAT/Prod (see 9.1) |
+| 12 | RDS Storage | Dev | Mumbai | RDS gp3 storage for SQL Server | NA | NA | NA | 50GB | $0.131 per GB-month | $6.55 | $78.60 | | **Proposed.** Automated backups up to the database size are included |
+| 13 | S3 | Dev | Mumbai | Uploaded files, thumbnails, last 3 file versions | NA | NA | NA | 50GB | $0.025 per GB-month | $1.25 | $15.00 | | **Proposed.** Needs the S3 file store to be built. Request charges are a few cents |
+| 14 | EBS | Dev | Mumbai | gp3 volume mounted on the ECS instance for `/data` (keys and files) | NA | NA | NA | 50GB | $0.0912 per GB-month | $4.56 | $54.72 | | **Proposed, temporary.** Needed until the S3 store and durable key store exist, then removed |
+| 15 | VPC | Dev | Mumbai | Public IPv4 addresses (1 for the instance, 2 for the ALB) | NA | NA | NA | 3 | $0.005 per hour | $10.95 | $131.40 | | **Proposed.** Used instead of a NAT gateway. May overlap with charges already inside rows 7 and 8; confirm in the calculator |
+| 16 | Route 53 | Dev | Mumbai | Hosted zones for the portals' domain and the GenAI domain | NA | NA | NA | 2 | $0.50 per zone-month | $1.00 | $12.00 | | **Proposed.** Zero if RRD's own DNS is used. Query charges are cents |
+| 17 | ACM | Dev | Mumbai | Public TLS certificates | NA | NA | NA | 3 | NA | $0.00 | $0.00 | | **Proposed.** Public certificates are free |
+| 18 | ECS | Dev | Mumbai | GenAI origin (small nginx service on its own domain) | runs on the row 2 instance | 0 | 0 | 1 | NA | $0.00 | $0.00 | | **Proposed.** No extra instance; uses a small share of the t3.xlarge |
+| | | | | | | | | | **Total (approved rows 1 to 10)** | **$260.45** | **$3,125.35** | **$0.00** | Approved sheet total |
+| | | | | | | | | | **Total (proposed rows 11 to 18)** | **$91.47** | **$1,097.64** | **$0.00** | New |
+| | | | | | | | | | **Grand total** | **$351.92** | **$4,222.99** | **$0.00** | Approved plus proposed |
+
+Arithmetic for the proposed rows: row 11 is 0.092 x 730; row 12 is 50 x 0.131; row 13 is 50 x 0.025; row 14 is
+50 x 0.0912; row 15 is 3 x 0.005 x 730; row 16 is 2 x 0.50.
+
+### 9.1 Choices behind the new rows
+
+- **Database edition.** Dev uses RDS for SQL Server **Express** because it is the only edition that keeps the cost
+  inside a Dev budget. The same database on **Standard** edition (the minimum we would use for UAT/Prod, since the
+  requirements ask for Multi-AZ and point-in-time restore) on a `db.m5.large` (2 vCPU, 8 GB) costs $1.078 an hour
+  single-AZ, which is about $786.94 a month ($9,443.28 a year), and Multi-AZ is roughly double that (not priced
+  here; confirm in the calculator). On a `db.t3.large` Express is $0.171 an hour (about $124.83 a month) if Dev
+  needs more memory. Express limits: 10 GB per database, about 1 GB of memory used by the database engine, no SQL
+  Server Agent. The Vantage database holds metadata, audit and usage rows; files go to S3. Check the Dev data size
+  against the 10 GB limit.
+- **No NAT gateway.** The ECS instance sits in a public subnet (security group allows only the ALB in), so the API
+  can reach Power BI, Azure AD and Tableau. Private subnets with a NAT gateway would add about $40.88 a month
+  ($0.056 an hour) plus $0.056 per GB processed, and more public IPv4 charges.
+- **No extra instance for GenAI.** The GenAI origin is a small nginx container. If the owner wants the optional
+  ClamAV malware scan in Dev, it needs about 2 GB of memory; check headroom on the `t3.xlarge` first.
+- **Not costed:** KMS customer-managed keys ($1 a month each; AWS-managed keys are free and meet encryption at
+  rest), Direct Connect or VPN, Secrets Manager beyond the two approved secrets ($0.40 per secret a month), AWS WAF,
+  AWS Backup beyond RDS automated backups, support plan, taxes.
+
+### 9.2 What changes for UAT and Prod (not costed here)
+
+- RDS moves to **Standard edition, Multi-AZ**, with larger storage; this becomes the largest line.
+- The API runs on at least two instances in two Availability Zones (the job runner already claims runs atomically),
+  with the ALB spreading across them.
+- SES leaves the sandbox; CloudWatch alarms notify IT Ops; a penetration test is booked before go-live.
+- Prod would normally be priced separately, with reserved or savings-plan pricing for the instances and database.
