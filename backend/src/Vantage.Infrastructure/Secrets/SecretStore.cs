@@ -22,8 +22,8 @@ public interface ISecretStore
 /// </summary>
 public sealed class DbSecretStore(AppDbContext db, IDataProtectionProvider protection, TimeProvider clock) : ISecretStore
 {
-    // Keep this purpose string as it is (it predates the Vantage rename): changing it makes stored secrets unreadable.
-    private readonly IDataProtector _protector = protection.CreateProtector("RdDashboard.Secrets.v1");
+    // Keep this purpose string as it is: changing it makes stored secrets unreadable.
+    private readonly IDataProtector _protector = protection.CreateProtector("Vantage.Secrets.v1");
 
     public async Task<string?> GetAsync(string secretName, CancellationToken ct = default)
     {
@@ -35,7 +35,7 @@ public sealed class DbSecretStore(AppDbContext db, IDataProtectionProvider prote
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            // Encryption keys were lost (e.g. the keys volume was deleted): treat as not set so the UI asks again.
+            // The encryption keys were lost or changed (e.g. the keys volume was deleted): treat as not set so the UI asks again.
             return null;
         }
     }

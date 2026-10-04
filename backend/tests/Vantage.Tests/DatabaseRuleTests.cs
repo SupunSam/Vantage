@@ -20,7 +20,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
     {
         var baseCs = Environment.GetEnvironmentVariable("VANTAGE_TEST_SQL");
         if (string.IsNullOrWhiteSpace(baseCs)) return null;
-        var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(baseCs) { InitialCatalog = "RDDashboard_Tests_" + Guid.NewGuid().ToString("N")[..8] };
+        var b = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(baseCs) { InitialCatalog = "Vantage_Tests_" + Guid.NewGuid().ToString("N")[..8] };
         return b.ConnectionString;
     }
 

@@ -7,7 +7,7 @@ import { useSession } from "./session";
 export type NavItem = { to: string; label: string; icon: string; end?: boolean; soon?: boolean };
 export type NavSection = { title?: string; items: NavItem[] };
 
-const COLLAPSE_KEY = "rd.navCollapsed";
+const COLLAPSE_KEY = "vantage.navCollapsed";
 
 function readCollapsed() {
   try {
