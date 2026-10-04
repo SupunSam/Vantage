@@ -67,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<AccessGroupRuleService>();
         services.AddScoped<ConfigService>();
         services.AddScoped<AnalyticsService>();
+        services.AddScoped<AdminHomeService>();
         services.AddScoped<PersonalFolderService>();
         // Email: queued in the outbox table and sent by a background worker (Mailpit locally, SES in AWS).
         services.Configure<EmailOptions>(config.GetSection("Email"));

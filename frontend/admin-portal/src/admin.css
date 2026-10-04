@@ -343,3 +343,34 @@ fieldset.plain > .btn { align-self: flex-start; }
 .job-facts dd { margin: 2px 0 0; }
 .job-summary { margin: 10px 0 0; padding: 8px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .job-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Home ---------- */
+/* Categorical slots 1 to 3 of the data-viz palette (validated together): the colour belongs to the dashboard type, whatever else is shown. */
+:root { --hv-s1: #2a78d6; --hv-s2: #eb6834; --hv-s3: #1baf7a; }
+.hv-s1 { background: var(--hv-s1); }
+.hv-s2 { background: var(--hv-s2); }
+.hv-s3 { background: var(--hv-s3); }
+.hv-tile { text-decoration: none; color: inherit; }
+.hv-tile:hover, .hv-tile:focus-visible { border-color: var(--brand); outline: none; }
+.hv-cols { margin-top: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.hv-panel h2 { font-size: 1rem; margin: 0 0 12px; }
+.hv-panel .panel-row { margin-bottom: 12px; }
+.hv-panel .panel-row h2 { margin: 0; }
+.hv-bar-name a { text-decoration: none; }
+.hv-bar-name a:hover { text-decoration: underline; }
+.hv-foot { margin: 12px 0 0; }
+.hv-stack { display: flex; gap: 2px; height: 16px; }
+.hv-seg { display: block; min-width: 6px; border-radius: 4px; }
+.hv-legend { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.hv-legend li { display: grid; grid-template-columns: 12px 1fr auto 44px; align-items: center; gap: 10px; }
+.hv-dot { width: 12px; height: 12px; border-radius: 3px; }
+.hv-legend .small { text-align: right; }
+.hv-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.hv-bars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; }
+.hv-bar-name { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+.hv-track { height: 10px; background: color-mix(in srgb, var(--brand) 8%, white); border-radius: 4px; overflow: hidden; }
+.hv-fill { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
+.hv-value { font-size: 0.9rem; min-width: 2.5em; text-align: right; }
+.hv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hv-activity li { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.hv-activity li:last-child { border-bottom: 0; padding-bottom: 0; }

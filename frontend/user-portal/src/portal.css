@@ -4,6 +4,7 @@
 .home-head { margin-bottom: 18px; }
 .home-head h1 { font-size: 1.75rem; }
 .home-head p { margin-top: 4px; }
+.home-count { margin: 0 0 14px; }
 .home-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 22px; }
 .home-search { flex: 1 1 360px; max-width: 560px; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--muted); }
 .home-search:focus-within { border-color: var(--brand); outline: 2px solid color-mix(in srgb, var(--brand) 25%, transparent); }

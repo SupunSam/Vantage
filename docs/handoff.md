@@ -42,6 +42,8 @@ Key services: CategoryService, DashboardMasterService, GroupService, AccessGroup
 
 26. Follow-ups after the owner's answers (C39 to C44): users are created by Super Admins only (API-enforced; Add User, Add Many, Excel); only Super Admins publish, modify and restore (`PublishingController`, `AdminDashboardsController`); the portals never share a session (real sign-in parked); Analytics has a Dashboard Type filter (`AnalyticsService.ScopeAsync`, shared `TypePicker`, All Types by default, also on the owner page); `OwnerDepartureService` makes a dashboard Inactive when neither owner is an Active user (after the HRMS job and on a manual Inactive) and Dashboards Master shows a banner; naming a new active owner reactivates it. Tests: OwnerDepartureTests (SQL, plus pure rules in OwnerAndTypeRulesTests).
 
+27. Sign-in, Home and log out (C45): shared `SignInPage` replaces the dev picker (Internal / External choice, then the local picker; lands on Home); `signOut` reloads at `/` (per portal session); Log Out button in the top bar and in the user menu. Admin Portal "Home" (was Overview): `AdminHomeService` + `HomeController` (GET /api/admin/home, parts filled by permission), `HomePage.tsx` (tiles, TrendChart, stacked bar by type, bar lists, Needs Attention, Recent Activity). The old /api/admin/setup endpoint and OverviewPage are removed. User Portal "Home" has tabs My Dashboards and Personal Folders (`?tab=folders`; /folders redirects); owners' menu section is "Owner Workspace". Tests: AdminHomeTests (SQL).
+
 
 ## Key rules (from the doc)
 - Access is only through dashboard groups: one live group per user per dashboard. The group's RLS value is the Power BI role name (several roles comma-separated).

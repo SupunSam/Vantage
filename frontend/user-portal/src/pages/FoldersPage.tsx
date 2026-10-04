@@ -10,7 +10,7 @@ const MAX_FOLDERS = 20;
 const message = (e: unknown) => (e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e));
 
 /** Personal Folders: the person's own one-level folders of the dashboards they can open. */
-export function FoldersPage() {
+export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [mine, setMine] = useState<Mine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,9 +59,9 @@ export function FoldersPage() {
 
   return (
     <>
-      <div className="home-head">
-        <h1>Personal Folders</h1>
-        <p className="muted">Your own folders for the dashboards you open often. Only you can see them, and a dashboard you lose access to leaves them automatically.</p>
+      <div className={embedded ? "" : "home-head"}>
+        {!embedded && <h1>Personal Folders</h1>}
+        <p className="muted home-count">Your own folders for the dashboards you open often. Only you can see them, and a dashboard you lose access to leaves them automatically.</p>
       </div>
       {notice && <p className="notice notice-error">{notice}</p>}
 

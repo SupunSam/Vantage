@@ -92,6 +92,7 @@ export function AppShell({ portalLabel, sections, otherPortal, children }: {
           <div className="topbar-fill" />
           <NotificationBell />
           <UserMenu otherPortal={otherPortal} />
+          <LogOutButton />
         </header>
         <main className="content">{children}</main>
       </div>
@@ -216,11 +217,21 @@ function UserMenu({ otherPortal }: { otherPortal?: { label: string; href: string
             </a>
           )}
           <button type="button" className="pop-item" role="menuitem" onClick={signOut}>
-            <Icon name="swap" size={18} /> Switch User
+            <Icon name="logout" size={18} /> Log Out
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+/** Always in view, so signing out never needs a search through menus. */
+function LogOutButton() {
+  const { signOut } = useSession();
+  return (
+    <button type="button" className="icon-btn" onClick={signOut} aria-label="Log Out" title="Log Out">
+      <Icon name="logout" />
+    </button>
   );
 }
 

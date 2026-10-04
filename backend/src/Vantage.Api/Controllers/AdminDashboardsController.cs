@@ -282,23 +282,3 @@ public sealed class AdminDashboardsController(
     /// <summary>A short token that changes whenever the thumbnail changes, so the browser can cache by it; null when there is none.</summary>
     internal static string? ThumbnailVersion(string? key) => key is null ? null : Path.GetFileNameWithoutExtension(key);
 }
-
-/// <summary>Progress of the setup steps shown on the Admin Portal overview.</summary>
-[Route("api/admin/setup")]
-public sealed class SetupController(CurrentUser current, AppDbContext db) : AdminControllerBase(current)
-{
-    [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken ct)
-    {
-        if (await Current.GetAsync(ct) is null) return Unauthorized();
-        var customRoles = await db.Roles.CountAsync(r => !r.IsSystem, ct);
-        var roles = await db.Roles.CountAsync(ct);
-        var users = await db.Users.CountAsync(ct);
-        var tenants = await db.BiTenants.CountAsync(t => t.IsActive, ct);
-        var verified = await db.BiTenants.CountAsync(t => t.IsActive && t.LastVerifyPassed == true, ct);
-        var categories = await db.Categories.CountAsync(ct);
-        var published = await db.Dashboards.CountAsync(d => d.Status == DashboardStatus.Active, ct);
-        var uncategorised = await db.Dashboards.CountAsync(d => d.Status != DashboardStatus.Retired && d.CategoryId == null, ct);
-        return Ok(new { roles, customRoles, users, tenants, verifiedTenants = verified, categories, activeDashboards = published, uncategorised });
-    }
-}

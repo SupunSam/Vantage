@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, ApiError, Icon, Thumbnail, useSession } from "@vantage/shared";
 import { FolderMenu } from "./FolderMenu";
+import { FoldersPage } from "./FoldersPage";
 
 type MyDashboard = {
   id: number;
@@ -42,9 +43,32 @@ function readPrefs(): { grouping: Grouping; layout: Layout } {
 
 const time = (iso: string | null) => (iso ? new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime() : 0);
 
-/** Home page: the dashboards this person can open, as thumbnail cards (newest first), by category, or as a sortable list. */
+/** Home: two tabs. My Dashboards (everything this person can open) and Personal Folders (their own groupings of those). */
 export function HomePage() {
   const { me } = useSession();
+  const [search, setSearch] = useSearchParams();
+  const tab = search.get("tab") === "folders" ? "folders" : "dashboards";
+  const firstName = me?.displayName.split(" ")[0];
+  const tabs = [{ key: "dashboards", label: "My Dashboards" }, { key: "folders", label: "Personal Folders" }] as const;
+  return (
+    <>
+      <div className="home-head">
+        <h1>Home</h1>
+        <p className="muted">{firstName ? `Welcome, ${firstName}. ` : ""}Your dashboards, and the folders you keep them in.</p>
+      </div>
+      <div className="tabs" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`tab ${tab === t.key ? "tab-on" : ""}`}
+            onClick={() => setSearch(t.key === "dashboards" ? {} : { tab: t.key }, { replace: true })}>{t.label}</button>
+        ))}
+      </div>
+      {tab === "folders" ? <FoldersPage embedded /> : <MyDashboards />}
+    </>
+  );
+}
+
+/** The dashboards this person can open, as thumbnail cards (newest first), by category, or as a sortable list. */
+function MyDashboards() {
   const [rows, setRows] = useState<MyDashboard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -88,20 +112,14 @@ export function HomePage() {
 
   const pinned = filtered.filter((r) => r.pinned).sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0));
   const pinCount = rows.filter((r) => r.pinned).length;
-  const firstName = me?.displayName.split(" ")[0];
 
   return (
     <>
-      <div className="home-head">
-        <div>
-          <h1>{firstName ? `${firstName}'s Dashboards` : "My Dashboards"}</h1>
-          <p className="muted">
-            {rows.length === 0
-              ? "You don't have access to any dashboards yet."
-              : `${rows.length} dashboard${rows.length === 1 ? "" : "s"} you can open${pinCount ? `, ${pinCount} pinned` : ""}.`}
-          </p>
-        </div>
-      </div>
+      <p className="muted home-count">
+        {rows.length === 0
+          ? "You don't have access to any dashboards yet."
+          : `${rows.length} dashboard${rows.length === 1 ? "" : "s"} you can open${pinCount ? `, ${pinCount} pinned` : ""}.`}
+      </p>
 
       {rows.length === 0 ? (
         <div className="state">

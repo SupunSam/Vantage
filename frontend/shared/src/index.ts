@@ -1,6 +1,6 @@
 export * from "./api";
 export * from "./session";
-export * from "./DevSignIn";
+export * from "./SignInPage";
 export * from "./TypeGlyph";
 export * from "./Icon";
 export * from "./Shell";
