@@ -169,6 +169,7 @@ depends on them:
   - They are served only from the separate origin (`GenAi:BaseUrl`) via `GenAiContentController`, with the strict CSP and `sandbox allow-scripts` from `GenAiService.PolicyFor`. Never serve the file from the portals' origin or through `/api`.
   - The portals frame it with `GenAiFrame` (`sandbox="allow-scripts"`, never `allow-same-origin`). Don't widen the sandbox, the CSP or `GenAi:FrameAncestors` without a recorded decision.
   - A link is issued only after the normal membership check (or Super Admin preview) and is the only way in. The view row is written when the link is issued, as for Power BI. Not Active means not served.
+  - Security write-up, including what the check does NOT do and the open hardening options: `docs/genai-security.md`. Keep it in step with any change here.
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
 ## Conventions
