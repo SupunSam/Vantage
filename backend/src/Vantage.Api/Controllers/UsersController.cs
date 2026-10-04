@@ -4,12 +4,13 @@ using Microsoft.EntityFrameworkCore;
 using Vantage.Api.Auth;
 using Vantage.Domain;
 using Vantage.Infrastructure.Data;
+using Vantage.Infrastructure.Jobs;
 using Vantage.Infrastructure.Services;
 
 namespace Vantage.Api.Controllers;
 
 [Route("api/admin/users")]
-public sealed class UsersController(CurrentUser current, AppDbContext db, UserService users, HrmsSyncService hrms, AccessGroupRuleService accessRules, ILogger<UsersController> log) : AdminControllerBase(current)
+public sealed class UsersController(CurrentUser current, AppDbContext db, UserService users, JobRunner jobs) : AdminControllerBase(current)
 {
     [HttpGet]
     public async Task<IActionResult> List(string? search, string? type, string? status, int? roleId, int page = 1, int pageSize = 25, CancellationToken ct = default)
@@ -220,16 +221,18 @@ public sealed class UsersController(CurrentUser current, AppDbContext db, UserSe
         });
     }
 
-    /// <summary>Runs the HRMS job now (normally monthly).</summary>
+    /// <summary>Runs the HRMS job now (it also runs on its schedule). The run is recorded on the Scheduled Jobs page like any other.</summary>
     [HttpPost("hrms-sync")]
     public async Task<IActionResult> HrmsSync(CancellationToken ct)
     {
         if (await RequireAsync(AppModules.Users, PermissionLevel.Edit, ct) is { } denied) return denied;
-        var s = await hrms.RunAsync(ct);
-        // Fresh HRMS data may put new people inside a rule: send what the rules find to the owners (nothing changes until they approve).
-        List<RuleRunResult> rules = [];
-        try { rules = await accessRules.RunAllAsync(ct); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "Access group rules failed after the HRMS sync"); }
-        return Ok(new { s.Checked, s.ProfilesUpdated, s.Deactivated, s.SkippedManual, s.NotInHrms, s.DeactivatedEmails, rules });
+        var me = await Current.GetAsync(ct);
+        return await Guard(async () =>
+        {
+            var run = await jobs.RunNowAsync(HrmsSyncJob.JobName, me!.Id, ct);
+            if (run.Data is not HrmsJobResult r) return StatusCode(500, new { message = run.Run.Summary ?? "The HRMS sync failed." });
+            var s = r.Sync;
+            return Ok(new { s.Checked, s.ProfilesUpdated, s.Deactivated, s.SkippedManual, s.NotInHrms, s.DeactivatedEmails, r.LeaversRevoked, r.MembershipsEnded, rules = r.Rules });
+        });
     }
 }

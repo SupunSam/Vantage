@@ -51,7 +51,7 @@ public sealed class TableauTokenService(ISecretStore secrets, TimeProvider clock
         return (token, expires);
     }
 
-    /// <summary>Embedding API v3 script hosted by the Tableau Server itself.</summary>
+    /// <summary>Embedding API v3 script hosted by the Tableau Server itself (Tableau Public uses <see cref="TableauViewUrl.ScriptUrl"/>).</summary>
     public static string ScriptUrl(BiTenant tenant) =>
         $"{tenant.ServerUrl?.TrimEnd('/')}/javascripts/api/tableau.embedding.3.latest.min.js";
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.Email;
 using Vantage.Infrastructure.Embedding;
+using Vantage.Infrastructure.Jobs;
 using Vantage.Infrastructure.GenAi;
 using Vantage.Infrastructure.Secrets;
 using Vantage.Infrastructure.Services;
@@ -52,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IFileScanner, ConfiguredFileScanner>();
         services.AddScoped<GenAiService>();
         services.AddScoped<GenAiPublisher>();
+        services.AddScoped<TableauPublisher>();
         services.AddScoped<EmbedService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<DashboardMasterService>();
@@ -70,6 +72,12 @@ public static class DependencyInjection
         services.AddScoped<EmailOutboxService>();
         services.AddHostedService<EmailSenderWorker>();
         services.AddScoped<NotificationService>();
+        // Scheduled jobs: the runner decides when each runs and records every run; the scheduler wakes it every 30 seconds.
+        services.AddScoped<IScheduledJob, HrmsSyncJob>();
+        services.AddScoped<IScheduledJob, InactivityJob>();
+        services.AddScoped<IScheduledJob, NewHireDigestJob>();
+        services.AddScoped<JobRunner>();
+        services.AddHostedService<JobScheduler>();
         services.AddScoped<DbSeeder>();
         return services;
     }

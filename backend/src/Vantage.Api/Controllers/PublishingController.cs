@@ -13,7 +13,7 @@ namespace Vantage.Api.Controllers;
 /// <summary>Publishing (Admin Portal). Needs Edit on the Publishing module (Super Admin, BPI Publisher, …).</summary>
 [ApiController, Authorize, Route("api/publishing")]
 public sealed class PublishingController(
-    AppDbContext db, CurrentUser current, PublishingService publishing, GenAiPublisher genAiPublisher, GenAiService genAi,
+    AppDbContext db, CurrentUser current, PublishingService publishing, GenAiPublisher genAiPublisher, GenAiService genAi, TableauPublisher tableauPublisher,
     CategoryService categoryService, DashboardMasterService master) : ControllerBase
 {
     /// <summary>Choices for the publish form: Power BI tenants with their workspaces, categories, users for owner pickers.</summary>
@@ -31,6 +31,13 @@ public sealed class PublishingController(
             })
             .ToListAsync(ct);
 
+        // Tableau Server tenants for the Tableau tab (a Tableau Public view needs none). Verify isn't required to publish, so it is shown, not enforced.
+        var tableauTenants = await db.BiTenants.AsNoTracking()
+            .Where(t => t.Platform == BiPlatform.Tableau && t.IsActive)
+            .OrderBy(t => t.Name)
+            .Select(t => new { t.Id, t.Name, t.ServerUrl, t.SiteContentUrl, verified = t.LastVerifyPassed == true })
+            .ToListAsync(ct);
+
         var categories = await categoryService.ListAsync(ct);
 
         var users = await db.Users.AsNoTracking()
@@ -42,6 +49,7 @@ public sealed class PublishingController(
         return Ok(new
         {
             tenants,
+            tableauTenants,
             categories,
             users,
             limits = new
@@ -115,6 +123,65 @@ public sealed class PublishingController(
         catch (EmbedException ex)
         {
             return StatusCode(502, new { code = ex.Code, message = ex.Message });
+        }
+    }
+
+    public sealed class PublishTableauForm
+    {
+        public string Name { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string? Description { get; set; }
+        /// <summary>The Tableau Server tenant; empty for a Tableau Public view.</summary>
+        public int? TenantId { get; set; }
+        public string ViewUrl { get; set; } = "";
+        public int? PrimaryOwnerId { get; set; }
+        public int? BackupOwnerId { get; set; }
+        public int? CategoryId { get; set; }
+        /// <summary>Comma-separated, up to 8.</summary>
+        public string? Tags { get; set; }
+        public Audience Audience { get; set; } = Audience.Internal;
+        public DataClassification DataClassification { get; set; } = DataClassification.Internal;
+        public IFormFile? Thumbnail { get; set; }
+    }
+
+    /// <summary>Publishes a Tableau dashboard (a Tableau Server view, or a Tableau Public view). It is live at once, with the owners in the default group.</summary>
+    [HttpPost("tableau")]
+    [RequestSizeLimit(3L * 1024 * 1024)]
+    public async Task<IActionResult> PublishTableau([FromForm] PublishTableauForm form, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.Edit, ct) is { } denied) return denied;
+        var me = (await current.GetAsync(ct))!;
+        try
+        {
+            var thumbnail = await ReadThumbnailAsync(form.Thumbnail, ct);
+            var status = await tableauPublisher.PublishAsync(new PublishTableauRequest(
+                form.Name, form.Code, form.Description, form.TenantId, form.ViewUrl, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId, form.CategoryId,
+                Rules.NormalizeTags([form.Tags ?? ""]), form.Audience, form.DataClassification), me.Id, ct);
+            if (thumbnail is not null) await master.SetThumbnailAsync(status.DashboardId, thumbnail, ct);
+            return Ok(status);
+        }
+        catch (Exception ex) when (ex is ArgumentException or RuleException)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    public sealed record CheckTableauBody(int? TenantId, string? ViewUrl);
+
+    /// <summary>Reads a view address the way publishing will, without saving anything, so the form can say what is wrong before the real publish.</summary>
+    [HttpPost("tableau/check")]
+    public async Task<IActionResult> CheckTableau(CheckTableauBody body, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.View, ct) is { } denied) return denied;
+        try
+        {
+            var tenant = await tableauPublisher.ResolveTenantAsync(body.TenantId, ct);
+            var view = TableauViewUrl.Parse(body.ViewUrl, tenant?.ServerUrl, tenant?.SiteContentUrl);
+            return Ok(new { view.IsPublic, view.Src, view.Host, view.Workbook, view.View, view.Site, warning = TableauPublisher.Warning(tenant, view) });
+        }
+        catch (RuleException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 

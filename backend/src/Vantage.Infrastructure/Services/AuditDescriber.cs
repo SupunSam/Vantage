@@ -35,6 +35,13 @@ public static class AuditDescriber
             "user.status-changed" => $"Changed status of {who} from {Str("from")} to {Str("to")}.",
             "user.email-changed" => $"Changed email from {Str("from")} to {Str("to")}.",
             "user.deactivated-by-hrms" => $"Deactivated {who} after the HR system showed they left.",
+            "dashboard.tableau-view-changed" => $"Changed the Tableau view of {dashboard ?? who}.",
+            "job.run" => $"{(Str("trigger") == "Manual" ? "Ran" : "Scheduled run of")} {Str("title") ?? Str("job")}: {Str("summary")}",
+            "job.paused" => $"Paused the scheduled job {Str("title") ?? Str("job")}.",
+            "job.resumed" => $"Resumed the scheduled job {Str("title") ?? Str("job")}.",
+            "user.access-revoked" => $"Ended the access of {Str("email") ?? who} after they left: {Count("memberships")} group membership{(Count("memberships") == 1 ? "" : "s")} ended"
+                + (Count("keptAsOwner") > 0 ? $", {Count("keptAsOwner")} kept because they own the dashboard" : "") + ".",
+            "dashboard.inactivity-flagged" => $"Flagged {dashboard ?? who} as unused: not opened for {Count("daysQuiet")} days.",
             "hrms.sync" => $"Synced users with the HR system: {Count("updated")} updated, {Count("deactivated")} deactivated, {Count("skipped")} skipped.",
 
             "role.created" => $"Created role {Str("Name") ?? who}.",

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import * as pbi from "powerbi-client";
-import { api, ApiError, GenAiFrame } from "@vantage/shared";
+import { api, ApiError, GenAiFrame, TableauViz } from "@vantage/shared";
 
 type EmbedInfo = {
   type: "powerbi" | "tableau" | "genai";
@@ -26,6 +26,7 @@ const friendly: Record<string, string> = {
   "secret-missing": "The portal can't sign in to the BI platform because its secret isn't set on this machine.",
   "rls-missing": "This dashboard uses row-level security, but your group has no RLS value. Ask a Super Admin to set it.",
   "tableau-user-missing": "Your profile has no Tableau user name. Ask a Super Admin to add it.",
+  "tableau-load": "Tableau couldn't open this view for you. On Tableau Server this usually means your Tableau user name in your profile is wrong, or you have no Tableau account. Ask a Super Admin to check it.",
   "platform-error": "The BI platform returned an error.",
   timeout: "The dashboard took more than 30 seconds to load.",
 };
@@ -106,35 +107,6 @@ export function ViewerPage() {
     };
   }, [info, fetchEmbed]);
 
-  // Tableau: load the Embedding API v3 from the Tableau Server, then render <tableau-viz> with the Connected App JWT.
-  useEffect(() => {
-    if (info?.type !== "tableau" || !hostRef.current || !info.tableauScriptUrl || !info.embedUrl || !info.token) return;
-    const host = hostRef.current;
-    const render = () => {
-      host.innerHTML = "";
-      const viz = document.createElement("tableau-viz");
-      viz.setAttribute("src", info.embedUrl!);
-      viz.setAttribute("token", info.token!);
-      viz.setAttribute("toolbar", "bottom");
-      viz.setAttribute("hide-tabs", "false");
-      viz.style.width = "100%";
-      viz.style.height = "100%";
-      host.appendChild(viz);
-    };
-    if (customElements.get("tableau-viz")) render();
-    else {
-      const script = document.createElement("script");
-      script.type = "module";
-      script.src = info.tableauScriptUrl;
-      script.onload = render;
-      script.onerror = () => setFailure({ kind: "error", code: "platform-error", message: "Couldn't load the Tableau embedding library from the Tableau Server." });
-      document.head.appendChild(script);
-    }
-    return () => {
-      host.innerHTML = "";
-    };
-  }, [info]);
-
   return (
     <div className="viewer">
       <div className="viewer-bar">
@@ -165,7 +137,14 @@ export function ViewerPage() {
         <div className="embed-host"><GenAiFrame url={info.embedUrl} title={info.name} /></div>
       )}
 
-      {!failure && (info?.type === "powerbi" || info?.type === "tableau") && <div ref={hostRef} className="embed-host" />}
+      {!failure && info?.type === "tableau" && info.embedUrl && info.tableauScriptUrl && (
+        <div className="embed-host">
+          <TableauViz src={info.embedUrl} token={info.token} scriptUrl={info.tableauScriptUrl}
+            onError={(message) => setFailure({ kind: "error", code: "tableau-load", message, name: info.name })} />
+        </div>
+      )}
+
+      {!failure && info?.type === "powerbi" && <div ref={hostRef} className="embed-host" />}
     </div>
   );
 }

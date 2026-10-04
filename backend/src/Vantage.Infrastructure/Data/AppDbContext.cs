@@ -40,6 +40,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<EmailOutbox> EmailOutbox => Set<EmailOutbox>();
     public DbSet<JobRun> JobRuns => Set<JobRun>();
+    public DbSet<JobState> JobStates => Set<JobState>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -379,6 +380,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.JobName, x.StartedAtUtc });
             e.Property(x => x.JobName).HasMaxLength(60);
             e.Property(x => x.Summary).HasMaxLength(4000);
+        });
+
+        m.Entity<JobState>(e =>
+        {
+            e.HasKey(x => x.JobName);
+            e.Property(x => x.JobName).HasMaxLength(60);
+            e.Property(x => x.Schedule).HasMaxLength(60);
         });
     }
 }

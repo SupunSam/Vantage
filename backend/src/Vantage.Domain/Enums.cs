@@ -43,3 +43,6 @@ public enum ViewSource { Portal, PowerBiActivity, TableauUsage }
 public enum EmailStatus { Pending, Sent, Failed }
 
 public enum JobRunStatus { Running, Succeeded, Failed }
+
+/// <summary>What started a job run: the scheduler, or a Super Admin pressing Run Now.</summary>
+public enum JobTrigger { Schedule, Manual }

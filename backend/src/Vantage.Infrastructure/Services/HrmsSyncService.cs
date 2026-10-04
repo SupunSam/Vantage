@@ -11,17 +11,13 @@ public sealed record HrmsSyncSummary(int Checked, int ProfilesUpdated, int Deact
 /// The HRMS job: reads the hrms.EmployeeProfile table (filled by the SQL-level sync) and, for each internal user
 /// matched by email, refreshes their HRMS profile and marks leavers Inactive, unless an admin set the status by hand.
 /// It never creates users and never reactivates anyone (re-employment is reactivated by an admin).
-/// Scheduled monthly; Super Admins can also run it from the User Master.
+/// The work only: <see cref="Jobs.HrmsSyncJob"/> runs it on its schedule (and from Run Now or the Users page) and the job runner records and audits the run.
 /// </summary>
 public sealed class HrmsSyncService(AppDbContext db, AuditWriter audit, TimeProvider clock)
 {
     public async Task<HrmsSyncSummary> RunAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow().UtcDateTime;
-        var run = new JobRun { JobName = "hrms-sync", StartedAtUtc = now, Status = JobRunStatus.Running };
-        db.JobRuns.Add(run);
-        await db.SaveChangesAsync(ct);
-
         var source = await db.HrmsSource.AsNoTracking().ToDictionaryAsync(h => h.Email.ToLower(), ct);
         var users = await db.Users.Include(u => u.HrmsProfile).Where(u => u.UserType == UserType.Internal).ToListAsync(ct);
 
@@ -49,13 +45,8 @@ public sealed class HrmsSyncService(AppDbContext db, AuditWriter audit, TimeProv
             }
         }
 
-        var summary = new HrmsSyncSummary(users.Count, updated, deactivated, skipped, missing, leavers);
-        run.FinishedAtUtc = clock.GetUtcNow().UtcDateTime;
-        run.Status = JobRunStatus.Succeeded;
-        run.Summary = System.Text.Json.JsonSerializer.Serialize(summary);
-        audit.Add("hrms.sync", "JobRun", run.Id, details: summary);
         await db.SaveChangesAsync(ct);
-        return summary;
+        return new HrmsSyncSummary(users.Count, updated, deactivated, skipped, missing, leavers);
     }
 
     public static HrmsProfile ProfileFrom(HrmsEmployeeSource h, DateTime now)

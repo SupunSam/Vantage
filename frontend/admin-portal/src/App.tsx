@@ -15,6 +15,7 @@ import { AuditLogPage } from "./pages/AuditLogPage";
 import { AccessRulesPage } from "./pages/AccessRulesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { ConfigPage } from "./pages/ConfigPage";
+import { JobsPage } from "./pages/JobsPage";
 import "./admin.css";
 
 /** The User Portal runs next to this one: port 8081 in the local Docker build. */
@@ -53,6 +54,7 @@ export function App() {
         ...(show("tenants") ? [{ to: "/tenants", label: "Tenants", icon: "server" }] : []),
         ...(show("analytics") ? [{ to: "/analytics", label: "Analytics", icon: "chart" }] : []),
         ...(show("audit") ? [{ to: "/audit", label: "Audit Log", icon: "history" }] : []),
+        ...(show("scheduled-jobs") ? [{ to: "/jobs", label: "Scheduled Jobs", icon: "refresh" }] : []),
         ...(show("admin-config") ? [{ to: "/config", label: "Configuration", icon: "settings" }] : []),
       ],
     },
@@ -72,6 +74,7 @@ export function App() {
         {show("groups") && <Route path="/access-rules" element={<AccessRulesPage />} />}
         {show("groups") && <Route path="/requests" element={<AccessRequestsPage />} />}
         {show("audit") && <Route path="/audit" element={<AuditLogPage />} />}
+        {show("scheduled-jobs") && <Route path="/jobs" element={<JobsPage />} />}
         {show("analytics") && <Route path="/analytics" element={<AnalyticsPage />} />}
         {show("admin-config") && <Route path="/config" element={<ConfigPage />} />}
         {show("dashboard-config") && <Route path="/dashboards" element={<DashboardsPage />} />}

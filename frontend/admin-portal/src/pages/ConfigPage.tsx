@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, Icon, useSession } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "../ui";
 
@@ -186,6 +186,7 @@ function SettingsTab({ data, scope, onDone, onError }: TabProps & { scope: "gene
       {groups.map((g) => (
         <section key={g} className="panel stack">
           <h2>{scope === "genai" ? g.replace(/^GenAI\s+/, "") : g}</h2>
+          {g === "Scheduled jobs" && <p className="muted small">Times are UTC. A change applies from the next check (within a minute). See when each job runs next, or run one now, on <Link to="/jobs">Scheduled Jobs</Link>.</p>}
           {list.filter((s) => s.group === g).map((s) => (
             <div key={s.key} className="cfg-setting">
               <div className="cfg-setting-text">

@@ -89,7 +89,7 @@ public class ConfigServiceTests(SqlServerFixture fx) : IClassFixture<SqlServerFi
         Assert.Equal("true", list.Single(s => s.Key == SettingKeys.ExternalSeeInternalCatalogue).Value);
         Assert.Equal(k.Admin.DisplayName, list.Single(s => s.Key == SettingKeys.IdleTimeoutMinutes).UpdatedBy);
         Assert.True(list.Single(s => s.Key == SettingKeys.IdleTimeoutMinutes).InUse);
-        Assert.False(list.Single(s => s.Key == SettingKeys.HrmsSyncCron).InUse);       // waits for the scheduled jobs
+        Assert.True(list.Single(s => s.Key == SettingKeys.HrmsSyncCron).InUse);        // the scheduled jobs use it now
         Assert.Contains(await k.Db.AuditLogs.Where(a => a.Action == "config.setting-changed").ToListAsync(), a => a.Details!.Contains("45") && a.Details.Contains("30"));
         Assert.DoesNotContain(list, s => s.Key == SettingKeys.BrandLogoFile);          // internal keys are never offered
     }

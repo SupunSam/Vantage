@@ -32,12 +32,12 @@ export function UsersPage() {
   async function syncHrms() {
     setSyncing(true);
     try {
-      const s = await api<{ checked: number; profilesUpdated: number; deactivated: number; skippedManual: number; notInHrms: number; deactivatedEmails: string[]; rules: { rule: string; proposed: number; message: string }[] }>(
+      const s = await api<{ checked: number; profilesUpdated: number; deactivated: number; skippedManual: number; notInHrms: number; deactivatedEmails: string[]; leaversRevoked: number; membershipsEnded: number; rules: { rule: string; proposed: number; message: string }[] }>(
         "/api/admin/users/hrms-sync", { method: "POST" });
       const sent = s.rules.reduce((n, r) => n + r.proposed, 0);
       setMessage({
         ok: true,
-        text: `HRMS sync: ${s.checked} internal users checked, ${s.profilesUpdated} profiles refreshed, ${s.deactivated} leaver${s.deactivated === 1 ? "" : "s"} set Inactive${s.deactivatedEmails.length ? ` (${s.deactivatedEmails.join(", ")})` : ""}${s.skippedManual ? `, ${s.skippedManual} left alone because an admin set their status` : ""}${s.notInHrms ? `, ${s.notInHrms} not found in HRMS` : ""}.${s.rules.length ? ` Access group rules ran: ${sent ? `${sent} ${sent === 1 ? "person was" : "people were"} sent to the owners for approval.` : "nothing new to propose."}` : ""}`,
+        text: `HRMS sync: ${s.checked} internal users checked, ${s.profilesUpdated} profiles refreshed, ${s.deactivated} leaver${s.deactivated === 1 ? "" : "s"} set Inactive${s.deactivatedEmails.length ? ` (${s.deactivatedEmails.join(", ")})` : ""}${s.skippedManual ? `, ${s.skippedManual} left alone because an admin set their status` : ""}${s.notInHrms ? `, ${s.notInHrms} not found in HRMS` : ""}.${s.leaversRevoked ? ` Access ended for ${s.leaversRevoked} ${s.leaversRevoked === 1 ? "leaver" : "leavers"} (${s.membershipsEnded} group ${s.membershipsEnded === 1 ? "membership" : "memberships"}).` : ""}${s.rules.length ? ` Access group rules ran: ${sent ? `${sent} ${sent === 1 ? "person was" : "people were"} sent to the owners for approval.` : "nothing new to propose."}` : ""}`,
       });
       reload();
     } catch (e) {
@@ -203,7 +203,7 @@ function AddUser({ roles, onClose, onDone }: { roles: RoleOption[]; onClose: () 
           </div>
         )}
         <div className="form-grid">
-          <label className="field"><span>Tableau user name (optional)</span><input value={tableau} onChange={(e) => setTableau(e.target.value)} /></label>
+          <label className="field"><span>Tableau user name (optional; needed to open Tableau Server dashboards, not Tableau Public ones)</span><input value={tableau} onChange={(e) => setTableau(e.target.value)} /></label>
           <label className="field"><span>ServiceNow ticket (optional)</span><input maxLength={64} value={serviceNow} onChange={(e) => setServiceNow(e.target.value)} placeholder="e.g. RITM0012345" /><small className="field-hint">Saved in the audit log with this change, not on the user.</small></label>
         </div>
         <RolePicker roles={roles} value={roleIds} onChange={setRoleIds} />
@@ -386,7 +386,7 @@ function UserDetail({ id, roles, canEdit, isSuperAdmin, onClose, onSaved }: {
             <label className="field"><span>Display name</span><input value={form.displayName ?? ""} onChange={set("displayName")} /></label>
             <label className="field"><span>Contact number</span><input value={form.contactNumber ?? ""} onChange={set("contactNumber")} /></label>
             <label className="field"><span>Time zone</span><input value={form.timeZone ?? ""} onChange={set("timeZone")} /></label>
-            <label className="field"><span>Tableau user name</span><input value={form.tableauUserName ?? ""} onChange={set("tableauUserName")} /></label>
+            <label className="field"><span>Tableau user name (needed for Tableau Server dashboards, not Tableau Public ones)</span><input value={form.tableauUserName ?? ""} onChange={set("tableauUserName")} /></label>
             <label className="field"><span>ServiceNow ticket for this change (optional)</span><input maxLength={64} value={form.serviceNowReference ?? ""} onChange={set("serviceNowReference")} placeholder="e.g. RITM0012345" /><small className="field-hint">Saved in the audit log with this change.</small></label>
           </div>
           {u.statusSetManually && <p className="muted small">Status was set by an admin, so the HRMS sync won't change it.</p>}

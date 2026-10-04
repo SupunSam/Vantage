@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import * as pbi from "powerbi-client";
-import { api, ApiError, apiObjectUrl, GenAiFrame, Icon, Thumbnail } from "@vantage/shared";
+import { api, ApiError, apiObjectUrl, GenAiFrame, Icon, TableauViz, Thumbnail } from "@vantage/shared";
 import { errorText, Modal, Notice, StatusPill, useApi, when } from "../ui";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
 import type { CategoryNode } from "./CategoriesPage";
@@ -13,6 +13,7 @@ type Detail = {
     categoryId: number | null; primaryOwnerId: number | null; backupOwnerId: number | null;
     tenant: string | null; workspace: string | null; owner: string | null; backupOwner: string | null;
     tags: string[]; audience: string; dataClassification: string; sharePointFolder: string | null; sharePointSubFolder: string | null;
+    tenantId: number | null; tableauViewUrl: string | null;
     powerBiReportId: string | null; powerBiDatasetId: string | null; publishedAtUtc: string | null; createdAtUtc: string; updatedAtUtc: string | null;
     groups: Group[];
     versions: Version[];
@@ -30,8 +31,9 @@ type Detail = {
 };
 type Version = { versionNumber: number; fileName: string; sizeBytes: number; isCurrent: boolean; uploadedAtUtc: string; note: string | null; uploadedBy: string | null };
 type ReplaceStatus = { dashboardId: number; state: "Idle" | "Replacing" | "Succeeded" | "Failed"; versionNumber: number | null; message: string | null };
-type FormOptions = { users: { id: number; email: string; displayName: string | null }[]; categories: CategoryNode[]; limits: { nameMax: number; descriptionMax: number; tagsMax: number; tagMax: number } };
-type EmbedInfo = { type: string; name?: string; embedUrl: string | null; token: string | null; expiresAt: string | null; reportId: string | null };
+type TableauTenant = { id: number; name: string; serverUrl: string | null; siteContentUrl: string | null };
+type FormOptions = { tableauTenants?: TableauTenant[]; users: { id: number; email: string; displayName: string | null }[]; categories: CategoryNode[]; limits: { nameMax: number; descriptionMax: number; tagsMax: number; tagMax: number } };
+type EmbedInfo = { type: string; name?: string; embedUrl: string | null; token: string | null; expiresAt: string | null; reportId: string | null; tableauScriptUrl?: string | null };
 
 const powerbiService = new pbi.service.Service(pbi.factories.hpmFactory, pbi.factories.wpmpFactory, pbi.factories.routerFactory);
 const tabs = [
@@ -337,6 +339,7 @@ function DetailsTab({ data, onSaved, onError }: { data: Detail; onSaved: (t: str
             </dl>
           </section>
         )}
+        {d.type === "Tableau" && <TableauPanel data={data} onSaved={onSaved} onError={onError} />}
         {d.type === "PowerBi" && (
           <section className="panel">
             <div className="panel-row">
@@ -673,6 +676,7 @@ function Preview({ dashboardId, groupId }: { dashboardId: number; groupId: numbe
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState("Getting an embed token…");
   const [genAi, setGenAi] = useState<EmbedInfo | null>(null);
+  const [tableau, setTableau] = useState<EmbedInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -683,6 +687,11 @@ function Preview({ dashboardId, groupId }: { dashboardId: number; groupId: numbe
         if (info.type === "genai" && info.embedUrl) {
           setGenAi(info);
           setState(`Loaded. The link is valid until ${when(info.expiresAt)}.`);
+          return;
+        }
+        if (info.type === "tableau" && info.embedUrl && info.tableauScriptUrl) {
+          setTableau(info);
+          setState(info.token ? `Loading the view. Token valid until ${when(info.expiresAt)}.` : "Loading the Tableau Public view…");
           return;
         }
         if (!info.token || !info.embedUrl) return;
@@ -707,8 +716,78 @@ function Preview({ dashboardId, groupId }: { dashboardId: number; groupId: numbe
   return (
     <>
       {error ? <Notice tone="error">{error}</Notice> : <p className="muted small">{state}</p>}
-      {genAi?.embedUrl ? <div className="embed-host"><GenAiFrame url={genAi.embedUrl} title="Preview" /></div> : <div ref={host} className="embed-host" />}
+      {genAi?.embedUrl ? <div className="embed-host"><GenAiFrame url={genAi.embedUrl} title="Preview" /></div>
+        : tableau?.embedUrl && tableau.tableauScriptUrl
+          ? <div className="embed-host"><TableauViz src={tableau.embedUrl} token={tableau.token} scriptUrl={tableau.tableauScriptUrl}
+              onError={(m) => setError(`Tableau couldn't open the view: ${m} On Tableau Server this usually means your own Tableau user name (on your profile in Users) is missing or wrong.`)} /></div>
+          : <div ref={host} className="embed-host" />}
     </>
+  );
+}
+
+/** The Tableau view behind a Tableau dashboard: Tableau Public or a Tableau Server tenant, with the view's address. Changing it keeps the groups and access as they are. */
+function TableauPanel({ data, onSaved, onError }: { data: Detail; onSaved: (t: string) => void; onError: (t: string) => void }) {
+  const d = data.dashboard;
+  const [editing, setEditing] = useState(false);
+  const [tenantId, setTenantId] = useState(d.tenantId ? String(d.tenantId) : "");
+  const [url, setUrl] = useState(d.tableauViewUrl ?? "");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const options = useApi<FormOptions>(editing ? "/api/admin/dashboards/form-options" : null);
+  const tenants = options.data?.tableauTenants ?? [];
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api(`/api/admin/dashboards/${d.id}/tableau-view`, { method: "PUT", body: JSON.stringify({ tenantId: tenantId ? Number(tenantId) : null, viewUrl: url }) });
+      setEditing(false);
+      onSaved("Saved the Tableau view.");
+    } catch (err) {
+      setProblem(errorText(err));
+      onError(errorText(err));
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-row">
+        <h2>Tableau View</h2>
+        {data.canEdit && d.status !== "Retired" && !editing && <button className="btn" type="button" onClick={() => setEditing(true)}><Icon name="edit" size={18} /> Edit View</button>}
+      </div>
+      {!editing ? (
+        <dl className="facts">
+          <dt>Runs on</dt><dd>{d.tenant ? <>Tableau Server: {d.tenant}</> : "Tableau Public"}</dd>
+          <dt>View</dt><dd>{d.tableauViewUrl ? <a href={d.tableauViewUrl} target="_blank" rel="noreferrer">{d.tableauViewUrl}</a> : <span className="warn-text">No view address yet</span>}</dd>
+          <dt>Who sees what</dt>
+          <dd className="small">
+            {d.tenant
+              ? "Each person opens it as their own Tableau user (the Tableau user name on their profile), so Tableau's own permissions and row-level security apply. The portal's groups decide who can open it here."
+              : "Tableau Public views are open to anyone who has the address. The portal's groups only decide who is shown it here, so only public data belongs on it."}
+          </dd>
+        </dl>
+      ) : (
+        <form className="stack" onSubmit={save}>
+          <label className="field">
+            <span>Runs on</span>
+            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+              <option value="">Tableau Public</option>
+              {tenants.map((t) => <option key={t.id} value={t.id}>Tableau Server: {t.name}{t.siteContentUrl ? ` (site ${t.siteContentUrl})` : ""}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>View address</span>
+            <input required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://public.tableau.com/views/WorkbookName/ViewName" />
+          </label>
+          {problem && <Notice tone="error">{problem}</Notice>}
+          <div className="actions">
+            <button className="btn btn-primary" type="submit" disabled={busy || !options.data}>{busy ? "Saving…" : "Save View"}</button>
+            <button className="btn btn-quiet" type="button" onClick={() => { setEditing(false); setProblem(null); }}>Cancel</button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }
 
