@@ -184,6 +184,12 @@ depends on them:
   - A Tableau Public dashboard must be classified Public (`TableauPublisher.EnsureClassificationFits`, also checked when editing details and changing the view). Never relax this: anyone with the address can open it on Tableau Public.
   - No portal RLS for Tableau (Tableau owns it), so only the default group. Access still needs a group membership; the view row is written when the embed is issued.
   - `TableauPublisher` publishes (live at once, no import); `DashboardMasterService.SetTableauViewAsync` changes the view. The shared `TableauViz` component renders it in both portals.
+- **Users, publishers and sessions** (C39 to C41).
+  - Only Super Admins create users (Add User, Add Many, Excel; `RequireSuperAdminAsync`). Nobody is created at sign-in or by the HRMS job; an unknown person who signs in is refused.
+  - Only Super Admins publish, modify and restore dashboards of any type. There is no publisher role, and role permissions can't grant it. Owners see only the dashboards they own, in the Owner Workspace.
+  - The Admin Portal and User Portal never share a session. Don't build anything that signs one in or out through the other.
+- **Owners leaving** (C43). `OwnerDepartureService.ReviewAsync` makes an Active dashboard Inactive (and sets `OwnershipPendingReview`) when neither owner is an Active user, tells the Super Admins and audits it. It runs after the HRMS job and when a user is set Inactive by hand. A Super Admin naming a new active owner in Dashboards Master (`DashboardMasterService.UpdateAsync`) reactivates it. The portal never picks owners.
+- **Analytics type filter** (C42). Admin and owner analytics take an optional `type` (blank = all). Build the scope with `AnalyticsService.ScopeAsync` and never parse the type yourself (`ParseType` refuses unknown values).
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
 ## Conventions
@@ -222,7 +228,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C39) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C45) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -241,13 +247,9 @@ Done:
 - User Portal **Personal Folders** (page plus a folder button on cards).
 - Scheduled jobs (C35 to C37): HRMS sync, inactivity check and new-hire digest on one scheduler, with an Admin Portal Scheduled Jobs page (schedule, last and next run, Run Now, Pause, history).
 - Tableau dashboards (C38): publish from the Tableau tab (Tableau Server tenant or Tableau Public), Tableau View panel in Dashboards Master, shared `TableauViz`. Tableau Server is untested until a test server exists.
+- Follow-ups (C39 to C44): Super Admin-only user creation and publishing, separate portal sessions, Analytics dashboard-type filter, dashboards go Inactive when their owners leave.
 - GenAI dashboards (C32, C33): starter template, vetted upload (rule check plus optional ClamAV scan, Super Admin only), publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
 
-Next, in order:
-1. Test Tableau Server against a real test server when one exists.
-2. Real ADFS/Cognito sign-in and the AWS environments.
+Next (parked by the owner for now): Tableau Server test site, real ADFS/Cognito sign-in with separate sessions per portal, the AWS environments, and the migration from the .NET 4.8 portal (U7, in scope, last).
 
-Open questions (still unanswered):
-- U5: internal users who sign in before they've been added.
-- U6: publisher scope.
-- U7: migration from the .NET 4.8 portal.
+Open questions: none. U5 to U7 were answered on 4 Oct (C39, C40, C44).

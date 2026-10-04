@@ -45,6 +45,32 @@ public sealed class AnalyticsService(AppDbContext db, TimeProvider clock)
     public async Task<List<int>> OwnedAsync(int userId, CancellationToken ct = default) =>
         await db.Dashboards.AsNoTracking().Where(d => d.PrimaryOwnerId == userId || d.BackupOwnerId == userId).Select(d => d.Id).ToListAsync(ct);
 
+    /// <summary>
+    /// "PowerBi", "Tableau" or "GenAi" (any case) as a type, or null for "all types" (blank). Anything else is refused, so a typo can't quietly show everything.
+    /// </summary>
+    public static DashboardType? ParseType(string? type)
+    {
+        if (string.IsNullOrWhiteSpace(type) || type.Trim().Equals("all", StringComparison.OrdinalIgnoreCase)) return null;
+        var t = type.Trim().Replace(" ", "");
+        // An exact name match: Enum.TryParse would also accept numbers and comma lists ("PowerBi,Tableau").
+        var name = Enum.GetNames<DashboardType>().FirstOrDefault(n => n.Equals(t, StringComparison.OrdinalIgnoreCase));
+        if (name is not null) return Enum.Parse<DashboardType>(name);
+        throw new RuleException("Dashboard type must be Power BI, Tableau or GenAI, or blank for all types.");
+    }
+
+    /// <summary>
+    /// The dashboards an analytics view covers once a type is chosen: null for everything (no type, no owner scope), otherwise the ids that
+    /// are of that type and, for an owner, also owned by them. An empty list means "nothing matches", not "everything".
+    /// </summary>
+    public async Task<List<int>?> ScopeAsync(string? type, IReadOnlyCollection<int>? within, CancellationToken ct = default)
+    {
+        var t = ParseType(type);
+        if (t is null) return within?.ToList();
+        var q = db.Dashboards.AsNoTracking().Where(d => d.Type == t);
+        if (within is not null) q = q.Where(d => within.Contains(d.Id));
+        return await q.Select(d => d.Id).ToListAsync(ct);
+    }
+
     private IQueryable<DashboardView> Views(DateTime from, IReadOnlyCollection<int>? scope)
     {
         var q = db.DashboardViews.AsNoTracking().Where(v => v.ViewedAtUtc >= from);

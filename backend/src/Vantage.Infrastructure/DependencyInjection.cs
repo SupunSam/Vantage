@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<TableauTokenService>();
         services.AddScoped<AuditWriter>();
         services.AddScoped<OwnershipService>();
+        services.AddScoped<OwnerDepartureService>();
         services.AddScoped<DashboardFactory>();
         services.Configure<GenAiOptions>(config.GetSection("GenAi"));
         services.AddScoped<GenAiSettings>();

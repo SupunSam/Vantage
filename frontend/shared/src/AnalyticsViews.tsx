@@ -35,6 +35,21 @@ export async function downloadFile(path: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+/** Dashboard types an analytics view can be limited to. The empty value means every type, which is the default. */
+export const TYPE_FILTERS = [{ value: "", label: "All Types" }, { value: "PowerBi", label: "Power BI" }, { value: "Tableau", label: "Tableau" }, { value: "GenAi", label: "GenAI" }] as const;
+
+/** `&type=Tableau` for a chosen type, or nothing for all types. */
+export const typeParam = (type: string) => (type ? `&type=${encodeURIComponent(type)}` : "");
+
+/** Limits an analytics view to one dashboard type; All Types is the default. */
+export function TypePicker({ type, onChange }: { type: string; onChange: (t: string) => void }) {
+  return (
+    <div className="seg" role="group" aria-label="Dashboard type">
+      {TYPE_FILTERS.map((t) => <button key={t.value} type="button" aria-pressed={type === t.value} onClick={() => onChange(t.value)}>{t.label}</button>)}
+    </div>
+  );
+}
+
 /** The date range switcher that sits above every analytics view and scopes all of it. */
 export function RangePicker({ days, onChange }: { days: number; onChange: (d: number) => void }) {
   return (
@@ -117,7 +132,7 @@ export function OverviewPanel({ o, scopeLabel, onOpenDashboard }: { o: Overview;
 
 type SortKey = "name" | "views" | "users" | "lastViewedAtUtc" | "members";
 
-export function DashboardsPanel({ base, days, exportPath, onOpen }: { base: string; days: number; exportPath?: string; onOpen: (id: number) => void }) {
+export function DashboardsPanel({ base, days, type = "", exportPath, onOpen }: { base: string; days: number; type?: string; exportPath?: string; onOpen: (id: number) => void }) {
   const [rows, setRows] = useState<DashboardUsage[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -125,8 +140,8 @@ export function DashboardsPanel({ base, days, exportPath, onOpen }: { base: stri
 
   useEffect(() => {
     setRows(null);
-    api<DashboardUsage[]>(`${base}/dashboards?days=${days}`).then(setRows).catch((e) => setError(errorText(e)));
-  }, [base, days]);
+    api<DashboardUsage[]>(`${base}/dashboards?days=${days}${typeParam(type)}`).then(setRows).catch((e) => setError(errorText(e)));
+  }, [base, days, type]);
 
   const sorted = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -134,7 +149,7 @@ export function DashboardsPanel({ base, days, exportPath, onOpen }: { base: stri
     const value = (r: DashboardUsage) => (sort.key === "name" ? r.name.toLowerCase() : sort.key === "lastViewedAtUtc" ? (r.lastViewedAtUtc ?? "") : r[sort.key]);
     return [...list].sort((a, b) => { const x = value(a), y = value(b); const c = x < y ? -1 : x > y ? 1 : 0; return sort.desc ? -c : c; });
   }, [rows, q, sort]);
-  const paged = usePaged(sorted, 25, `${q}|${days}`);
+  const paged = usePaged(sorted, 25, `${q}|${days}|${type}`);
 
   if (error) return <p className="notice notice-error">{error}</p>;
   if (!rows) return <p className="muted">Loading…</p>;
@@ -153,7 +168,7 @@ export function DashboardsPanel({ base, days, exportPath, onOpen }: { base: stri
         <h2>Dashboards <span className="muted count">{sorted.length}</span></h2>
         <div className="actions">
           <span className="input-icon input-compact"><Icon name="search" size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a dashboard or owner" aria-label="Find a dashboard or owner" /></span>
-          {exportPath && <button className="btn" type="button" onClick={() => void downloadFile(`${exportPath}?days=${days}`, `dashboard-usage-${new Date().toISOString().slice(0, 10)}.xlsx`).catch((e) => setError(errorText(e)))}><Icon name="download" size={18} /> Export to Excel</button>}
+          {exportPath && <button className="btn" type="button" onClick={() => void downloadFile(`${exportPath}?days=${days}${typeParam(type)}`, `dashboard-usage-${new Date().toISOString().slice(0, 10)}.xlsx`).catch((e) => setError(errorText(e)))}><Icon name="download" size={18} /> Export to Excel</button>}
         </div>
       </div>
       <div className="requests-table-wrap">

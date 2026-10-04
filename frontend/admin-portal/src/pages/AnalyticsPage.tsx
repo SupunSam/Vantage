@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, Pager, RangePicker, usePaged, type Overview } from "@vantage/shared";
+import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, Pager, RangePicker, TypePicker, typeParam, usePaged, type Overview } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "../ui";
 
 const BASE = "/api/admin/analytics";
@@ -19,8 +19,9 @@ export function AnalyticsPage() {
   const [search, setSearch] = useSearchParams();
   const tab: Tab = search.get("tab") === "dashboards" ? "dashboards" : search.get("tab") === "reports" ? "reports" : "overview";
   const [days, setDays] = useState(30);
+  const [type, setType] = useState("");   // all dashboard types by default
   const [selected, setSelected] = useState<number | null>(null);
-  const overview = useApi<Overview>(tab === "overview" ? `${BASE}/overview?days=${days}` : null);
+  const overview = useApi<Overview>(tab === "overview" ? `${BASE}/overview?days=${days}${typeParam(type)}` : null);
 
   return (
     <>
@@ -32,7 +33,7 @@ export function AnalyticsPage() {
             Power BI activity and Tableau usage will be added to the same numbers when those imports are connected.
           </p>
         </div>
-        {tab !== "reports" && <RangePicker days={days} onChange={setDays} />}
+        {tab !== "reports" && <div className="actions"><TypePicker type={type} onChange={setType} /><RangePicker days={days} onChange={setDays} /></div>}
       </div>
 
       <div className="tabs" role="tablist">
@@ -49,7 +50,7 @@ export function AnalyticsPage() {
           : !overview.data ? <p className="muted">Loading…</p>
           : <OverviewPanel o={overview.data} scopeLabel="active dashboards" onOpenDashboard={setSelected} />
       )}
-      {tab === "dashboards" && <DashboardsPanel base={BASE} days={days} exportPath={`${BASE}/dashboards/export`} onOpen={setSelected} />}
+      {tab === "dashboards" && <DashboardsPanel base={BASE} days={days} type={type} exportPath={`${BASE}/dashboards/export`} onOpen={setSelected} />}
       {tab === "reports" && <Reports />}
     </>
   );
