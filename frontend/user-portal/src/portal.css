@@ -136,3 +136,9 @@
 .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; font-size: 0.95rem; color: var(--muted); }
 .crumb-here { color: var(--ink); font-weight: 600; }
 .cat-inside { font-size: 1.05rem; margin: 6px 0 12px; }
+
+/* ---------- Sort control on Home ---------- */
+.home-sort { display: inline-flex; gap: 6px; }
+.home-sort select { height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); padding: 0 12px; font: inherit; font-size: 0.9rem; }
+.sort-dir { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.sort-dir:hover { border-color: var(--brand); color: var(--brand); }

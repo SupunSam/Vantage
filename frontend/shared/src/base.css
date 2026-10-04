@@ -308,3 +308,7 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 .tab { border: 0; background: none; padding: 10px 14px; font: inherit; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; gap: 8px; align-items: center; }
 .tab:hover { color: var(--ink); }
 .tab-on { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* ---------- Dashboard type icon ---------- */
+.type-icon { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.type-icon-svg { flex: none; }

@@ -46,6 +46,8 @@ Key services: CategoryService, DashboardMasterService, GroupService, AccessGroup
 
 28. Folder-style browsing (C46): User Portal Home "By Category" is a grid of category folders you open (sub-categories as tiles, then the dashboards filed there; breadcrumb; `?cat=`), built from `categoryChain` on GET /api/dashboards/mine (`CategoryService.BuildChains`, pure, tested in CategoryChainTests). Personal Folders shows a grid of folder tiles in the main area with the side list kept (plus All Folders); `?folder=` keeps the open folder. Shared `FolderGrid`/`Crumbs` in `user-portal/src/pages/FolderGrid.tsx`.
 
+29. Sorting and type column (C47): User Portal Home arrangement "By Name" / "By Category", one remembered sort (field + direction) shared by cards, list and category folders; category tiles show only the dashboard count. Dashboards Master shows Primary Category only and a Type column with the shared `TypeIcon`.
+
 
 ## Key rules (from the doc)
 - Access is only through dashboard groups: one live group per user per dashboard. The group's RLS value is the Power BI role name (several roles comma-separated).

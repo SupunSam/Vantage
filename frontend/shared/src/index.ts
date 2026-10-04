@@ -13,3 +13,4 @@ export * from "./Pager";
 export * from "./TrendChart";
 export * from "./AnalyticsViews";
 export * from "./TableauViz";
+export * from "./TypeIcon";
