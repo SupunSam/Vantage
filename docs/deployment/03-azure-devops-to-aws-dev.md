@@ -15,7 +15,7 @@ Audience: the person who will set up the repository, the pipeline and the AWS De
 | `Program.cs` throws `Only the Development environment is configured in this build` in any other environment | The API container will not start with `ASPNETCORE_ENVIRONMENT=Production` | Build real sign-in (ADFS SAML federated into Cognito for @rrd.com; Cognito with authenticator-app MFA for externals), refuse people who are not already users, separate session per portal |
 | Database migration and seeding (`PrepareDatabaseAsync`) run only in Development | No tables, roles or settings would be created in AWS | Run migrations as a pipeline step (migration bundle) and keep seeding safe to run at deploy |
 | Uploaded files use `LocalFileStore` only (`IFileStore` has no S3 version yet) | Files would sit on one instance's disk | Add an S3 `IFileStore` |
-| Data Protection keys are files in `DataProtection:KeysPath` | Lost if the instance is replaced, and stored tenant secrets become unreadable | Durable key store (for example S3 plus KMS, or a database-backed key ring), keeping `SetApplicationName("RdDashboard")` |
+| Data Protection keys are files in `DataProtection:KeysPath` | Lost if the instance is replaced, and stored tenant secrets become unreadable | Durable key store (for example S3 plus KMS, or a database-backed key ring), keeping `SetApplicationName("Vantage")` |
 
 **Interim option, needs the project owner's explicit decision:** running the AWS Dev API with
 `ASPNETCORE_ENVIRONMENT=Development` would work today but switches on the sign-in picker that lets anyone choose to
@@ -46,7 +46,7 @@ Approved sheet (Dev, Mumbai region, `ap-south-1`): about **$260.45 per month, $3
 
 | Missing | Why Vantage needs it | Options |
 | --- | --- | --- |
-| **SQL Server database** | The application stores everything in SQL Server (`RDDashboard`) | RDS for SQL Server (requirements say RDS; Multi-AZ is for Prod), or SQL Server on the EC2 host (adds licence and patching). Dev can use a single-AZ RDS instance. Name `RDDashboard` and login `rd_app` must be kept |
+| **SQL Server database** | The application stores everything in SQL Server (`Vantage`) | RDS for SQL Server (requirements say RDS; Multi-AZ is for Prod), or SQL Server on the EC2 host (adds licence and patching). Dev can use a single-AZ RDS instance. Name `Vantage` and login `vantage_app` must be kept |
 | **S3 bucket** | The requirements put uploaded files, thumbnails and the last 3 file versions in S3 | One private, encrypted bucket per environment (needs the S3 code in 1.1) |
 | **Disk for keys and files (interim)** | Until the S3 and key changes exist, `/data` must survive container restarts | An EBS volume mounted on the instance |
 | **GenAI origin** | GenAI dashboards must be served from a different registrable domain from the portals | A fourth small nginx service (config `deploy/genai.nginx.conf`) behind the same ALB on its own host name, plus a second domain |
@@ -67,7 +67,7 @@ All 3 ECR repositories are enough for API, Admin Portal and User Portal. The Gen
                                   |                    --> ECS service "genai" (nginx, other domain)
                                   |
    admin and user nginx forward /api/  ----------------->  ECS service "api" (ASP.NET Core, port 8080)
-                                                                 |-- RDS SQL Server (RDDashboard)
+                                                                 |-- RDS SQL Server (Vantage)
                                                                  |-- S3 bucket (files)
                                                                  |-- Secrets Manager, SES, Cognito
    Azure DevOps pipeline --> ECR (3 repos) --> ECS (new task definition revision)
@@ -82,7 +82,7 @@ definition, never from the repository):
 
 | Setting | Source |
 | --- | --- |
-| `ConnectionStrings__Default` | Secrets Manager. Database `RDDashboard`, login `rd_app`, encrypted connection |
+| `ConnectionStrings__Default` | Secrets Manager. Database `Vantage`, login `vantage_app`, encrypted connection |
 | `ASPNETCORE_URLS` | Image default `http://+:8080` |
 | `DataProtection__KeysPath` | Interim: a mounted EBS path such as `/data/keys`. Final: durable key store (1.1) |
 | `Storage__LocalPath` | Interim: `/data/files`. Final: S3 (1.1) |
@@ -170,7 +170,7 @@ requirements ask for it. The list below is what the code has to be written for.
      short-lived credentials; if an IAM user with access keys is the only option, store the keys only inside the Azure
      DevOps service connection.
 9. **RDS SQL Server:** subnet group, encryption at rest, automated backups (point-in-time restore is a requirement),
-   parameter set, and the `RDDashboard` database with the `rd_app` login (adapt `deploy/db/init.sql`: on RDS the
+   parameter set, and the `Vantage` database with the `vantage_app` login (adapt `deploy/db/init.sql`: on RDS the
    `db_owner` grant for migrations is acceptable only in Dev; later give migrations a separate owner login and the
    running API a narrower one). The dummy HRMS rows in `init.sql` are for local use; in Dev the HRMS table is filled
    by the SQL-level sync run by RRD.
@@ -393,7 +393,7 @@ Please confirm the final figures in the AWS Pricing Calculator before submitting
 | 8 | VPC Data | Dev | Mumbai | VPC Data Traffic | NA | NA | NA | 30GB | NA | $10.64 | $127.72 | | Approved |
 | 9 | Cloudfront | Dev | Mumbai | CDN Layer | NA | NA | NA | 30GB | NA | $11.03 | $132.40 | | Approved |
 | 10 | Cloudwatch | Dev | Mumbai | Monitoring Service | NA | NA | NA | 3 | NA | $16.00 | $192.05 | | Approved |
-| 11 | RDS for SQL Server | Dev | Mumbai | Database `RDDashboard` (license included, Express edition, single-AZ) | db.t3.medium | 2 | 4 | 1 | $0.092 | $67.16 | $805.92 | | **Proposed.** Express edition has a 10 GB database limit and no Multi-AZ; fine for Dev, not for UAT/Prod (see 9.1) |
+| 11 | RDS for SQL Server | Dev | Mumbai | Database `Vantage` (license included, Express edition, single-AZ) | db.t3.medium | 2 | 4 | 1 | $0.092 | $67.16 | $805.92 | | **Proposed.** Express edition has a 10 GB database limit and no Multi-AZ; fine for Dev, not for UAT/Prod (see 9.1) |
 | 12 | RDS Storage | Dev | Mumbai | RDS gp3 storage for SQL Server | NA | NA | NA | 50GB | $0.131 per GB-month | $6.55 | $78.60 | | **Proposed.** Automated backups up to the database size are included |
 | 13 | S3 | Dev | Mumbai | Uploaded files, thumbnails, last 3 file versions | NA | NA | NA | 50GB | $0.025 per GB-month | $1.25 | $15.00 | | **Proposed.** Needs the S3 file store to be built. Request charges are a few cents |
 | 14 | EBS | Dev | Mumbai | gp3 volume mounted on the ECS instance for `/data` (keys and files) | NA | NA | NA | 50GB | $0.0912 per GB-month | $4.56 | $54.72 | | **Proposed, temporary.** Needed until the S3 store and durable key store exist, then removed |

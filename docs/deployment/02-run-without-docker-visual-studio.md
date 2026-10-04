@@ -53,10 +53,10 @@ cd Vantage
 
 ## 4. Create the database
 
-The script creates the `RDDashboard` database, the `rd_app` login and the dummy HRMS table with sample people.
-(The database and login keep these names on purpose; do not rename them.)
+The script creates the `Vantage` database, the `vantage_app` login and the dummy HRMS table with sample people.
+(Do not rename them: the code, the scripts and the guides all use these names.)
 
-Run it from PowerShell, choosing your own password for `rd_app` (8+ characters with upper case, lower case, a digit
+Run it from PowerShell, choosing your own password for `vantage_app` (8+ characters with upper case, lower case, a digit
 and a symbol; avoid quotes and `$`):
 
 ```powershell
@@ -65,7 +65,7 @@ sqlcmd -S localhost -E -C -v APP_PASSWORD="<choose-a-password>" -i deploy\db\ini
 
 `-E` means "sign in as me with Windows authentication". If SQL Server is a named instance use `-S localhost\SQLEXPRESS`.
 Do not run the script by pasting it into an SSMS query window; it needs the `APP_PASSWORD` value, which `sqlcmd`
-supplies. The last line it prints is `RDDashboard ready: 20 HRMS rows.`
+supplies. The last line it prints is `Vantage ready: 20 HRMS rows.`
 
 ## 5. Give the API its settings (User Secrets)
 
@@ -73,12 +73,14 @@ Settings with passwords must not go into files that are committed. The API proje
 
 1. In Visual Studio open `C:\Code\Vantage\backend\Vantage.slnx`.
 2. In Solution Explorer, right-click the **Vantage.Api** project, then **Manage User Secrets**.
-3. Paste this into the `secrets.json` that opens, then adjust:
+3. Paste this into the `secrets.json` that opens, then adjust. (The project's User Secrets ID is `vantage-api`.
+   If you ran an earlier version, its settings were stored under a different ID and are not picked up: paste them
+   again here, and re-enter saved tenant secrets in the Admin Portal.)
 
 ```json
 {
   "ConnectionStrings": {
-    "Default": "Server=localhost;Database=RDDashboard;Trusted_Connection=True;TrustServerCertificate=True"
+    "Default": "Server=localhost;Database=Vantage;Trusted_Connection=True;TrustServerCertificate=True"
   },
   "DataProtection": { "KeysPath": "C:\\VantageData\\keys" },
   "Storage": { "LocalPath": "C:\\VantageData\\files" },
@@ -95,8 +97,8 @@ Settings with passwords must not go into files that are committed. The API proje
 
 Notes:
 
-- The connection string above uses your Windows login. To use the `rd_app` login instead:
-  `Server=localhost;Database=RDDashboard;User Id=rd_app;Password=<the password from step 4>;TrustServerCertificate=True;Encrypt=True`
+- The connection string above uses your Windows login. To use the `vantage_app` login instead:
+  `Server=localhost;Database=Vantage;User Id=vantage_app;Password=<the password from step 4>;TrustServerCertificate=True;Encrypt=True`
   (this needs the SQL Server to allow SQL logins, "mixed mode").
 - `DataProtection:KeysPath` holds the keys that encrypt stored tenant secrets (Power BI and Tableau). Create the
   folder and **keep it**: if the keys are lost, saved tenant secrets cannot be read and must be entered again.
@@ -183,7 +185,7 @@ All tests must pass before a change is done; the CI also runs them against SQL S
 | Task | How |
 | --- | --- |
 | New database migration | From `C:\Code\Vantage`: `dotnet tool restore` then `dotnet ef migrations add <Name> -p backend/src/Vantage.Infrastructure -s backend/src/Vantage.Api`. Never rename an existing migration |
-| Start with an empty database | Stop the API, drop `RDDashboard` in SSMS, run step 4 again, start the API |
+| Start with an empty database | Stop the API, drop `Vantage` in SSMS, run step 4 again, start the API |
 | Reset sample data only | Re-run `init.sql` (it is safe to run more than once and only fills an empty HRMS table) |
 | Debug the API | F5 with breakpoints. React code: use the browser's developer tools |
 | Run a background job now | Admin Portal, **Scheduled Jobs**, Run Now (the scheduler also runs inside the API while it is up) |
@@ -194,7 +196,7 @@ All tests must pass before a change is done; the CI also runs them against SQL S
 | --- | --- |
 | Solution will not load, or "SDK not found" | Visual Studio 2022 or missing .NET 10 SDK; use VS 2026 or install the SDK |
 | Login failed for user | Wrong connection string or SQL login not enabled; test it in SSMS first |
-| `Cannot open database RDDashboard` | Step 4 was not run on this SQL Server instance |
+| `Cannot open database Vantage` | Step 4 was not run on this SQL Server instance |
 | `The certificate chain was issued by an authority that is not trusted` | Add `TrustServerCertificate=True` to the connection string |
 | Portal shows network errors | The API is not running on 5080, or the Vite proxy cannot reach it |
 | Port 5173/5174/5080 in use | Another process uses it (Vite is set to fail rather than pick another port); close it |

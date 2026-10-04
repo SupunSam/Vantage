@@ -84,7 +84,7 @@ Edit the three values and save:
 | Setting | What to put |
 | --- | --- |
 | `MSSQL_SA_PASSWORD` | A new password for the SQL Server `sa` account |
-| `APP_DB_PASSWORD` | A new password for the application's `rd_app` database login |
+| `APP_DB_PASSWORD` | A new password for the application's `vantage_app` database login |
 | `SUPER_ADMIN_EMAIL` | The email of the first Super Admin. It must exist in the dummy HRMS list to get a name. The default `nimal.perera@rrd.com` is fine for testing |
 
 Password rules: at least 8 characters with upper case, lower case, a digit and a symbol. Avoid `"` `'` `$` and
@@ -124,7 +124,7 @@ The API creates its tables and seeds roles, modules, settings and sample people 
 | User Portal | http://localhost:8081 |
 | Emails Vantage sends (Mailpit) | http://localhost:8025 |
 | GenAI dashboards | http://localhost:8082 (loads inside the portals; nothing to open by hand) |
-| SQL Server (SSMS or Azure Data Studio) | `localhost,1433`, login `sa` or `rd_app` with the passwords from `deploy\.env` |
+| SQL Server (SSMS or Azure Data Studio) | `localhost,1433`, login `sa` or `vantage_app` with the passwords from `deploy\.env` |
 
 Sign in: choose **Login as Internal User**, then pick **Nimal Perera** (Super Admin). This picker is the local
 stand-in for ADFS and Cognito. The two portals keep separate sessions, so sign in to each one.
@@ -142,7 +142,10 @@ git pull                                                    # get new code, then
 
 **Warning about `down -v`:** it deletes the database, uploaded files and the encryption keys. Tenant client secrets
 (Power BI, Tableau) stored in the database become unreadable and must be entered again. The data volumes are named
-`rd-dashboard_sqldata` and `rd-dashboard_appdata` on purpose; do not rename them.
+`vantage_sqldata` and `vantage_appdata`; do not rename them.
+
+**Upgrading from a version before 4 Oct 2026?** Follow `docs/deployment/04-upgrade-from-the-old-names.md` once
+before you start the new version, or your old data will not be picked up.
 
 Data does not travel between PCs. A new PC starts with an empty portal plus the sample data.
 

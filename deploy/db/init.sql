@@ -1,24 +1,49 @@
--- Vantage: local database bootstrap (the database keeps its original name, RDDashboard).
--- Creates the RDDashboard database, an application login (rd_app),
+-- Vantage: local database bootstrap.
+-- Creates the Vantage database, an application login (vantage_app),
 -- and the hrms.EmployeeProfile table that the SQL-level HRMS sync will fill in real environments.
 -- Safe to run more than once.
+--
+-- One-time upgrade: an install made before the rename to Vantage has a database called RDDashboard and a login called
+-- rd_app. When the new names are not there yet, the first two blocks rename them in place, so the data is kept.
+-- (docs/deployment/04-upgrade-from-the-old-names.md has the steps around it.)
 
-IF DB_ID(N'RDDashboard') IS NULL
-    CREATE DATABASE RDDashboard;
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'rd_app')
-    CREATE LOGIN rd_app WITH PASSWORD = N'$(APP_PASSWORD)', CHECK_POLICY = ON;
-GO
-
-USE RDDashboard;
-GO
-
-IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'rd_app')
+IF DB_ID(N'Vantage') IS NULL AND DB_ID(N'RDDashboard') IS NOT NULL
 BEGIN
-    CREATE USER rd_app FOR LOGIN rd_app;
+    ALTER DATABASE RDDashboard SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    ALTER DATABASE RDDashboard MODIFY NAME = Vantage;
+    ALTER DATABASE Vantage SET MULTI_USER;
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'rd_app')
+   AND NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'vantage_app')
+BEGIN
+    ALTER LOGIN rd_app WITH NAME = vantage_app;
+    ALTER LOGIN vantage_app WITH PASSWORD = N'$(APP_PASSWORD)';
+END
+GO
+
+IF DB_ID(N'Vantage') IS NULL
+    CREATE DATABASE Vantage;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'vantage_app')
+    CREATE LOGIN vantage_app WITH PASSWORD = N'$(APP_PASSWORD)', CHECK_POLICY = ON;
+GO
+
+USE Vantage;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'rd_app')
+   AND NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'vantage_app')
+    ALTER USER rd_app WITH NAME = vantage_app;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'vantage_app')
+BEGIN
+    CREATE USER vantage_app FOR LOGIN vantage_app;
     -- db_owner so EF Core migrations can create the application schema locally.
-    ALTER ROLE db_owner ADD MEMBER rd_app;
+    ALTER ROLE db_owner ADD MEMBER vantage_app;
 END
 GO
 
