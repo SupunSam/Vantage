@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Vantage.Domain;
 using Vantage.Domain.Entities;
 using Vantage.Infrastructure.Data;
+using Vantage.Infrastructure.Jobs;
 using Vantage.Infrastructure.Settings;
 using Vantage.Infrastructure.Storage;
 
@@ -30,8 +31,6 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
 
     private sealed record Def(string Key, string Label, string Group, string Kind, int? Min = null, int? Max = null, string[]? Options = null, bool InUse = true, string? Note = null);
 
-    private const string ScheduledNote = "Saved now. It takes effect when the scheduled jobs (HRMS sync, inactivity check, new-hire digest) are added.";
-
     private static readonly Def[] Definitions =
     [
         new(SettingKeys.BrandPortalName, "Portal name", "Branding", "text", 1, 60),
@@ -46,10 +45,10 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
 
         new(SettingKeys.EmailEnabled, "Send emails", "Email", "bool"),
 
-        new(SettingKeys.InactivityDays, "Days without views before a dashboard is flagged", "Scheduled jobs", "int", 7, 730, InUse: false, Note: ScheduledNote),
-        new(SettingKeys.HrmsSyncCron, "HRMS sync schedule (cron, UTC)", "Scheduled jobs", "cron", InUse: false, Note: ScheduledNote),
-        new(SettingKeys.LeaverRevokeImmediately, "Leavers lose access as soon as the HRMS sync marks them Inactive", "Scheduled jobs", "bool", InUse: false, Note: ScheduledNote),
-        new(SettingKeys.NewHireDigestFrequency, "New-hire digest", "Scheduled jobs", "choice", Options: ["Weekly", "Monthly", "Never"], InUse: false, Note: ScheduledNote),
+        new(SettingKeys.InactivityDays, "Days without views before a dashboard is flagged", "Scheduled jobs", "int", 1, 730),
+        new(SettingKeys.HrmsSyncCron, "HRMS sync schedule (cron, UTC)", "Scheduled jobs", "cron"),
+        new(SettingKeys.LeaverRevokeImmediately, "Leavers lose access as soon as the HRMS sync marks them Inactive", "Scheduled jobs", "bool"),
+        new(SettingKeys.NewHireDigestFrequency, "New-hire digest", "Scheduled jobs", "choice", Options: ["Weekly", "Monthly", "Never"]),
 
         // GenAI Config tab. Group names start with "GenAI" (the Settings tab hides them; the GenAI Config tab shows them).
         new(SettingKeys.GenAiBaseUrl, "GenAI web address", GenAiGroupServing, "url"),
@@ -149,7 +148,11 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
             case "cron":
                 var parts = v.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length != 5 || parts.Any(p => !CronField.IsMatch(p))) throw new RuleException($"{d.Label} must be five fields like 0 2 1 * * (minute, hour, day of month, month, day of week).");
-                return string.Join(' ', parts);
+                var text = string.Join(' ', parts);
+                if (!CronSchedule.TryParse(text, out var cron, out var cronError)) throw new RuleException($"{d.Label} isn't a valid schedule. {cronError}");
+                if (cron!.Next(DateTime.UtcNow) is null) throw new RuleException($"{d.Label} never comes up (for example 31 February). Choose a date that exists.");
+                if (cron.ShortestGap(DateTime.UtcNow) < TimeSpan.FromHours(1)) throw new RuleException($"{d.Label} would run more than once an hour. The HRMS sync can run at most once an hour.");
+                return text;
             default:
                 return v;
         }

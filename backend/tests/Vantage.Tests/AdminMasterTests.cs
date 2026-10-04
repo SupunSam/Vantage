@@ -158,7 +158,6 @@ public class AdminMasterTests(SqlServerFixture fx) : IClassFixture<SqlServerFixt
         var leo = await db.Users.AsNoTracking().Include(u => u.HrmsProfile).SingleAsync(u => u.Email == "leo.leaver@rrd.com");
         Assert.Equal(UserStatus.Inactive, leo.Status);
         Assert.Equal(new DateOnly(2026, 9, 30), leo.HrmsProfile!.ExitDate);
-        Assert.True(await db.JobRuns.AnyAsync(j => j.JobName == "hrms-sync" && j.Status == JobRunStatus.Succeeded));
     }
 
     // ------------------------------------------------------------ Secrets

@@ -66,4 +66,22 @@ public class JobRun
     public DateTime? FinishedAtUtc { get; set; }
     public JobRunStatus Status { get; set; }
     public string? Summary { get; set; }
+    public JobTrigger Trigger { get; set; } = JobTrigger.Schedule;
+    /// <summary>The Super Admin who pressed Run Now; null for scheduled runs.</summary>
+    public int? TriggeredByUserId { get; set; }
+}
+
+/// <summary>
+/// One row per scheduled job: whether it is paused, when it runs next and whether a run is in progress.
+/// The scheduler claims a run by setting <see cref="RunningSinceUtc"/> with one atomic update, so two API instances never run the same job at once.
+/// </summary>
+public class JobState
+{
+    public string JobName { get; set; } = "";
+    public bool IsPaused { get; set; }
+    /// <summary>The cron text <see cref="NextRunAtUtc"/> was worked out from; when the setting changes the next run is recalculated.</summary>
+    public string? Schedule { get; set; }
+    public DateTime? NextRunAtUtc { get; set; }
+    /// <summary>Set while a run is in progress. A claim older than the lease is treated as dead (the process stopped mid-run).</summary>
+    public DateTime? RunningSinceUtc { get; set; }
 }

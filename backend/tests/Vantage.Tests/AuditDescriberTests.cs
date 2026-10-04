@@ -14,6 +14,17 @@ public class AuditDescriberTests
     }
 
     [Fact]
+    public void Job_runs_pauses_and_inactivity_flags_read_as_sentences()
+    {
+        Assert.Equal("Ran HRMS Sync: Checked 12.", AuditDescriber.Describe("job.run", "JobRun", "3", """{"job":"hrms-sync","title":"HRMS Sync","trigger":"Manual","status":"Succeeded","summary":"Checked 12."}""", null, null, null));
+        Assert.Equal("Scheduled run of Inactivity Check: Flagged 2 dashboards.", AuditDescriber.Describe("job.run", "JobRun", "4", """{"job":"inactivity-check","title":"Inactivity Check","trigger":"Schedule","summary":"Flagged 2 dashboards."}""", null, null, null));
+        Assert.Equal("Paused the scheduled job New-Hire Digest.", AuditDescriber.Describe("job.paused", "JobState", "new-hire-digest", """{"job":"new-hire-digest","title":"New-Hire Digest"}""", null, null, null));
+        Assert.Equal("Flagged Sales Overview as unused: not opened for 120 days.", AuditDescriber.Describe("dashboard.inactivity-flagged", "Dashboard", "1", """{"daysQuiet":120}""", null, "Sales Overview", null));
+        Assert.Equal("Ended the access of a@rrd.com after they left: 2 group memberships ended, 1 kept because they own the dashboard.",
+            AuditDescriber.Describe("user.access-revoked", "User", "9", """{"email":"a@rrd.com","memberships":2,"keptAsOwner":1}""", null, null, null));
+    }
+
+    [Fact]
     public void A_genai_replace_and_restore_read_as_page_changes()
     {
         Assert.Equal("Replaced the page of Sales Page with version 4.", AuditDescriber.Describe("dashboard.replaced", "Dashboard", "1", """{"version":4,"type":"GenAi"}""", null, "Sales Page", null));

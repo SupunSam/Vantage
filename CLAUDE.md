@@ -32,7 +32,7 @@ Requirements:
 | 8 | **Database** | `deploy/db/init.sql` and EF migrations | SQL Server 2022, schema `app` (+ `hrms`) | `vantage-db` on localhost:1433 |
 | 9 | **Mail catcher** | `deploy/docker-compose.yml` | Mailpit | `vantage-mail` at http://localhost:8025 |
 | 10 | **GenAI origin** | `deploy/genai.nginx.conf` | nginx, passes signed links to the API's `/genai/{token}` | `vantage-genai` at http://localhost:8082 |
-| 11 | **Background worker** | `Infrastructure/Email/EmailSenderWorker` | `BackgroundService` in the API | sends the email outbox every 10 s |
+| 11 | **Background workers** | `Infrastructure/Email/EmailSenderWorker`, `Infrastructure/Jobs/JobScheduler` | `BackgroundService`s in the API | the first sends the email outbox every 10 s; the second runs the scheduled jobs (C35) |
 
 Target production (not built yet): both SPAs plus the API on AWS. The API runs on EC2, SQL Server on RDS
 Multi-AZ, files on S3, email through SES, secrets in Secrets Manager. Sign-in is ADFS SAML with Duo federated
@@ -100,7 +100,7 @@ cd frontend && npm run typecheck && npm run build
 dotnet ef migrations add <Name> -p backend/src/Vantage.Infrastructure -s backend/src/Vantage.Api
 ```
 Tests that need SQL Server are skipped when `VANTAGE_TEST_SQL` is unset. Each test class creates and drops its
-own database. All 80 tests must pass before a change is done.
+own database. All tests must pass before a change is done (CI runs the SQL ones).
 
 ## Names that must NOT change
 
@@ -173,6 +173,12 @@ depends on them:
   - The portals frame it with `GenAiFrame` (`sandbox="allow-scripts"`, never `allow-same-origin`). Don't widen the sandbox or the CSP without a recorded decision.
   - A link is issued only after the normal membership check (or Super Admin preview) and is the only way in. The view row is written when the link is issued, as for Power BI. Not Active means not served.
   - Security write-up, including what the check does NOT do and the open hardening options: `docs/genai-security.md`. Keep it in step with any change here.
+- **Scheduled jobs** (C35 to C37).
+  - A job implements `IScheduledJob` (`Infrastructure/Jobs`), is registered in `DependencyInjection.cs`, and never records its own run. `JobRunner` does: claim, `JobRun` row, audit (`job.run`), failure notice to Super Admins, next run. The scheduler and Run Now share that path. Job state (`JobStates`) is changed only with direct updates.
+  - A job's schedule is a cron (UTC) read from its setting (`CronSchedule`, pure and unit tested); the digest's "Never" means no schedule. A new job needs a stable `Name` that is never renamed.
+  - The HRMS job only updates users; it never creates them (U5 open). With `hrms.leaverRevokeImmediately` on it ends a leaver's live memberships directly, which is a revocation and not a rule proposal. Owners keep theirs.
+  - The inactivity check flags and emails once; opening a dashboard clears the flag (`EmbedService`). Previews are not views.
+  - Keep the decisions in `JobRules` (pure) so they stay testable without a database.
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
 ## Conventions
@@ -211,7 +217,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C35) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C38) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -228,12 +234,13 @@ Done:
 - Super Admins preview dashboards without joining any group (C27).
 - Admin **Audit Log** viewer (filters, plain-sentence descriptions, before and after values, Excel export).
 - User Portal **Personal Folders** (page plus a folder button on cards).
+- Scheduled jobs (C35 to C37): HRMS sync, inactivity check and new-hire digest on one scheduler, with an Admin Portal Scheduled Jobs page (schedule, last and next run, Run Now, Pause, history).
 - GenAI dashboards (C32, C33): starter template, vetted upload (rule check plus optional ClamAV scan, Super Admin only), publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
 
 Next, in order:
-1. **Scheduled jobs**: HRMS monthly sync, inactivity flag and owner emails, new-hire digest (their settings already exist in Admin Configuration).
+1. **Tableau embedding** end to end.
 
-Then Tableau embedding end to end, then real ADFS/Cognito and the AWS environments.
+Then real ADFS/Cognito and the AWS environments.
 
 Open questions (still unanswered):
 - U5: internal users who sign in before they've been added.

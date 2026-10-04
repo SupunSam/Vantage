@@ -20,6 +20,7 @@ public static class AppModules
     public const string Audit = "audit";
     public const string AdminConfig = "admin-config";         // Settings, branding, CDN list, BI service master
     public const string Tenants = "tenants";                  // Power BI and Tableau tenant master
+    public const string ScheduledJobs = "scheduled-jobs";     // Schedule, last and next run, Run Now for the background jobs
 
     public static readonly IReadOnlyList<(string Key, string Name, string Portal)> All =
     [
@@ -37,6 +38,7 @@ public static class AppModules
         (Audit, "Audit Log", "Admin"),
         (AdminConfig, "Admin Configuration", "Admin"),
         (Tenants, "Tenants", "Admin"),
+        (ScheduledJobs, "Scheduled Jobs", "Admin"),
     ];
 }
 

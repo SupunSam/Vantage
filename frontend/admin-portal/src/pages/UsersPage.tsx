@@ -32,12 +32,12 @@ export function UsersPage() {
   async function syncHrms() {
     setSyncing(true);
     try {
-      const s = await api<{ checked: number; profilesUpdated: number; deactivated: number; skippedManual: number; notInHrms: number; deactivatedEmails: string[]; rules: { rule: string; proposed: number; message: string }[] }>(
+      const s = await api<{ checked: number; profilesUpdated: number; deactivated: number; skippedManual: number; notInHrms: number; deactivatedEmails: string[]; leaversRevoked: number; membershipsEnded: number; rules: { rule: string; proposed: number; message: string }[] }>(
         "/api/admin/users/hrms-sync", { method: "POST" });
       const sent = s.rules.reduce((n, r) => n + r.proposed, 0);
       setMessage({
         ok: true,
-        text: `HRMS sync: ${s.checked} internal users checked, ${s.profilesUpdated} profiles refreshed, ${s.deactivated} leaver${s.deactivated === 1 ? "" : "s"} set Inactive${s.deactivatedEmails.length ? ` (${s.deactivatedEmails.join(", ")})` : ""}${s.skippedManual ? `, ${s.skippedManual} left alone because an admin set their status` : ""}${s.notInHrms ? `, ${s.notInHrms} not found in HRMS` : ""}.${s.rules.length ? ` Access group rules ran: ${sent ? `${sent} ${sent === 1 ? "person was" : "people were"} sent to the owners for approval.` : "nothing new to propose."}` : ""}`,
+        text: `HRMS sync: ${s.checked} internal users checked, ${s.profilesUpdated} profiles refreshed, ${s.deactivated} leaver${s.deactivated === 1 ? "" : "s"} set Inactive${s.deactivatedEmails.length ? ` (${s.deactivatedEmails.join(", ")})` : ""}${s.skippedManual ? `, ${s.skippedManual} left alone because an admin set their status` : ""}${s.notInHrms ? `, ${s.notInHrms} not found in HRMS` : ""}.${s.leaversRevoked ? ` Access ended for ${s.leaversRevoked} ${s.leaversRevoked === 1 ? "leaver" : "leavers"} (${s.membershipsEnded} group ${s.membershipsEnded === 1 ? "membership" : "memberships"}).` : ""}${s.rules.length ? ` Access group rules ran: ${sent ? `${sent} ${sent === 1 ? "person was" : "people were"} sent to the owners for approval.` : "nothing new to propose."}` : ""}`,
       });
       reload();
     } catch (e) {
