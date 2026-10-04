@@ -179,6 +179,11 @@ depends on them:
   - The HRMS job only updates users; it never creates them (U5 open). With `hrms.leaverRevokeImmediately` on it ends a leaver's live memberships directly, which is a revocation and not a rule proposal. Owners keep theirs.
   - The inactivity check flags and emails once; opening a dashboard clears the flag (`EmbedService`). Previews are not views.
   - Keep the decisions in `JobRules` (pure) so they stay testable without a database.
+- **Tableau dashboards** (C38).
+  - Two modes: a Tableau Server tenant (Connected App JWT for the viewer's own Tableau user name) or Tableau Public (no tenant, no token). `TableauViewUrl` (pure) reads and cleans every address, on publish, on change and again on every open; the stored address is always the embed form.
+  - A Tableau Public dashboard must be classified Public (`TableauPublisher.EnsureClassificationFits`, also checked when editing details and changing the view). Never relax this: anyone with the address can open it on Tableau Public.
+  - No portal RLS for Tableau (Tableau owns it), so only the default group. Access still needs a group membership; the view row is written when the embed is issued.
+  - `TableauPublisher` publishes (live at once, no import); `DashboardMasterService.SetTableauViewAsync` changes the view. The shared `TableauViz` component renders it in both portals.
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
 ## Conventions
@@ -217,7 +222,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C38) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C39) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -235,12 +240,12 @@ Done:
 - Admin **Audit Log** viewer (filters, plain-sentence descriptions, before and after values, Excel export).
 - User Portal **Personal Folders** (page plus a folder button on cards).
 - Scheduled jobs (C35 to C37): HRMS sync, inactivity check and new-hire digest on one scheduler, with an Admin Portal Scheduled Jobs page (schedule, last and next run, Run Now, Pause, history).
+- Tableau dashboards (C38): publish from the Tableau tab (Tableau Server tenant or Tableau Public), Tableau View panel in Dashboards Master, shared `TableauViz`. Tableau Server is untested until a test server exists.
 - GenAI dashboards (C32, C33): starter template, vetted upload (rule check plus optional ClamAV scan, Super Admin only), publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
 
 Next, in order:
-1. **Tableau embedding** end to end.
-
-Then real ADFS/Cognito and the AWS environments.
+1. Test Tableau Server against a real test server when one exists.
+2. Real ADFS/Cognito sign-in and the AWS environments.
 
 Open questions (still unanswered):
 - U5: internal users who sign in before they've been added.

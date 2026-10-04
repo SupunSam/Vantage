@@ -12,3 +12,4 @@ export * from "./GroupAddRequests";
 export * from "./Pager";
 export * from "./TrendChart";
 export * from "./AnalyticsViews";
+export * from "./TableauViz";

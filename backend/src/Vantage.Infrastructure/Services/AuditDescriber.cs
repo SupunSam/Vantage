@@ -35,6 +35,7 @@ public static class AuditDescriber
             "user.status-changed" => $"Changed status of {who} from {Str("from")} to {Str("to")}.",
             "user.email-changed" => $"Changed email from {Str("from")} to {Str("to")}.",
             "user.deactivated-by-hrms" => $"Deactivated {who} after the HR system showed they left.",
+            "dashboard.tableau-view-changed" => $"Changed the Tableau view of {dashboard ?? who}.",
             "job.run" => $"{(Str("trigger") == "Manual" ? "Ran" : "Scheduled run of")} {Str("title") ?? Str("job")}: {Str("summary")}",
             "job.paused" => $"Paused the scheduled job {Str("title") ?? Str("job")}.",
             "job.resumed" => $"Resumed the scheduled job {Str("title") ?? Str("job")}.",

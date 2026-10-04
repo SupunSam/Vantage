@@ -203,7 +203,7 @@ function AddUser({ roles, onClose, onDone }: { roles: RoleOption[]; onClose: () 
           </div>
         )}
         <div className="form-grid">
-          <label className="field"><span>Tableau user name (optional)</span><input value={tableau} onChange={(e) => setTableau(e.target.value)} /></label>
+          <label className="field"><span>Tableau user name (optional; needed to open Tableau Server dashboards, not Tableau Public ones)</span><input value={tableau} onChange={(e) => setTableau(e.target.value)} /></label>
           <label className="field"><span>ServiceNow ticket (optional)</span><input maxLength={64} value={serviceNow} onChange={(e) => setServiceNow(e.target.value)} placeholder="e.g. RITM0012345" /><small className="field-hint">Saved in the audit log with this change, not on the user.</small></label>
         </div>
         <RolePicker roles={roles} value={roleIds} onChange={setRoleIds} />
@@ -386,7 +386,7 @@ function UserDetail({ id, roles, canEdit, isSuperAdmin, onClose, onSaved }: {
             <label className="field"><span>Display name</span><input value={form.displayName ?? ""} onChange={set("displayName")} /></label>
             <label className="field"><span>Contact number</span><input value={form.contactNumber ?? ""} onChange={set("contactNumber")} /></label>
             <label className="field"><span>Time zone</span><input value={form.timeZone ?? ""} onChange={set("timeZone")} /></label>
-            <label className="field"><span>Tableau user name</span><input value={form.tableauUserName ?? ""} onChange={set("tableauUserName")} /></label>
+            <label className="field"><span>Tableau user name (needed for Tableau Server dashboards, not Tableau Public ones)</span><input value={form.tableauUserName ?? ""} onChange={set("tableauUserName")} /></label>
             <label className="field"><span>ServiceNow ticket for this change (optional)</span><input maxLength={64} value={form.serviceNowReference ?? ""} onChange={set("serviceNowReference")} placeholder="e.g. RITM0012345" /><small className="field-hint">Saved in the audit log with this change.</small></label>
           </div>
           {u.statusSetManually && <p className="muted small">Status was set by an admin, so the HRMS sync won't change it.</p>}

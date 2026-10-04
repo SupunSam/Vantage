@@ -50,6 +50,7 @@ public sealed class DashboardMasterService(
         d.CategoryId = input.CategoryId;
         d.PrimaryOwnerId = primary;
         d.BackupOwnerId = backup;
+        if (d.Type == DashboardType.Tableau && d.TenantId is null) TableauPublisher.EnsureClassificationFits(true, input.DataClassification);
         d.Audience = input.Audience;
         d.DataClassification = input.DataClassification;
         d.SharePointFolder = folder;
@@ -80,6 +81,26 @@ public sealed class DashboardMasterService(
     }
 
     /// <summary>Checks the image, stores it under a new key (so browsers never show a stale copy) and points the dashboard at it.</summary>
+    /// <summary>Points a Tableau dashboard at another view, or moves it between Tableau Public and a Tableau Server tenant. Access and groups don't change.</summary>
+    public async Task SetTableauViewAsync(int id, int? tenantId, string viewUrl, int actorUserId, CancellationToken ct = default)
+    {
+        var d = await db.Dashboards.Include(x => x.Tenant).SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException();
+        if (d.Type != DashboardType.Tableau) throw new RuleException("Only Tableau dashboards have a Tableau view.");
+        if (d.Status == DashboardStatus.Retired) throw new RuleException("Retired dashboards can't be edited.");
+
+        var tenant = tenantId is null or 0 ? null : await db.BiTenants.AsNoTracking().SingleOrDefaultAsync(t => t.Id == tenantId, ct) ?? throw new RuleException("That Tableau tenant doesn't exist.");
+        if (tenant is not null && (tenant.Platform != BiPlatform.Tableau || !tenant.IsActive)) throw new RuleException($"{tenant.Name} isn't an active Tableau tenant.");
+        var view = TableauViewUrl.Parse(viewUrl, tenant?.ServerUrl, tenant?.SiteContentUrl);
+        TableauPublisher.EnsureClassificationFits(view.IsPublic, d.DataClassification);
+
+        var before = new { tenant = d.Tenant?.Name, view = d.TableauViewUrl };
+        d.TenantId = tenant?.Id;
+        d.TableauViewUrl = view.Src;
+        d.UpdatedAtUtc = clock.GetUtcNow().UtcDateTime;
+        audit.Add("dashboard.tableau-view-changed", "Dashboard", d.Id, d.Id, new { from = before, to = new { tenant = tenant?.Name, view = view.Src, mode = view.IsPublic ? "Public" : "Server" } });
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<string> SetThumbnailAsync(int id, byte[] data, CancellationToken ct = default)
     {
         var info = Thumbnails.Validate(data);

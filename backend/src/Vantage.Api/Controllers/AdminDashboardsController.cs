@@ -58,7 +58,9 @@ public sealed class AdminDashboardsController(
         if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
         var users = await db.Users.AsNoTracking().Where(u => u.Status == UserStatus.Active).OrderBy(u => u.DisplayName)
             .Select(u => new { u.Id, u.Email, u.DisplayName }).ToListAsync(ct);
-        return Ok(new { users, categories = await categories.ListAsync(ct), limits = Limits });
+        var tableauTenants = await db.BiTenants.AsNoTracking().Where(t => t.Platform == BiPlatform.Tableau && t.IsActive).OrderBy(t => t.Name)
+            .Select(t => new { t.Id, t.Name, t.ServerUrl, t.SiteContentUrl }).ToListAsync(ct);
+        return Ok(new { users, categories = await categories.ListAsync(ct), limits = Limits, tableauTenants });
     }
 
     [HttpGet("{id:int}")]
@@ -75,6 +77,7 @@ public sealed class AdminDashboardsController(
             tags = x.Tags.Select(t => t.Tag).OrderBy(t => t).ToList(),
             audience = x.Audience.ToString(), dataClassification = x.DataClassification.ToString(),
             x.SharePointFolder, x.SharePointSubFolder, x.ThumbnailKey,
+            x.TenantId, x.TableauViewUrl,
             x.PowerBiReportId, x.PowerBiDatasetId, x.PublishedAtUtc, x.CreatedAtUtc, x.UpdatedAtUtc,
             groups = x.Groups.OrderByDescending(g => g.IsDefault).ThenBy(g => g.Name).Select(g => new
             {
@@ -118,6 +121,20 @@ public sealed class AdminDashboardsController(
         {
             await master.UpdateAsync(id, new DashboardDetailsInput(body.Name, body.Description, body.CategoryId, body.PrimaryOwnerId, body.BackupOwnerId,
                 body.Tags, body.Audience, body.DataClassification, body.SharePointFolder, body.SharePointSubFolder), Current.UserId!.Value, ct);
+            return NoContent();
+        });
+    }
+
+    public sealed record TableauViewBody(int? TenantId, string ViewUrl);
+
+    /// <summary>Changes the Tableau view of a Tableau dashboard (or moves it between Tableau Public and a Tableau Server tenant).</summary>
+    [HttpPut("{id:int}/tableau-view")]
+    public async Task<IActionResult> SetTableauView(int id, TableauViewBody body, CancellationToken ct)
+    {
+        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        return await Guard(async () =>
+        {
+            await master.SetTableauViewAsync(id, body.TenantId, body.ViewUrl, Current.UserId!.Value, ct);
             return NoContent();
         });
     }

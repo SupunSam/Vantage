@@ -106,12 +106,24 @@ public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, Tableau
         return new EmbedInfo("powerbi", d.Id, d.Name, report.EmbedUrl, token.Token, token.Expiration, report.Id.ToString(), null);
     }
 
+    /// <summary>
+    /// Tableau Server: a short-lived Connected App token for the viewer's Tableau user name (their Tableau account decides what they see inside).
+    /// Tableau Public (no tenant): the public address and no token; the portal's groups decide who gets the link.
+    /// The address is read again here, so a bad stored address gives a clear message instead of a broken page.
+    /// </summary>
     private async Task<EmbedInfo> TableauAsync(Dashboard d, string? tableauUserName, CancellationToken ct)
     {
-        if (d.Tenant is null || string.IsNullOrWhiteSpace(d.TableauViewUrl))
-            throw new EmbedException("not-linked", "This dashboard has no Tableau view URL yet.");
+        if (string.IsNullOrWhiteSpace(d.TableauViewUrl))
+            throw new EmbedException("not-linked", "This dashboard has no Tableau view address yet.");
+
+        TableauView view;
+        try { view = TableauViewUrl.Parse(d.TableauViewUrl, d.Tenant?.ServerUrl, d.Tenant?.SiteContentUrl); }
+        catch (RuleException ex) { throw new EmbedException("not-configured", ex.Message); }
+
+        if (d.Tenant is null)
+            return new EmbedInfo("tableau", d.Id, d.Name, view.Src, null, null, null, TableauViewUrl.ScriptUrl(view, null));
 
         var (token, expires) = await tableau.CreateTokenAsync(d.Tenant, tableauUserName ?? "", ct);
-        return new EmbedInfo("tableau", d.Id, d.Name, d.TableauViewUrl, token, expires, null, TableauTokenService.ScriptUrl(d.Tenant));
+        return new EmbedInfo("tableau", d.Id, d.Name, view.Src, token, expires, null, TableauViewUrl.ScriptUrl(view, d.Tenant.ServerUrl));
     }
 }

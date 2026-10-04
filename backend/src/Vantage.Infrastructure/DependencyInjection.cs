@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IFileScanner, ConfiguredFileScanner>();
         services.AddScoped<GenAiService>();
         services.AddScoped<GenAiPublisher>();
+        services.AddScoped<TableauPublisher>();
         services.AddScoped<EmbedService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<DashboardMasterService>();

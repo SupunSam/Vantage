@@ -5,6 +5,7 @@ import { errorText, Notice, useApi } from "../ui";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
 import type { CategoryNode } from "./CategoriesPage";
 import { PublishGenAiPage } from "./PublishGenAiPage";
+import { PublishTableauPage } from "./PublishTableauPage";
 
 type Options = {
   tenants: { id: number; name: string; verified: boolean; lastVerifiedAtUtc: string | null; workspaces: { id: number; name: string; workspaceId: string; servicePrincipalAccess: string | null; onDedicatedCapacity: boolean | null }[] }[];
@@ -17,18 +18,20 @@ type PublishStatus = { dashboardId: number; name: string; status: string; error:
 /** Publish Dashboard: choose the type, then the matching form. */
 export function PublishPage() {
   const { me } = useSession();
-  const [type, setType] = useState<"powerbi" | "genai">("powerbi");
+  const [type, setType] = useState<"powerbi" | "tableau" | "genai">("powerbi");
   // GenAI pages are code, so only Super Admins vet and publish them.
   const showGenAi = me?.isSuperAdmin === true;
+  const tab = (key: typeof type, label: string) => (
+    <button type="button" role="tab" aria-selected={type === key} className={`tab ${type === key ? "tab-on" : ""}`} onClick={() => setType(key)}>{label}</button>
+  );
   return (
     <>
-      {showGenAi && (
-        <div className="tabs" role="tablist" aria-label="Dashboard type">
-          <button type="button" role="tab" aria-selected={type === "powerbi"} className={`tab ${type === "powerbi" ? "tab-on" : ""}`} onClick={() => setType("powerbi")}>Power BI</button>
-          <button type="button" role="tab" aria-selected={type === "genai"} className={`tab ${type === "genai" ? "tab-on" : ""}`} onClick={() => setType("genai")}>GenAI</button>
-        </div>
-      )}
-      {type === "powerbi" || !showGenAi ? <PublishPowerBiPage /> : <PublishGenAiPage />}
+      <div className="tabs" role="tablist" aria-label="Dashboard type">
+        {tab("powerbi", "Power BI")}
+        {tab("tableau", "Tableau")}
+        {showGenAi && tab("genai", "GenAI")}
+      </div>
+      {type === "tableau" ? <PublishTableauPage /> : type === "genai" && showGenAi ? <PublishGenAiPage /> : <PublishPowerBiPage />}
     </>
   );
 }
