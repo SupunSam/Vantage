@@ -97,3 +97,13 @@ company's root certificate (.crt) in `deploy/certs` and run the start command ag
 Tests: `cd backend && dotnet test Vantage.slnx`. The SQL Server tests run when `VANTAGE_TEST_SQL` is set, for
 example `Server=localhost,1433;User Id=sa;Password=<MSSQL_SA_PASSWORD>;TrustServerCertificate=True`; each creates
 and drops its own database. GitHub Actions (`.github/workflows/ci.yml`) runs the same on every push and pull request.
+
+## Malware scan for GenAI uploads (optional)
+
+Every GenAI file is always checked against the template and security rules. To also scan it for malware with ClamAV:
+
+1. In `deploy/.env` set `GENAI_SCAN_HOST=clamav`.
+2. Start with `docker compose -f deploy/docker-compose.yml --profile scan up -d --build`.
+3. The first start downloads virus signatures and takes a few minutes. Until the scanner is ready, GenAI uploads are refused with "The malware scanner couldn't be reached".
+
+With `GENAI_SCAN_HOST` empty (the default) no scan runs and each file version shows no scan note. In AWS point `GenAi__ScanHost` at the scanner service.

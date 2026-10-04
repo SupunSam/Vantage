@@ -20,7 +20,7 @@ public sealed class GenAiPublisher(
 {
     public async Task<PublishStatus> PublishAsync(PublishGenAiRequest req, Stream html, int actorUserId, CancellationToken ct = default)
     {
-        var (bytes, result) = await genAi.ValidateUploadAsync(html, req.FileName, ct);
+        var (bytes, result, scan) = await genAi.ValidateUploadAsync(html, req.FileName, ct);
         await master.ValidateCategoryAsync(req.CategoryId, ct);
         var tags = DashboardMasterService.ValidateTags(req.Tags);
         await master.ValidateOwnersAsync(req.PrimaryOwnerId, req.BackupOwnerId, ct);
@@ -34,11 +34,11 @@ public sealed class GenAiPublisher(
             Tags = tags.Select(t => new DashboardTag { Tag = t }).ToList(),
         }, null, actorUserId, ct);
 
-        var version = await genAi.AddVersionAsync(dashboard, bytes, req.FileName, actorUserId, null, ct);
+        var version = await genAi.AddVersionAsync(dashboard, bytes, req.FileName, actorUserId, null, scan, ct);
         dashboard.Status = DashboardStatus.Active;
         dashboard.PublishedAtUtc = clock.GetUtcNow().UtcDateTime;
         audit.Add("dashboard.published", "Dashboard", dashboard.Id, dashboard.Id,
-            new { type = "GenAi", version, file = Path.GetFileName(req.FileName), size = bytes.Length, libraries = result.Libraries });
+            new { type = "GenAi", version, file = Path.GetFileName(req.FileName), size = bytes.Length, libraries = result.Libraries, scan = scan.Status.ToString() });
         notifications.Notify(new[] { dashboard.PrimaryOwnerId, dashboard.BackupOwnerId, dashboard.CreatedByUserId }.OfType<int>().Distinct(),
             "publish.succeeded", $"{dashboard.Name} is published", "It's live for the members of its groups.", $"/dashboards/{dashboard.Id}");
         await db.SaveChangesAsync(ct);

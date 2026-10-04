@@ -16,14 +16,19 @@ type PublishStatus = { dashboardId: number; name: string; status: string; error:
 
 /** Publish Dashboard: choose the type, then the matching form. */
 export function PublishPage() {
+  const { me } = useSession();
   const [type, setType] = useState<"powerbi" | "genai">("powerbi");
+  // GenAI pages are code, so only Super Admins vet and publish them.
+  const showGenAi = me?.isSuperAdmin === true;
   return (
     <>
-      <div className="tabs" role="tablist" aria-label="Dashboard type">
-        <button type="button" role="tab" aria-selected={type === "powerbi"} className={`tab ${type === "powerbi" ? "tab-on" : ""}`} onClick={() => setType("powerbi")}>Power BI</button>
-        <button type="button" role="tab" aria-selected={type === "genai"} className={`tab ${type === "genai" ? "tab-on" : ""}`} onClick={() => setType("genai")}>GenAI</button>
-      </div>
-      {type === "powerbi" ? <PublishPowerBiPage /> : <PublishGenAiPage />}
+      {showGenAi && (
+        <div className="tabs" role="tablist" aria-label="Dashboard type">
+          <button type="button" role="tab" aria-selected={type === "powerbi"} className={`tab ${type === "powerbi" ? "tab-on" : ""}`} onClick={() => setType("powerbi")}>Power BI</button>
+          <button type="button" role="tab" aria-selected={type === "genai"} className={`tab ${type === "genai" ? "tab-on" : ""}`} onClick={() => setType("genai")}>GenAI</button>
+        </div>
+      )}
+      {type === "powerbi" || !showGenAi ? <PublishPowerBiPage /> : <PublishGenAiPage />}
     </>
   );
 }

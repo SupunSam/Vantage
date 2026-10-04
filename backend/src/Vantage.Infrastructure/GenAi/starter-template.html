@@ -13,19 +13,26 @@
   Rules (the portal checks them when you publish):
   1. One file. Put your HTML, CSS, JavaScript and data in this file. No links to other files or images;
      use inline SVG, or data: URLs for small images.
-  2. Libraries only from the approved CDNs (see Admin Configuration > Approved CDNs), over HTTPS. Pin an exact
-     version in the URL. Add an integrity="sha384-..." attribute when you can.
+  2. Libraries only from the approved CDNs (see Admin Configuration > Approved CDNs), over HTTPS. The URL must
+     name an exact version (chart.js@4.4.7, not @latest or @4), and every script and stylesheet needs an
+     integrity="sha384-..." hash with crossorigin="anonymous", as the Chart.js line below has. Get the hash
+     from the CDN's page for that file (jsdelivr and cdnjs show it) or compute it from the file you reviewed.
   3. Maximum 5 MB (a warning appears at 2 MB). Big data tables are the usual reason files grow.
   4. No network requests: anything the page tries to fetch while it runs is blocked. Put the data in the
-     file (see DATA below). No nested frames, plug-in objects, base-URL tags or automatic page redirects.
-  5. The page runs in a sandbox: no cookies, no local storage, no pop-ups. It can't reach the portal.
+     file (see DATA below). No nested frames, plug-in objects, base-URL tags, page redirects or links to other
+     sites.
+  5. Not allowed in the code: running text as code, changing the page's address, opening windows, reaching the
+     parent window, background threads, binary modules, dynamic imports and cookies. The upload check lists any it finds.
+  6. The page runs in a sandbox: no cookies, no local storage, no pop-ups. It can't reach the portal.
+  7. Only Super Admins publish the file. It is checked, and malware-scanned where a scanner is set up.
 
   How to use it with an AI tool: give the AI this whole file and say "keep the template marker, the CSS
   variables and the DATA block, and change the content to <what you want to show>".
 -->
 
 <!-- Approved library example: Chart.js (cdn.jsdelivr.net). Replace or remove as you need. -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js"
+        integrity="sha384-zYPBGXwO4633CABX/5Spf6emCKUJCfoOkhOMYyxMsatqQZPnDblmmOewfjsIVWCM" crossorigin="anonymous"></script>
 
 <style>
   :root {

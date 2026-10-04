@@ -17,10 +17,10 @@ namespace Vantage.Tests;
 /// <summary>Builds a <see cref="GenAiService"/> over a throwaway file store, for tests that also need an EmbedService.</summary>
 internal static class GenAiTestKit
 {
-    public static GenAiService Service(AppDbContext db, AuditWriter audit, TimeProvider clock, int linkMinutes = 60, IFileStore? files = null) =>
+    public static GenAiService Service(AppDbContext db, AuditWriter audit, TimeProvider clock, int linkMinutes = 60, IFileStore? files = null, IFileScanner? scanner = null) =>
         new(db, files ?? new LocalFileStore(Path.Combine(Path.GetTempPath(), "vantage-tests", Guid.NewGuid().ToString("N"))),
             DataProtectionProvider.Create("vantage-tests"), Options.Create(new GenAiOptions { BaseUrl = "http://genai.test/", LinkMinutes = linkMinutes }),
-            audit, new NotificationService(db, clock), clock);
+            audit, new NotificationService(db, clock), scanner ?? new NoFileScanner(), clock);
 }
 
 /// <summary>GenAI dashboards: publishing, Modify Dashboard, restore, signed links and what gets served.</summary>
@@ -54,13 +54,13 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
     private static byte[] Html(string marker = "ok") =>
         Encoding.UTF8.GetBytes($"""<!DOCTYPE html><html><head><meta name="vantage-template" content="genai-1"><title>{marker}</title></head><body>{marker}</body></html>""");
 
-    private async Task<Kit> ArrangeAsync(int linkMinutes = 60)
+    private async Task<Kit> ArrangeAsync(int linkMinutes = 60, IFileScanner? scanner = null)
     {
         var db = fx.CreateContext();
         var clock = TimeProvider.System;
         var audit = new AuditWriter(db, new Ctx(), clock);
         var files = new LocalFileStore(Path.Combine(Path.GetTempPath(), "vantage-tests", Guid.NewGuid().ToString("N")));
-        var genAi = GenAiTestKit.Service(db, audit, clock, linkMinutes, files);
+        var genAi = GenAiTestKit.Service(db, audit, clock, linkMinutes, files, scanner);
 
         var owner = new User { Email = Unique("o") + "@rrd.com", DisplayName = Unique("Owner "), UserType = UserType.Internal, CreatedAtUtc = DateTime.UtcNow };
         var member = new User { Email = Unique("m") + "@rrd.com", DisplayName = Unique("Member "), UserType = UserType.Internal, CreatedAtUtc = DateTime.UtcNow };
@@ -214,7 +214,7 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         var cdn = new ApprovedCdn { Host = host, IsActive = true };
         k.Db.ApprovedCdns.Add(cdn);
         await k.Db.SaveChangesAsync();
-        var withCdn = Encoding.UTF8.GetBytes($"""<html><head><meta name="vantage-template" content="genai-1"><script src="https://{host}/x.js"></script></head></html>""");
+        var withCdn = Encoding.UTF8.GetBytes($"""<html><head><meta name="vantage-template" content="genai-1"><script src="https://{host}/x.js" integrity="sha384-zYPBGXwO4633CABX/5Spf6emCKUJCfoOkhOMYyxMsatqQZPnDblmmOewfjsIVWCM" crossorigin="anonymous"></script></head></html>""");
         var id = (await PublishAsync(k, withCdn)).DashboardId;
         await k.GenAi.ReplaceAsync(id, new MemoryStream(Html("second")), "page.html", k.Owner.Id);
         cdn.IsActive = false;
@@ -291,5 +291,41 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         var id2 = (await PublishAsync(expired)).DashboardId;
         var (url2, _) = await expired.GenAi.LinkAsync(await expired.Db.Dashboards.SingleAsync(x => x.Id == id2));
         Assert.Null(await expired.GenAi.OpenAsync(url2[(url2.LastIndexOf('/') + 1)..]));
+    }
+
+    private sealed class FakeScanner(ScanStatus status, string? report) : IFileScanner
+    {
+        public int Calls;
+        public Task<ScanOutcome> ScanAsync(byte[] content, CancellationToken ct = default) { Calls++; return Task.FromResult(new ScanOutcome(status, report)); }
+    }
+
+    [SqlFact]
+    public async Task A_file_the_malware_scanner_flags_is_refused_and_creates_nothing()
+    {
+        var scanner = new FakeScanner(ScanStatus.Failed, "Malware scan (ClamAV) flagged the file: Eicar-Test-Signature.");
+        await using var k = await ArrangeAsync(scanner: scanner);
+        var name = Unique("Flagged ");
+
+        var ex = await Assert.ThrowsAsync<RuleException>(() => PublishAsync(k, Html(), name));
+
+        Assert.Contains("Eicar", ex.Message);
+        Assert.Equal(1, scanner.Calls);
+        Assert.False(await k.Db.Dashboards.AnyAsync(d => d.Name == name));
+    }
+
+    [SqlFact]
+    public async Task A_clean_scan_is_kept_with_the_version_and_a_restore_is_scanned_again()
+    {
+        var scanner = new FakeScanner(ScanStatus.Passed, "Malware scan (ClamAV): clean.");
+        await using var k = await ArrangeAsync(scanner: scanner);
+        var id = (await PublishAsync(k)).DashboardId;
+        await k.GenAi.ReplaceAsync(id, new MemoryStream(Html("second")), "page.html", k.Owner.Id);
+
+        await k.GenAi.RestoreAsync(id, 1, k.Owner.Id);
+
+        Assert.Equal(3, scanner.Calls); // publish, replace, restore
+        var live = await k.Db.DashboardVersions.AsNoTracking().SingleAsync(v => v.DashboardId == id && v.IsCurrent);
+        Assert.Equal(ScanStatus.Passed, live.ScanStatus);
+        Assert.Contains("clean", live.ScanReport);
     }
 }

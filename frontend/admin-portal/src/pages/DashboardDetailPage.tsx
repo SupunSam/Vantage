@@ -95,7 +95,7 @@ export function DashboardDetailPage() {
             {needsRls && <span className="pill pill-warn">A group needs an RLS value</span>}
           </div>
         </div>
-        {(d.type === "PowerBi" || d.type === "GenAi") && data.canModify && ["Active", "Inactive"].includes(d.status) && (
+        {(d.type === "PowerBi" || (d.type === "GenAi" && data.isSuperAdmin)) && data.canModify && ["Active", "Inactive"].includes(d.status) && (
           <button className="btn btn-primary" type="button" disabled={replacing != null} onClick={() => setModifying(true)}>
             <Icon name="upload" size={18} /> Modify Dashboard
           </button>

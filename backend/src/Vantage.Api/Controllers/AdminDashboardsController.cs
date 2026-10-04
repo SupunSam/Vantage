@@ -164,6 +164,7 @@ public sealed class AdminDashboardsController(
     {
         if (await RequireAsync(AppModules.Publishing, PermissionLevel.Edit, ct) is { } denied) return denied;
         var isGenAi = await IsGenAiAsync(id, ct);
+        if (isGenAi && !(await Current.GetAsync(ct))!.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can modify GenAI dashboards." });
         if (file is null || file.Length == 0) return BadRequest(new { message = isGenAi ? "Choose a .html file." : "Choose a .pbix file." });
         return await Guard(async () =>
         {

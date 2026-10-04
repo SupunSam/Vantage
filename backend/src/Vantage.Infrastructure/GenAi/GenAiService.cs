@@ -19,6 +19,9 @@ public sealed class GenAiOptions
     public string FrameAncestors { get; set; } = "http://localhost:8080 http://localhost:8081";
     /// <summary>How long a signed link to a dashboard works.</summary>
     public int LinkMinutes { get; set; } = 60;
+    /// <summary>Host of a ClamAV (clamd) scanner. Empty means no scan; when set, every upload is scanned and an unreachable scanner refuses the upload.</summary>
+    public string? ScanHost { get; set; }
+    public int ScanPort { get; set; } = 3310;
 }
 
 /// <summary>A GenAI file ready to be served: its content and the headers that keep it isolated.</summary>
@@ -33,7 +36,7 @@ public sealed record GenAiContent(Stream Content, string ContentSecurityPolicy);
 /// </summary>
 public sealed class GenAiService(
     AppDbContext db, IFileStore files, IDataProtectionProvider protection, IOptions<GenAiOptions> options, AuditWriter audit,
-    NotificationService notifications, TimeProvider clock)
+    NotificationService notifications, IFileScanner scanner, TimeProvider clock)
 {
     private const string TokenPurpose = "Vantage.GenAi.Link.v1";
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
@@ -44,8 +47,8 @@ public sealed class GenAiService(
     public async Task<IReadOnlyList<string>> ApprovedHostsAsync(CancellationToken ct = default) =>
         await db.ApprovedCdns.AsNoTracking().Where(c => c.IsActive).Select(c => c.Host).ToListAsync(ct);
 
-    /// <summary>Reads the upload (never more than the limit plus one byte) and runs the checks; throws a RuleException listing what's wrong.</summary>
-    public async Task<(byte[] Bytes, GenAiCheckResult Result)> ValidateUploadAsync(Stream upload, string fileName, CancellationToken ct = default)
+    /// <summary>Reads the upload (never more than the limit plus one byte), runs the checks and the malware scan; throws a RuleException listing what's wrong.</summary>
+    public async Task<(byte[] Bytes, GenAiCheckResult Result, ScanOutcome Scan)> ValidateUploadAsync(Stream upload, string fileName, CancellationToken ct = default)
     {
         var ext = Path.GetExtension(fileName);
         if (!ext.Equals(".html", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
@@ -63,13 +66,21 @@ public sealed class GenAiService(
         var bytes = buffer.ToArray();
         var result = GenAiChecker.Check(bytes, await ApprovedHostsAsync(ct));
         if (!result.Passed) throw new RuleException("This file can't be published. " + string.Join(" ", result.Errors.Select((e, i) => $"({i + 1}) {e}")));
-        return (bytes, result);
+        return (bytes, result, await ScanAsync(bytes, ct));
+    }
+
+    /// <summary>Malware scan. A flagged file is refused; a configured scanner that can't answer refuses it too.</summary>
+    private async Task<ScanOutcome> ScanAsync(byte[] bytes, CancellationToken ct)
+    {
+        var scan = await scanner.ScanAsync(bytes, ct);
+        if (scan.Status == ScanStatus.Failed) throw new RuleException("This file can't be published. " + scan.Report);
+        return scan;
     }
 
     // ---------------------------------------------------------------- versions
 
     /// <summary>Stores the bytes as the next version of the dashboard and makes it the live one. Trims to the last few versions.</summary>
-    public async Task<int> AddVersionAsync(Dashboard d, byte[] html, string fileName, int actorUserId, string? note, CancellationToken ct = default)
+    public async Task<int> AddVersionAsync(Dashboard d, byte[] html, string fileName, int actorUserId, string? note, ScanOutcome scan, CancellationToken ct = default)
     {
         var number = (await db.DashboardVersions.Where(v => v.DashboardId == d.Id).MaxAsync(v => (int?)v.VersionNumber, ct) ?? 0) + 1;
         var name = Path.GetFileName(fileName);
@@ -81,7 +92,8 @@ public sealed class GenAiService(
         db.DashboardVersions.Add(new DashboardVersion
         {
             DashboardId = d.Id, VersionNumber = number, FileKey = key, FileName = name, SizeBytes = size, Sha256 = sha,
-            IsCurrent = true, ScanStatus = ScanStatus.NotRequired, ScanReport = note, UploadedAtUtc = Now, UploadedByUserId = actorUserId,
+            IsCurrent = true, ScanStatus = scan.Status,
+            ScanReport = string.Join(" ", new[] { note, scan.Report }.Where(t => !string.IsNullOrEmpty(t))) is { Length: > 0 } report ? report : null, UploadedAtUtc = Now, UploadedByUserId = actorUserId,
         });
         await db.SaveChangesAsync(ct);
 
@@ -99,8 +111,8 @@ public sealed class GenAiService(
     public async Task<ReplaceStatus> ReplaceAsync(int dashboardId, Stream upload, string fileName, int actorUserId, CancellationToken ct = default)
     {
         var d = await LoadAsync(dashboardId, ct);
-        var (bytes, result) = await ValidateUploadAsync(upload, fileName, ct);
-        var number = await AddVersionAsync(d, bytes, fileName, actorUserId, null, ct);
+        var (bytes, result, scan) = await ValidateUploadAsync(upload, fileName, ct);
+        var number = await AddVersionAsync(d, bytes, fileName, actorUserId, null, scan, ct);
         return await FinishAsync(d, number, "dashboard.replaced", new { version = number, type = "GenAi", file = Path.GetFileName(fileName), size = bytes.Length }, result, ct);
     }
 
@@ -121,7 +133,8 @@ public sealed class GenAiService(
         }
         var result = GenAiChecker.Check(bytes, await ApprovedHostsAsync(ct));
         if (!result.Passed) throw new RuleException($"Version {versionNumber} no longer passes the checks, so it can't be restored. " + string.Join(" ", result.Errors));
-        var number = await AddVersionAsync(d, bytes, source.FileName, actorUserId, $"Restored from version {versionNumber}", ct);
+        var scan = await ScanAsync(bytes, ct); // signatures change, so an old file is scanned again
+        var number = await AddVersionAsync(d, bytes, source.FileName, actorUserId, $"Restored from version {versionNumber}.", scan, ct);
         return await FinishAsync(d, number, "dashboard.restored", new { fromVersion = versionNumber, version = number, type = "GenAi" }, result, ct);
     }
 

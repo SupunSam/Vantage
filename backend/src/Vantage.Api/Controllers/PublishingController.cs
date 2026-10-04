@@ -144,6 +144,8 @@ public sealed class PublishingController(
     {
         if (await RequireAsync(PermissionLevel.Edit, ct) is { } denied) return denied;
         var me = (await current.GetAsync(ct))!;
+        // GenAI pages are code, so only Super Admins vet and publish them.
+        if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can publish GenAI dashboards." });
         if (form.File is null || form.File.Length == 0) return BadRequest(new { message = "Choose a .html file." });
 
         try

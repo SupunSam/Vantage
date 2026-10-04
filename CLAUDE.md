@@ -165,7 +165,9 @@ depends on them:
   - Dashboard name unique; group name ≤40 characters and unique.
 - **GenAI dashboards** (C32).
   - One `.html` file from the approved starter template (marker `vantage-template`/`genai-1`), 5 MB max, warning from 2 MB.
-  - `GenAiChecker` is the upload check (approved active CDNs over HTTPS only, nothing relative, no frames/objects/base/redirects). Publishing, Modify and Restore all run it; a failure changes nothing. `GenAiService` keeps the versions and signs the links; `GenAiPublisher` creates the dashboard.
+  - Only Super Admins publish, modify or restore a GenAI file (C33); the API refuses anyone else.
+  - `GenAiChecker` is the upload check: approved active CDNs over HTTPS at an exact version with an integrity hash, nothing relative, no links to other sites, no frames/objects/base/redirects, and banned code patterns. `IFileScanner` (ClamAV when `GenAi:ScanHost` is set, fail closed) scans every upload and restore. Publishing, Modify and Restore all run both; a failure changes nothing. `GenAiService` keeps the versions and signs the links; `GenAiPublisher` creates the dashboard.
+  - Keep the starter template passing the checker (a test enforces it). Rule words also trip the checker inside comments.
   - They are served only from the separate origin (`GenAi:BaseUrl`) via `GenAiContentController`, with the strict CSP and `sandbox allow-scripts` from `GenAiService.PolicyFor`. Never serve the file from the portals' origin or through `/api`.
   - The portals frame it with `GenAiFrame` (`sandbox="allow-scripts"`, never `allow-same-origin`). Don't widen the sandbox, the CSP or `GenAi:FrameAncestors` without a recorded decision.
   - A link is issued only after the normal membership check (or Super Admin preview) and is the only way in. The view row is written when the link is issued, as for Power BI. Not Active means not served.
@@ -208,7 +210,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C33) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C34) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -225,7 +227,7 @@ Done:
 - Super Admins preview dashboards without joining any group (C27).
 - Admin **Audit Log** viewer (filters, plain-sentence descriptions, before and after values, Excel export).
 - User Portal **Personal Folders** (page plus a folder button on cards).
-- GenAI dashboards (C32): starter template, upload check, publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
+- GenAI dashboards (C32, C33): starter template, vetted upload (rule check plus optional ClamAV scan, Super Admin only), publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
 
 Next, in order:
 1. **Scheduled jobs**: HRMS monthly sync, inactivity flag and owner emails, new-hire digest (their settings already exist in Admin Configuration).

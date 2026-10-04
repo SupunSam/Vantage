@@ -48,6 +48,8 @@ public static class DependencyInjection
         services.AddScoped<OwnershipService>();
         services.AddScoped<DashboardFactory>();
         services.Configure<GenAiOptions>(config.GetSection("GenAi"));
+        services.AddScoped<IFileScanner>(sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenAiOptions>>().Value is { ScanHost: { Length: > 0 } host } o
+            ? new ClamAvScanner(host, o.ScanPort) : new NoFileScanner());
         services.AddScoped<GenAiService>();
         services.AddScoped<GenAiPublisher>();
         services.AddScoped<EmbedService>();

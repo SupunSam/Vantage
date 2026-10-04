@@ -67,6 +67,9 @@ services:
       # GenAI dashboards are served from their own origin (the genai service below), framed only by the two portals.
       GenAi__BaseUrl: http://localhost:8082
       GenAi__FrameAncestors: "http://localhost:8080 http://localhost:8081"
+      # Malware scan of every GenAI upload. Empty = no scan. To switch it on: set GENAI_SCAN_HOST=clamav in deploy/.env and
+      # start with --profile scan (see README). When set, an unreachable scanner refuses uploads.
+      GenAi__ScanHost: ${GENAI_SCAN_HOST:-}
     volumes:
       - appdata:/data
     restart: unless-stopped
@@ -103,6 +106,14 @@ services:
       - "8082:80"
     volumes:
       - ./genai.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+  # Optional malware scanner for GenAI uploads (ClamAV). Only starts with:  docker compose --profile scan up -d
+  # The first start downloads virus signatures and takes a few minutes; uploads are refused until it is ready.
+  clamav:
+    image: clamav/clamav:stable
+    container_name: vantage-clamav
+    profiles: ["scan"]
     restart: unless-stopped
 
   # Local mail catcher: every email Vantage sends shows up at http://localhost:8025 (nothing leaves your machine).

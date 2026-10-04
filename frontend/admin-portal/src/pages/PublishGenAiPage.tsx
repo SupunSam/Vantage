@@ -122,7 +122,7 @@ export function PublishGenAiPage() {
       <div className="page-head">
         <div>
           <h1>Publish a GenAI Dashboard</h1>
-          <p>Upload one .html file built from the approved starter template. The portal checks it, and a file that passes goes live for the people in its groups. The owners are put in its default group automatically.</p>
+          <p>Upload the .html file the author handed over, built from the approved starter template. Vet it here first: the portal checks the file, scans it for malware where a scanner is set up, and refuses anything that fails. A file that passes goes live for the people in its groups. The owners are put in its default group automatically.</p>
         </div>
       </div>
 
@@ -147,7 +147,8 @@ export function PublishGenAiPage() {
             </div>
             <ul className="plain-list small">
               <li>One self-contained page: the HTML, CSS, JavaScript and data all live in the file. It must keep the template marker from the starter template.</li>
-              <li>Libraries may load only from the approved CDNs, over HTTPS: {g.approvedHosts.length > 0 ? <strong>{g.approvedHosts.join(", ")}</strong> : "none are approved yet (a Super Admin adds them in Admin Configuration)"}.</li>
+              <li>Libraries may load only from the approved CDNs, over HTTPS: {g.approvedHosts.length > 0 ? <strong>{g.approvedHosts.join(", ")}</strong> : "none are approved yet (add them in Admin Configuration)"}. Each script and stylesheet needs an exact version in its address and an integrity hash.</li>
+              <li>Code that runs text as code, changes the page's address, opens windows, reaches the parent window or makes network calls is refused. Links to other sites are refused too.</li>
               <li>The page runs in a sandbox on its own web address. It can't make network calls or reach the portal, so put its data in the file.</li>
               <li>The last {g.versionsKept} files are kept, so you can go back to an earlier one.</li>
             </ul>
@@ -155,7 +156,7 @@ export function PublishGenAiPage() {
             {check && (
               <>
                 {check.passed
-                  ? <Notice tone="ok">The file passes the checks ({mb(check.sizeBytes)}{check.libraries.length > 0 ? `; libraries from ${check.libraries.join(", ")}` : "; no external libraries"}).</Notice>
+                  ? <Notice tone="ok">The file passes the file checks ({mb(check.sizeBytes)}{check.libraries.length > 0 ? `; libraries: ${check.libraries.join(", ")}` : "; no external libraries"}).</Notice>
                   : <Notice tone="error"><strong>The file can't be published yet.</strong><ul className="plain-list">{check.errors.map((x) => <li key={x}>{x}</li>)}</ul></Notice>}
                 {check.warnings.length > 0 && <Notice><ul className="plain-list">{check.warnings.map((x) => <li key={x}>{x}</li>)}</ul></Notice>}
               </>

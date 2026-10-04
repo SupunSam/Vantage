@@ -1,110 +1,108 @@
 # GenAI dashboards: security
 
-This describes how Vantage keeps GenAI dashboards (a single HTML file, decision C32) from harming the portal, the
-people who open them, or the data behind other dashboards. Read it with `docs/requirements.md` (C32) before changing
-anything in `backend/src/Vantage.Infrastructure/GenAi`, `GenAiContentController`, `deploy/genai.nginx.conf` or
-`GenAiFrame`.
+This describes how Vantage keeps GenAI dashboards (a single HTML file, decisions C32 and C33) from harming corporate
+systems. Read it with `docs/requirements.md` before changing anything in `backend/src/Vantage.Infrastructure/GenAi`,
+`GenAiContentController`, `deploy/genai.nginx.conf` or `GenAiFrame`.
 
 ## The short answer
 
-- **The upload is checked, and a file that fails is blocked.** Publishing, Modify Dashboard and Restore all run the
-  same check. A failing file creates nothing and changes nothing.
-- **The check is a rule check, not a vulnerability or malware scan.** It confirms the file is the expected format and
-  loads nothing from outside the approved CDNs. It does not read or judge the file's own JavaScript.
-- **The real protection is containment when the page runs.** A GenAI page is treated as untrusted code. It runs on a
-  separate origin, in a sandbox, under a strict Content-Security-Policy, so even a hostile page can't reach the
-  portal, its session or its API.
+- **Only Super Admins publish a GenAI file.** The author hands the `.html` file to a Super Admin, who uploads it. The
+  same applies to Modify Dashboard and Restore. Other roles, including those with the Publishing permission, are
+  refused by the API (and don't see the GenAI tab).
+- **Every upload is vetted before it is stored, and a file that fails is blocked.** The same vetting runs on publish,
+  Modify and Restore. A failing file creates nothing and changes nothing.
+- **The vetting is layered.** A rule check (format, approved CDNs, exact versions, integrity hashes, banned code
+  patterns), then a malware scan when a scanner is configured, then containment when the page runs (separate origin,
+  sandbox, strict policy). No single layer is relied on alone.
+- **Be precise when describing it.** The rule check is a strong filter for the accidental and the obvious. It is not a
+  proof that code is harmless: a determined author can obfuscate JavaScript past any pattern list. What holds in that
+  case is the containment layer and the Super Admin's own review.
 
-The original SRS wording "every upload is scanned" is therefore replaced by C32: every upload is checked against the
-template rules.
+## Layer 1: the file check (`GenAiChecker`)
 
-## Who can publish
+A file is refused, with a list of what to fix, if any of these hold.
 
-Only people with **Edit** on the Publishing module (Super Admin, BPI Publisher, and any role given it) can upload a
-GenAI file, for a new dashboard or a replacement. Uploads are audited (`dashboard.published`, `dashboard.replaced`,
-`dashboard.restored`) with the file name, size and libraries used. Publishers are trusted staff, and the controls
-below are the safety net for mistakes (for example AI-generated code nobody read) and for a compromised publisher
-account.
-
-## Layer 1: the upload check (`GenAiChecker`)
-
-Blocked (the upload is refused with a plain-English list of what to fix):
-
-| Check | Why |
+| Area | Refused when |
 | --- | --- |
-| File is empty, not UTF-8 text, over 5 MB, or has no `<html>` element | Expected format and size |
-| Template marker `<meta name="vantage-template" content="genai-1">` is missing | Must be built from the approved starter template |
-| `<iframe>`, `<frame>`, `<frameset>`, `<object>`, `<embed>`, `<applet>` or `<base>` | No nested content, plug-ins or rewriting of links |
-| `<meta http-equiv="refresh">` | No automatic redirect |
-| Any script, stylesheet, image, media or `url()`/`@import` pointing at a host that is not on the approved, active CDN list | Libraries only from approved CDNs |
-| The same, over plain `http://` | HTTPS only |
-| A relative link such as `app.js` or `logo.png` | The page is served alone, so everything must be in the file |
-| Dashboard type switched off in Admin Configuration, or file over the configured size limit | Configuration is data (C30) |
+| Format | Empty, not UTF-8, over 5 MB (warning from 2 MB), no `<html>` element, or no template marker `<meta name="vantage-template" content="genai-1">` (a marker inside a comment doesn't count) |
+| Structure | `<iframe>`, `<frame>`, `<object>`, `<embed>`, `<applet>`, `<base>`, `<meta http-equiv="refresh">`, `<link>` other than a stylesheet, `<script type>` other than JavaScript, module or JSON data (so no import maps or speculation rules), a link to another site, CSS `@import` |
+| Libraries | A script or stylesheet from a host not on the approved, active CDN list; over plain HTTP; a relative file (`app.js`, `logo.png`); a version that isn't exact (`@latest`, `@4`, a range, `/combine/`); no `integrity="sha256/384/512-…"` hash of the right length; no `crossorigin="anonymous"` |
+| Images and fonts | Loaded from anywhere but approved CDNs over HTTPS (no integrity hash needed) |
+| Code | `eval()`, `new Function()`, `setTimeout`/`setInterval` with a text argument, `document.write()`, `document.cookie`, `window.open()`, `window.top`/`parent`/`opener`, changing `location`, `javascript:` URLs, Workers, service workers, `importScripts`, WebAssembly, dynamic `import()`, `postMessage()`, `sendBeacon()`, `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource` |
 
-Warned, not blocked: a file of 2 MB or more, and use of `fetch`, `XMLHttpRequest`, `WebSocket` or `EventSource` (they
-are blocked when the page runs anyway).
+Warned, not blocked: a file of 2 MB or more, a long encoded text blob that isn't a `data:` URL (it can hide code), and
+`atob()`.
 
-A restore runs the check again, so an old version that used a CDN since removed from the list can't be brought back.
+Notes for authors: the patterns match the whole file, including comments, so don't write those words in comments. An
+inline copy of a big library (for example a pasted minified chart library) will usually trip a code rule; load it from
+an approved CDN instead. The starter template passes all of these and shows the exact script tag to copy.
 
-### What the check does not do
+A restore runs the whole vetting again, so an old version that used a CDN since removed from the list can't come back.
 
-Be clear about these when describing the control to anyone:
+### What the file check does not do
 
-- It does **not** analyse the page's own inline JavaScript. Obfuscated or malicious script is not detected.
-- The template marker is a format marker, not a signature. Anyone can copy the line into a file.
-- It does not verify that an approved CDN's files are unchanged. The starter template notes "use an `integrity`
-  hash" but the checker doesn't require one.
-- It does not check what the page shows (misleading text, a fake sign-in form). Review of content is a publishing
-  responsibility.
+- It does not understand JavaScript. Patterns can be evaded by building names at run time
+  (`window["ev"+"al"]`, `this.constructor.constructor(...)`). The runtime policy below is what stops those.
+- The template marker is a format marker, not a signature. Anyone can copy the line.
+- The integrity hash proves the CDN file is the one the author referenced. It does not prove that file is benign.
+  Exact versions plus a short CDN list plus a Super Admin who recognises the libraries is the control.
+- It does not judge what the page displays.
 
-## Layer 2: serving the file safely
+## Layer 2: malware scan (`IFileScanner`, ClamAV)
+
+When `GenAi:ScanHost` is set, every upload and every restore is streamed to ClamAV (clamd). A flagged file is
+refused with the signature name; the clean result is stored on the file version (`ScanStatus`, `ScanReport`) and shown
+in File Versions. If a scanner is configured but can't answer, the upload is refused (fail closed), so nothing is
+accepted unscanned by accident. When `GenAi:ScanHost` is empty (the local default) no scan runs, the version's status is
+`NotRequired`, and the vetting is the file check plus containment. Production should always set it. ClamAV finds known
+malware signatures; it will not find a novel malicious script, so it adds to the layers around it and does not replace them.
+
+## Layer 3: containment when the page runs
 
 | Control | Where | What it stops |
 | --- | --- | --- |
-| **Separate origin** (`GenAi:BaseUrl`, `http://localhost:8082` locally, a dedicated domain in AWS) served by its own nginx listener | `deploy/genai.nginx.conf`, `GenAiContentController` | The page can't read the portals' cookies, storage, session or call `/api` as the viewer. Read-only (GET) |
-| **Signed, expiring link** (default 60 minutes, `GenAi:LinkMinutes`) | `GenAiService.LinkAsync/OpenAsync` | The file is never public. A link is issued only after the normal membership check (or a Super Admin preview). A forged, tampered or expired link serves nothing |
-| **Only Active dashboards are served** | `GenAiService.OpenAsync` | Retired or inactive dashboards stop being served at once |
-| **Content-Security-Policy** | `GenAiService.PolicyFor` | `default-src 'none'`; scripts, styles, fonts and images only from the page itself (inline) or approved CDNs; `connect-src 'none'` (no network calls); `form-action 'none'`; `object-src 'none'`; `frame-src 'none'`; `base-uri 'none'`; `frame-ancestors` only the two portals |
-| **CSP `sandbox allow-scripts`** | `GenAiService.PolicyFor` | Even if someone opens the link directly, the page has no same-origin rights, storage or cookies, and can't open pop-ups, download files or navigate the top window |
+| **Separate origin** (`GenAi:BaseUrl`: `http://localhost:8082` locally, a dedicated domain in AWS) with its own nginx listener | `deploy/genai.nginx.conf`, `GenAiContentController` | The page can't read the portals' cookies, storage or session, or call `/api` as the viewer. GET only |
+| **Signed, expiring link** (default 60 minutes, `GenAi:LinkMinutes`) | `GenAiService.LinkAsync/OpenAsync` | The file is never public. Issued only after the normal membership check (or a Super Admin preview). A forged, tampered or expired link serves nothing |
+| **Only Active dashboards are served** | `GenAiService.OpenAsync` | A retired dashboard stops being served at once |
+| **Content-Security-Policy** | `GenAiService.PolicyFor` | `default-src 'none'`; scripts, styles, fonts and images only from the page itself (inline) or approved CDNs; **no `unsafe-eval`**, so `eval`/`new Function` fail even if obfuscated; `connect-src 'none'`; `form-action 'none'`; `object-src 'none'`; `frame-src 'none'`; `base-uri 'none'`; `frame-ancestors` only the two portals |
+| **CSP `sandbox allow-scripts`** | `GenAiService.PolicyFor` | Even if someone opens the link directly: no same-origin rights, storage or cookies, no pop-ups, downloads, forms or top-window navigation |
 | **Sandboxed frame** in both portals | `GenAiFrame` (`sandbox="allow-scripts"`, `referrerPolicy="no-referrer"`) | The same restrictions from the portal side. `allow-same-origin` must never be added |
-| `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` | `GenAiContentController` | No sniffing, no leaking of the link in referrers, no caching of the page |
+| `nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` | `GenAiContentController` | No sniffing, no leaking the link in referrers, no caching |
 
-The CSP allows inline scripts and styles (the template needs them) but not `eval`.
+## Layer 4: access and audit
 
-## Layer 3: access and audit
-
-- Membership of an access group is still required to open a dashboard; the link is only the delivery step.
-- A member's open is counted as a view when the link is issued. A Super Admin preview is audited
-  (`dashboard.previewed`) and is not a view (C27, C31).
-- Every publish, replace, restore, version removal and preview is in the Audit Log.
+- Publishing, replacing and restoring are Super Admin only, enforced in the API.
+- Membership of an access group is still required to open a dashboard; the signed link is only the delivery step.
+- Publish, replace, restore, version removal and preview are in the Audit Log with the file name, size, libraries and
+  scan result.
 
 ## Known residual risks
 
-1. **Malicious script inside an approved page** can still change what the page shows, so it could display a fake
-   prompt or misleading numbers. It can't send data anywhere (no network calls, no forms) or reach the portal. It can
-   navigate its own frame to another site, which the CSP can't block, so a viewer could be sent to an outside page
-   from inside the frame.
-2. **A compromised approved CDN** could serve altered library code. Mitigations: pin versions, use `integrity`
-   hashes, keep the CDN list short.
-3. **A live link is a bearer URL** until it expires. Someone who is given a live link can load that page, but only
-   for the link's lifetime and only the file, never the portal.
-4. **A compromised publisher account** can publish a page. The sandbox limits the damage, and the audit log records
-   who did it.
+1. **Obfuscated script in an approved page** can still change what the page shows. It can't use the portal, the
+   viewer's session or `eval`, and it can't make network calls or submit forms. It can navigate its own frame to
+   another site (a browser can't block that), and browsers keep a few weak covert channels such as DNS prefetch. Both
+   are limited by what the page itself contains. The Super Admin's review is the control for this.
+2. **A compromised approved CDN** is limited by exact versions and integrity hashes: the browser refuses a changed
+   file. A bad library the author chose deliberately is a review matter.
+3. **A live link is a bearer URL** until it expires. Whoever holds one can load that page, for its lifetime, and only
+   that file.
+4. **A compromised Super Admin account** can publish a page. The sandbox limits what it can do, and the audit log
+   records who published it.
+5. **Without a configured scanner** there is no malware scan. Set `GenAi:ScanHost` in every shared environment.
 
-## Options to strengthen it (not built; each needs a decision, record it as C33 or later)
+## Options not built
 
-- Refuse risky JavaScript patterns at upload (`eval`, `new Function`, `document.cookie`, `location =`, `window.open`,
-  `window.top`), accepting some false positives.
-- Require an `integrity` (SRI) hash on every CDN script and stylesheet.
-- Reject inline event-handler attributes and `javascript:` URLs.
-- Run a malware or static-analysis scan service on upload (ClamAV or a commercial scanner) and record the result in
-  `DashboardVersion.ScanStatus`, which the data model already has.
-- Require a second person (a Super Admin) to approve a GenAI file before it goes live.
-- Shorten `GenAi:LinkMinutes`.
-- In AWS: serve from a dedicated domain with its own certificate, behind CloudFront, with S3 private and the origin
-  reachable only through the signed link.
+- Verify on upload that each integrity hash matches the file the CDN actually serves (needs outbound access to the CDNs).
+- Run a real JavaScript parser (an AST check) in place of patterns, which closes the obfuscation gap for code that is
+  visible in the file.
+- Require a second Super Admin to approve a file before it goes live.
+- Shorter links (`GenAi:LinkMinutes`).
+- In AWS: a dedicated registrable domain (not a subdomain of the portal's), CloudFront in front, the policy also set at
+  the edge, S3 private, a WAF, and the GenAI origin included in the planned penetration test.
 
 ## Testing
 
-`GenAiCheckerTests` (no database) covers each rule above, and `GenAiTests` (SQL Server) covers publish, replace,
-restore, signed links, forged and expired links, and retired dashboards. When you change a rule, change its test.
+`GenAiCheckerTests` (no database) covers every rule above, including that the starter template passes and that ordinary
+chart code isn't mistaken for risky code. `FileScannerTests` runs the ClamAV client against a fake scanner. `GenAiTests`
+(SQL Server) covers publish, replace, restore, scan refusal, signed, forged and expired links, and retired dashboards.
+`ControllerWiringTests` fails if a controller needs a service that isn't registered. When you change a rule, change its test.
