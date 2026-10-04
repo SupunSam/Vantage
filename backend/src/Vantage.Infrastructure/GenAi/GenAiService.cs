@@ -106,12 +106,19 @@ public sealed class GenAiService(
         });
         await db.SaveChangesAsync(ct);
 
-        var all = await db.DashboardVersions.Where(v => v.DashboardId == d.Id).OrderByDescending(v => v.VersionNumber).ToListAsync(ct);
-        foreach (var old in all.Skip(Rules.VersionsKept).Where(v => !v.IsCurrent))
+        // Read the rows fresh from the database (not through the change tracker, which may hold older copies) and trim to the last few.
+        var all = await db.DashboardVersions.AsNoTracking().Where(v => v.DashboardId == d.Id).OrderByDescending(v => v.VersionNumber)
+            .Select(v => new { v.Id, v.VersionNumber, v.FileKey, v.IsCurrent }).ToListAsync(ct);
+        var old = all.Skip(Rules.VersionsKept).Where(v => !v.IsCurrent).ToList();
+        foreach (var v in old)
         {
-            files.Delete(old.FileKey);
-            db.DashboardVersions.Remove(old);
-            audit.Add("dashboard.version-removed", "Dashboard", d.Id, d.Id, new { version = old.VersionNumber, reason = $"Only the last {Rules.VersionsKept} are kept" });
+            files.Delete(v.FileKey);
+            audit.Add("dashboard.version-removed", "Dashboard", d.Id, d.Id, new { version = v.VersionNumber, reason = $"Only the last {Rules.VersionsKept} are kept" });
+        }
+        if (old.Count > 0)
+        {
+            var ids = old.Select(v => v.Id).ToList();
+            await db.DashboardVersions.Where(v => ids.Contains(v.Id)).ExecuteDeleteAsync(ct);
         }
         return number;
     }

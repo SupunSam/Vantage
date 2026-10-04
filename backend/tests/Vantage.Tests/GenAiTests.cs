@@ -205,7 +205,7 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         Assert.Equal(3, r.VersionNumber);
         var live = await k.Db.DashboardVersions.AsNoTracking().SingleAsync(v => v.DashboardId == id && v.IsCurrent);
         Assert.Equal(3, live.VersionNumber);
-        Assert.Equal("Restored from version 1", live.ScanReport);
+        Assert.Equal("Restored from version 1.", live.ScanReport);
         await Assert.ThrowsAsync<RuleException>(() => k.GenAi.RestoreAsync(id, 3, k.Owner.Id)); // already live
     }
 
