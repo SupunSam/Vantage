@@ -27,6 +27,7 @@ public sealed class DashboardVersionService(
     public async Task<ReplaceStatus> ReplaceAsync(int dashboardId, Stream pbix, string fileName, int actorUserId, CancellationToken ct = default)
     {
         if (!fileName.EndsWith(".pbix", StringComparison.OrdinalIgnoreCase)) throw new RuleException("Choose a .pbix file.");
+        await ServiceTypes.EnsureAllowedAsync(db, DashboardType.PowerBi, pbix.CanSeek ? pbix.Length : null, ct);
         var d = await LoadReplaceableAsync(dashboardId, ct);
         await powerBi.EnsureSignInAsync(d.Tenant!, ct); // fail fast before storing anything
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, apiObjectUrl, Icon, Pager, usePaged } from "@vantage/shared";
+import { api, apiObjectUrl, Icon, Pager, useGridPageSize, usePaged } from "@vantage/shared";
 import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "../ui";
 import { NewGroupModal, type GroupRow, type MemberResult } from "./AccessGroupsPage";
 import { RulesPanel } from "./RulesPanel";
@@ -55,7 +55,7 @@ export function AccessGroupDetailPage() {
     const needle = q.trim().toLowerCase();
     return (data?.group.members ?? []).filter((m) => !needle || `${m.displayName ?? ""} ${m.email}`.toLowerCase().includes(needle));
   }, [data, q]);
-  const memberPage = usePaged(members, 25, q);
+  const memberPage = usePaged(members, useGridPageSize(), q);
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <p className="muted">Loading…</p>;

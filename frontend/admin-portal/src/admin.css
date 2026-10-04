@@ -308,3 +308,28 @@ fieldset.plain > .btn { align-self: flex-start; }
 .rule-people ul { list-style: none; margin: 6px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow: auto; }
 
 .rules-head { align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+
+/* Admin Configuration */
+.cfg-cols { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .cfg-cols { grid-template-columns: 1fr; } }
+.cfg-logo { display: grid; place-items: center; min-height: 110px; padding: 14px; background: var(--paper); border: 1px dashed var(--line); border-radius: var(--radius-sm); }
+.cfg-logo img { max-width: 220px; max-height: 80px; object-fit: contain; }
+.cfg-preview { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--radius-sm); color: #fff; }
+.cfg-preview img { width: 34px; height: 34px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+.cfg-badge { font-size: 0.74rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; color: #fff; }
+.cfg-color { display: flex; gap: 8px; align-items: center; }
+.cfg-color input[type="color"] { width: 42px; height: 38px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
+.cfg-color input:not([type="color"]) { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+.cfg-setting { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--line); }
+.cfg-setting:first-of-type { border-top: 0; padding-top: 0; }
+.cfg-setting-text { display: flex; flex-direction: column; gap: 3px; max-width: 640px; }
+.cfg-num { width: 110px; }
+.cfg-text { width: 230px; }
+.cfg-setting input, .cfg-setting select, .requests-table .cfg-num { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; background: var(--surface); color: inherit; }
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap; }
+.switch input { width: 38px; height: 22px; appearance: none; background: var(--line); border-radius: 99px; position: relative; cursor: pointer; transition: background 0.12s; border: 0; padding: 0; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.12s; }
+.switch input:checked { background: var(--brand); }
+.switch input:checked::after { transform: translateX(16px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch input:disabled { opacity: 0.55; cursor: not-allowed; }

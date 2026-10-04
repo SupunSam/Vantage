@@ -13,6 +13,8 @@ import { AccessGroupDetailPage } from "./pages/AccessGroupDetailPage";
 import { AccessRequestsPage } from "./pages/AccessRequestsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { AccessRulesPage } from "./pages/AccessRulesPage";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { ConfigPage } from "./pages/ConfigPage";
 import "./admin.css";
 
 /** The User Portal runs next to this one: port 8081 in the local Docker build. */
@@ -49,9 +51,9 @@ export function App() {
       title: "Platform",
       items: [
         ...(show("tenants") ? [{ to: "/tenants", label: "Tenants", icon: "server" }] : []),
-        ...(show("analytics") ? [{ to: "/analytics", label: "Analytics", icon: "chart", soon: true }] : []),
+        ...(show("analytics") ? [{ to: "/analytics", label: "Analytics", icon: "chart" }] : []),
         ...(show("audit") ? [{ to: "/audit", label: "Audit Log", icon: "history" }] : []),
-        ...(show("admin-config") ? [{ to: "/config", label: "Configuration", icon: "settings", soon: true }] : []),
+        ...(show("admin-config") ? [{ to: "/config", label: "Configuration", icon: "settings" }] : []),
       ],
     },
   ];
@@ -70,6 +72,8 @@ export function App() {
         {show("groups") && <Route path="/access-rules" element={<AccessRulesPage />} />}
         {show("groups") && <Route path="/requests" element={<AccessRequestsPage />} />}
         {show("audit") && <Route path="/audit" element={<AuditLogPage />} />}
+        {show("analytics") && <Route path="/analytics" element={<AnalyticsPage />} />}
+        {show("admin-config") && <Route path="/config" element={<ConfigPage />} />}
         {show("dashboard-config") && <Route path="/dashboards" element={<DashboardsPage />} />}
         {show("dashboard-config") && <Route path="/dashboards/:id" element={<DashboardDetailPage />} />}
         <Route path="*" element={<Navigate to="/" />} />

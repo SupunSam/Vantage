@@ -119,3 +119,6 @@
 .folders-pick li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
 .folders-pick li:last-child { border-bottom: 0; }
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* Owner analytics */
+.an-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; }

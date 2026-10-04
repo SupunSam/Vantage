@@ -9,3 +9,5 @@ export * from "./Requests";
 import "./base.css";
 export * from "./GroupAddRequests";
 export * from "./Pager";
+export * from "./TrendChart";
+export * from "./AnalyticsViews";

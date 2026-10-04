@@ -5,6 +5,7 @@ import { ViewerPage } from "./pages/ViewerPage";
 import { CataloguePage } from "./pages/CataloguePage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { FoldersPage } from "./pages/FoldersPage";
+import { OwnerAnalyticsPage } from "./pages/OwnerAnalyticsPage";
 
 /** The Admin Portal runs next to this one: port 8080 in the local Docker build. */
 const adminPortalUrl = `${window.location.protocol}//${window.location.hostname}:8080`;
@@ -26,7 +27,7 @@ export function App() {
         { to: "/folders", label: "Personal Folders", icon: "folder" },
       ],
     },
-    ...(isOwner ? [{ title: "As an Owner", items: [{ to: "/approvals", label: "Access Requests", icon: "inbox" }] }] : []),
+    ...(isOwner ? [{ title: "As an Owner", items: [{ to: "/approvals", label: "Access Requests", icon: "inbox" }, { to: "/owner-analytics", label: "Analytics", icon: "chart" }] }] : []),
   ];
   const showAdmin = adminModules.some((m) => can(me, m));
 
@@ -38,6 +39,7 @@ export function App() {
         <Route path="/catalogue" element={<CataloguePage />} />
         <Route path="/folders" element={<FoldersPage />} />
         {isOwner && <Route path="/approvals" element={<ApprovalsPage />} />}
+        {isOwner && <Route path="/owner-analytics" element={<OwnerAnalyticsPage />} />}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </AppShell>

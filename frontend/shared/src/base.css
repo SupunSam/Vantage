@@ -222,3 +222,51 @@ code { background: var(--paper); padding: 1px 5px; border-radius: 3px; font-size
 .pager-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-top: 12px; }
 .pager-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pager-controls select { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px 8px; background: var(--surface); color: inherit; }
+
+/* Analytics */
+.an-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.an-tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.an-tile-label { color: var(--muted); font-size: 0.85rem; }
+.an-tile-value { font-size: 1.75rem; font-weight: 600; line-height: 1.2; }
+.an-tile-hint { color: var(--muted); font-size: 0.8rem; }
+.an-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
+.an-detail h3 { font-size: 0.95rem; margin: 18px 0 8px; }
+.requests-table .num, .requests-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Trend chart: one series of thin columns */
+.trend { margin: 0; }
+.trend-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 600; margin-bottom: 8px; }
+.trend-plot { position: relative; outline-offset: 4px; border-radius: 6px; }
+.trend-plot svg { width: 100%; height: auto; display: block; }
+.trend-grid { stroke: var(--line); stroke-width: 1; }
+.trend-axis { fill: var(--muted); font-size: 11px; }
+.trend-bar { fill: var(--brand); }
+.trend-bar-on { fill: color-mix(in srgb, var(--brand) 75%, white); }
+.trend-hit { fill: transparent; cursor: default; }
+.trend-tip { position: absolute; top: 4px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgb(15 30 45 / 0.16); padding: 8px 12px; display: flex; flex-direction: column; gap: 1px; pointer-events: none; white-space: nowrap; z-index: 2; }
+.trend-tip strong { font-size: 1rem; }
+.trend-tip span { color: var(--muted); font-size: 0.82rem; }
+.trend-tip-date { margin-top: 2px; }
+.trend-empty { text-align: center; padding: 8px 0 0; }
+
+/* Small controls both portals use (Admin Portal had its own copies; these make them available everywhere) */
+button.link { background: none; border: 0; padding: 0; color: var(--brand); cursor: pointer; text-align: left; font-weight: 500; font: inherit; }
+button.link:hover { text-decoration: underline; }
+button.link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.input-icon { position: relative; display: block; }
+.input-icon svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.input-icon input { width: 100%; padding-left: 36px !important; }
+.input-compact input { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 8px 6px 32px; min-width: 200px; }
+.panel-row h2 { margin: 0; }
+.panel-row h2 .count { font-weight: 400; font-size: 0.95rem; margin-left: 4px; color: var(--muted); }
+.th-sort { width: 100%; display: inline-flex; align-items: center; gap: 4px; padding: 10px; border: 0; background: none; color: var(--muted); font-weight: 500; cursor: pointer; text-align: left; font: inherit; }
+.th-sort:hover { color: var(--ink); }
+.requests-table th:has(.th-sort) { padding: 0; }
+
+/* Segmented buttons (range pickers, view switches) */
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; height: 44px; }
+.seg button { border: 0; background: none; border-radius: 5px; padding: 0 14px; color: var(--muted); cursor: pointer; font-weight: 500; font-size: 0.9rem; display: inline-grid; place-items: center; }
+.seg-icons button { padding: 0 10px; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--brand); color: #fff; }

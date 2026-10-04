@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, getDevUser, useSession } from "@vantage/shared";
+import { api, can, getDevUser, useGridPageSize, useSession } from "@vantage/shared";
 import { errorText, Modal, Notice, Pill, StatusPill, useApi, when } from "../ui";
 
 type Row = {
@@ -12,6 +12,7 @@ type RoleOption = { id: number; name: string; isSystem: boolean };
 
 export function UsersPage() {
   const { me } = useSession();
+  const gridSize = useGridPageSize();
   const canEdit = can(me, "users", "Edit");
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
@@ -22,7 +23,7 @@ export function UsersPage() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const query = new URLSearchParams({ search, type, status, roleId, page: String(page), pageSize: "25" });
+  const query = new URLSearchParams({ search, type, status, roleId, page: String(page), pageSize: String(gridSize) });
   const { data, error, reload } = useApi<Page>(`/api/admin/users?${query}`);
   const roles = useApi<{ roles: RoleOption[] }>("/api/admin/roles").data?.roles ?? [];
 

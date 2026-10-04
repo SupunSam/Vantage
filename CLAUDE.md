@@ -133,6 +133,8 @@ depends on them:
   - The only override is a Super Admin deciding in the owners' place from the Admin Portal's Access Requests page ("Override Approval"). A reason is required. It goes into the audit log (`overrideReason`) and the group's History, and the owners are notified. The add screens have no override.
   - `AccessGroupService.AddMembersAsync` is the direct primitive behind it; controllers must not call it for admin adds.
   - Moves, removals and the default group at publishing stay direct.
+- **Configuration is data, validated and audited** (C30). Settings live in `SystemSettings`, defined in `ConfigService` (label, kind, limits, whether anything uses it yet). Add a new setting there and in `SettingKeys.Defaults`; never read a setting without a default. Dashboard type on/off and size limits are enforced with `ServiceTypes.EnsureAllowedAsync`.
+- **Analytics counts views, not previews** (C31). A view is a `DashboardViews` row written when a member's embed token is issued. Never write one for a Super Admin preview or any other administrative action.
 - **Access group rules** (C29).
   - A rule (HRMS field equals value, all conditions) proposes adding people to, or removing people from, ONE access group. It never changes membership.
   - `AccessGroupRuleService.RunAsync` sends what it finds to the owners as one `GroupAddRequest` (`Action` Add or Remove, `RuleId`, `RuleName`, no requester). Owners approve in part or in full; only Super Admins manage rules.
@@ -198,7 +200,7 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C30) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C32) and refresh `docs/requirements.md`.
 
 ## Status (3 Oct 2026)
 
@@ -209,6 +211,7 @@ Done:
 - Access Groups (members, move, copy, clone, details, history).
 - User Portal home (cards, categories, list, pins), Dashboard Catalogue, Request Access.
 - Owner approvals, Admin Access Requests, notifications (bell) and the email outbox with Mailpit.
+- Admin Configuration (C30) and Analytics (C31), with owner analytics in the User Portal.
 - Access Group Rules (C29): HRMS-based add and remove proposals that the owners confirm.
 - Owner approval for adding people to access groups (C26): one request per add, approve in part or in full, Super Admin override (Access Requests page only) with a reason.
 - Super Admins preview dashboards without joining any group (C27).
@@ -216,8 +219,7 @@ Done:
 - User Portal **Personal Folders** (page plus a folder button on cards).
 
 Next, in order:
-1. **Admin Configuration**: branding, settings, approved CDNs.
-2. Analytics.
+1. **Scheduled jobs**: HRMS monthly sync, inactivity flag and owner emails, new-hire digest (their settings already exist in Admin Configuration).
 
 Then Tableau and GenAI embedding end to end, then real ADFS/Cognito and the AWS environments.
 

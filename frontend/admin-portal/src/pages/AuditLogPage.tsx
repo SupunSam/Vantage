@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiObjectUrl, Icon } from "@vantage/shared";
+import { api, apiObjectUrl, Icon, useGridPageSize } from "@vantage/shared";
 import { errorText, Modal, Notice, useApi, when } from "../ui";
 
 type Row = {
@@ -11,7 +11,6 @@ type Options = { entityTypes: string[]; actions: string[] };
 type Filters = { from: string; to: string; actor: string; entityType: string; action: string; serviceNow: string; search: string };
 
 const empty: Filters = { from: "", to: "", actor: "", entityType: "", action: "", serviceNow: "", search: "" };
-const PAGE_SIZE = 50;
 
 function queryString(f: Filters) {
   const p = new URLSearchParams();
@@ -37,11 +36,12 @@ export function AuditLogPage() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const applied = useDebounced(filters);
+  const gridSize = useGridPageSize();
   const options = useApi<Options>("/api/admin/audit-log/options");
 
   const qs = queryString(applied);
   qs.set("page", String(page));
-  qs.set("pageSize", String(PAGE_SIZE));
+  qs.set("pageSize", String(gridSize));
   const { data, error, loading } = useApi<Page>(`/api/admin/audit-log?${qs}`);
 
   const set = (k: keyof Filters, v: string) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1); };

@@ -7,7 +7,7 @@ import { useSession } from "./session";
  * Pick any seeded user to see the portal through their roles and group memberships.
  */
 export function DevSignIn({ portalLabel }: { portalLabel: string }) {
-  const { branding, signIn } = useSession();
+  const { branding, signIn, idleNotice } = useSession();
   const [users, setUsers] = useState<DevUser[]>([]);
   const [filter, setFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +37,7 @@ export function DevSignIn({ portalLabel }: { portalLabel: string }) {
         </div>
       </header>
 
+      {idleNotice && <p className="notice">{idleNotice}</p>}
       {error && <p className="notice notice-error">{error}</p>}
 
       <label className="field">

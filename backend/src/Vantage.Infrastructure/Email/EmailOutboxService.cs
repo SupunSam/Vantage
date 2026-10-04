@@ -96,6 +96,9 @@ public sealed class EmailSenderWorker(IServiceScopeFactory scopes, IOptions<Emai
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        // Admin Configuration can switch sending off; the emails then wait in the outbox until it is switched on again.
+        var sendEmails = await db.SystemSettings.Where(s => s.Key == SettingKeys.EmailEnabled).Select(s => s.Value).SingleOrDefaultAsync(ct);
+        if (string.Equals(sendEmails, "false", StringComparison.OrdinalIgnoreCase)) return;
         var batch = await db.EmailOutbox.Where(e => e.Status == EmailStatus.Pending && e.Attempts < MaxAttempts)
             .OrderBy(e => e.CreatedAtUtc).Take(20).ToListAsync(ct);
         if (batch.Count == 0) return;

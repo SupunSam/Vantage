@@ -28,6 +28,7 @@ public sealed class PublishingService(
     {
         if (!req.FileName.EndsWith(".pbix", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Choose a .pbix file.");
+        await ServiceTypes.EnsureAllowedAsync(db, DashboardType.PowerBi, pbix.CanSeek ? pbix.Length : null, ct);
 
         var workspace = await db.PowerBiWorkspaces.Include(w => w.Tenant)
             .SingleOrDefaultAsync(w => w.Id == req.WorkspaceId && w.IsActive && w.Tenant.IsActive, ct)

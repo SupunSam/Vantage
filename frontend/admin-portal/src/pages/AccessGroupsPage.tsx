@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, can, Icon, Pager, useSession, usePaged } from "@vantage/shared";
+import { api, can, Icon, Pager, useGridPageSize, useSession, usePaged } from "@vantage/shared";
 import { errorText, Modal, Notice, StatusPill, useApi } from "../ui";
 
 export type GroupRow = {
@@ -30,7 +30,7 @@ export function AccessGroupsPage() {
       && (!needle || [g.name, g.dashboard, g.dashboardCode, g.rlsValue].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, status, dashboardId]);
 
-  const paged = usePaged(rows, 25, `${q}|${status}|${dashboardId}`);
+  const paged = usePaged(rows, useGridPageSize(), `${q}|${status}|${dashboardId}`);
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <p className="muted">Loading…</p>;

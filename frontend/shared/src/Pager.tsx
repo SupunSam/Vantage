@@ -10,6 +10,7 @@ export function usePaged<T>(items: readonly T[], initialSize = 10, resetKey?: un
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(initialSize);
   useEffect(() => setPage(1), [resetKey]);
+  useEffect(() => setSize(initialSize), [initialSize]); // the configured default arrives after the first render
   const pages = Math.max(1, Math.ceil(items.length / size));
   const current = Math.min(page, pages);
   const pager: PagerState = { page: current, pages, size, total: items.length, onPage: setPage, onSize: (n) => { setSize(n); setPage(1); } };
