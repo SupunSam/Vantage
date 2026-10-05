@@ -16,7 +16,7 @@ type Session = {
   signOut: () => void;
 };
 
-const IDLE_NOTICE_KEY = "rd.idleNotice";
+const IDLE_NOTICE_KEY = "vantage.idleNotice";
 
 /** The "signed out for being idle" message, kept across the reload that returns to the sign-in page. Cleared on the next sign-in. */
 function readIdleNotice(): string | null {

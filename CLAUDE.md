@@ -5,7 +5,7 @@ changing behaviour.
 
 ## What Vantage is
 
-Vantage (formerly "RD Dashboard", PRF#1484) is the corporate BI portal. It replaces a .NET 4.8 MVC portal.
+Vantage (formerly RRD Dashboards, PRF#1484) is the corporate BI portal. It replaces a .NET 4.8 MVC portal.
 - It registers Power BI, Tableau Server and GenAI (single HTML) dashboards.
 - It controls who sees each dashboard through access groups.
 - It embeds Power BI on F64 capacity, so viewers need no Power BI licence.
@@ -15,7 +15,7 @@ Sizing: about 1,000 users and 100 to 150 dashboards, 80 to 85% of them Power BI.
 Requirements:
 - The live requirements and decisions log is a Claude Doc:
   https://claude.ai/code/artifact/23091f2e-8231-484a-9f67-405ece572694
-- `docs/requirements.md` is a snapshot of it (decisions C1–C23).
+- `docs/requirements.md` is a snapshot of it (decisions C1–C48).
 - The original SRS is "SRS_RD_Dashboard - Dev Version.pdf", kept in the claude.ai project "DashboardRevamp", not in git.
 
 ## Components
@@ -104,14 +104,17 @@ own database. All tests must pass before a change is done (CI runs the SQL ones)
 
 ## Names that must NOT change
 
-The repo was renamed from RdDashboard to Vantage on 3 Oct 2026. These identifiers stay as they were because data
-depends on them:
-- **Database `RDDashboard` and login `rd_app`.** Used in the compose connection string and `init.sql`.
-- **Docker volumes `rd-dashboard_sqldata` and `rd-dashboard_appdata`.** Pinned with `name:` in the compose file.
+Everything is named Vantage (C48, 4 Oct 2026). These identifiers now stay as they are because data depends on them:
+- **Database `Vantage` and login `vantage_app`.** Used in the compose connection string and `init.sql`.
+- **Docker volumes `vantage_sqldata` and `vantage_appdata`.** Created by the compose project name `vantage`.
   They hold the database, uploaded files and Data Protection keys.
-- **Data Protection.** `SetApplicationName("RdDashboard")` in `DependencyInjection.cs` and the protector purpose
-  `"RdDashboard.Secrets.v1"` in `SecretStore.cs`. Changing either makes stored tenant secrets unreadable.
+- **Data Protection.** `SetApplicationName("Vantage")` in `DependencyInjection.cs` and the protector purpose
+  `"Vantage.Secrets.v1"` in `SecretStore.cs`. Changing either makes stored tenant secrets unreadable.
 - **EF migration IDs** (the `__EFMigrationsHistory` rows). Never rename existing migrations.
+
+An install made before C48 (database `RDDashboard`, login `rd_app`, volumes `rd-dashboard_*`) upgrades once:
+`init.sql` renames the database and login in place, and `docs/deployment/04-upgrade-from-the-old-names.md` has the
+volume copy. Those old names appear only in that script and that guide. Don't introduce them anywhere else.
 
 ## Domain rules (enforced in services, covered by tests)
 
@@ -229,9 +232,9 @@ depends on them:
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C48) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C49) and refresh `docs/requirements.md`.
 
-## Status (3 Oct 2026)
+## Status (4 Oct 2026)
 
 Done:
 - Roles, Users (HRMS lookup and sync), Tenants with Verify.
@@ -251,6 +254,8 @@ Done:
 - Sign-in page, Home pages, Log Out (C45): internal/external login choice, Admin Home with stats and charts, User Portal Home with a Personal Folders tab, Owner Workspace menu.
 - Follow-ups (C39 to C44): Super Admin-only user creation and publishing, separate portal sessions, Analytics dashboard-type filter, dashboards go Inactive when their owners leave.
 - GenAI dashboards (C32, C33): starter template, vetted upload (rule check plus optional ClamAV scan, Super Admin only), publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
+- Names unified (C48): database `Vantage`, login `vantage_app`, volumes `vantage_*`, Data Protection names, browser storage keys. One-time upgrade for older installs in `docs/deployment/04-upgrade-from-the-old-names.md`.
+- Deployment guides (`docs/deployment/`): Docker on Windows 11, Visual Studio without Docker, Visual Studio Code (Docker or not), and Azure DevOps to AWS Dev with a proposed Dev costing. The AWS deploy is a plan only: the API still starts only in Development (real sign-in, migrations on deploy, S3 and durable keys come first).
 
 Next (parked by the owner for now): Tableau Server test site, real ADFS/Cognito sign-in with separate sessions per portal, the AWS environments, and the migration from the .NET 4.8 portal (U7, in scope, last).
 

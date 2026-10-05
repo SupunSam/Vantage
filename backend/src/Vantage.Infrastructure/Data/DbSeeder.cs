@@ -113,9 +113,6 @@ public sealed class DbSeeder(AppDbContext db, TimeProvider clock, ILogger<DbSeed
                 db.SystemSettings.Add(new SystemSetting { Key = key, Value = value, Description = description, UpdatedAtUtc = Now });
         var retired = await db.SystemSettings.Where(s => SettingKeys.Retired.Contains(s.Key)).ToListAsync(ct);
         db.SystemSettings.RemoveRange(retired);
-        // The portal was renamed from "RD Dashboard" to Vantage (3 Oct 2026); update the name unless someone already changed it.
-        var name = await db.SystemSettings.SingleOrDefaultAsync(s => s.Key == SettingKeys.BrandPortalName, ct);
-        if (name is { Value: "RD Dashboard" }) { name.Value = "Vantage"; name.UpdatedAtUtc = Now; }
         await db.SaveChangesAsync(ct);
     }
 

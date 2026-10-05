@@ -33,7 +33,7 @@ type SortKey = "name" | "category" | "owner" | "type" | "published";
 const typeLabel: Record<MyDashboard["type"], string> = { PowerBi: "Power BI", Tableau: "Tableau", GenAi: "GenAI" };
 const NEW_DAYS = 14;
 const MAX_PINS = 12;
-const PREFS_KEY = "rd.homeView";
+const PREFS_KEY = "vantage.homeView";
 
 type Sort = { key: SortKey; desc: boolean };
 const SORT_KEYS: { key: SortKey; label: string }[] = [

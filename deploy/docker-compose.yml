@@ -25,8 +25,8 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  # Runs once: creates the RDDashboard database, the rd_app login and the dummy HRMS table, then exits.
-  # (The database and login keep their original names so existing data carries over.)
+  # Runs once: creates the Vantage database, the vantage_app login and the dummy HRMS table, then exits.
+  # (An older install's database and login are renamed in place; see deploy/db/init.sql.)
   db-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
     depends_on:
@@ -54,7 +54,7 @@ services:
         condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development      # local build: dev sign-in picker instead of ADFS/Cognito
-      ConnectionStrings__Default: "Server=db,1433;Database=RDDashboard;User Id=rd_app;Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=True"
+      ConnectionStrings__Default: "Server=db,1433;Database=Vantage;User Id=vantage_app;Password=${APP_DB_PASSWORD};TrustServerCertificate=True;Encrypt=True"
       DataProtection__KeysPath: /data/keys     # encrypts the secrets entered in the Tenant Master
       Storage__LocalPath: /data/files          # uploaded .pbix files and thumbnails
       Bootstrap__SuperAdminEmail: ${SUPER_ADMIN_EMAIL:-nimal.perera@rrd.com}
@@ -124,10 +124,8 @@ services:
       - "8025:8025"
     restart: unless-stopped
 
-# The volumes keep the names they had when the project was called rd-dashboard, so the database,
-# uploaded files and encryption keys carry over.
+# Named volumes, created as vantage_sqldata and vantage_appdata (the project name is vantage):
+# the database, uploaded files and encryption keys.
 volumes:
   sqldata:
-    name: rd-dashboard_sqldata
   appdata:
-    name: rd-dashboard_appdata

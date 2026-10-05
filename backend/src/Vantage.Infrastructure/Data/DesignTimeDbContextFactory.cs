@@ -8,8 +8,8 @@ public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<App
 {
     public AppDbContext CreateDbContext(string[] args)
     {
-        var cs = Environment.GetEnvironmentVariable("RD_DESIGN_CONNECTION")
-                 ?? "Server=localhost,1433;Database=RDDashboard;Integrated Security=false;TrustServerCertificate=True";
+        var cs = Environment.GetEnvironmentVariable("VANTAGE_DESIGN_CONNECTION")
+                 ?? "Server=localhost,1433;Database=Vantage;Integrated Security=false;TrustServerCertificate=True";
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlServer(cs, sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", "app"))
             .Options;

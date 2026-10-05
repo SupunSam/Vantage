@@ -1,6 +1,6 @@
 # Vantage
 
-Vantage (formerly the RD Dashboard portal) is the corporate BI portal for Power BI and Tableau dashboards.
+Vantage (formerly RRD Dashboards) is the corporate BI portal for Power BI and Tableau dashboards.
 `CLAUDE.md` describes the components, structure, rules and conventions; `docs/requirements.md` holds the
 requirements and decisions.
 
@@ -64,6 +64,10 @@ The first start takes a few minutes while the images build. In Docker Desktop th
 six containers: `vantage-db`, `db-init` (runs once and stops, which is expected), `vantage-api`, `vantage-admin`,
 `vantage-user` and `vantage-mail`.
 
+Deployment guides (run with Docker on Windows 11, run without Docker in Visual Studio or in Visual Studio Code, and the
+Azure DevOps to AWS plan) are in `docs/deployment/`. If you ran Vantage before 4 Oct 2026, follow
+`docs/deployment/04-upgrade-from-the-old-names.md` once before you start the new version.
+
 ## Settings
 
 `deploy/.env` holds the SQL Server passwords and the bootstrap Super Admin's email. It's created once and is never
@@ -75,7 +79,7 @@ committed. `deploy/.env.example` shows the format.
 | 8081 | User Portal (and the API under /api) |
 | 8082 | GenAI dashboards (framed by the portals; signed links only) |
 | 8025 | Mailpit: the emails Vantage has sent |
-| 1433 | SQL Server, for SSMS or Azure Data Studio: `localhost,1433`, login `sa` or `rd_app` with the passwords in `deploy/.env` |
+| 1433 | SQL Server, for SSMS or Azure Data Studio: `localhost,1433`, login `sa` or `vantage_app` with the passwords in `deploy/.env` |
 
 If your network inspects HTTPS traffic and **Verify connection** says the certificate isn't trusted, put your
 company's root certificate (.crt) in `deploy/certs` and run the start command again.

@@ -1,4 +1,4 @@
-const DEV_USER_KEY = "rd.devUser";
+const DEV_USER_KEY = "vantage.devUser";
 
 export function getDevUser(): string | null {
   try {

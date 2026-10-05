@@ -30,8 +30,8 @@ public static class DependencyInjection
 
         services.AddSingleton(TimeProvider.System);
         // Secrets are encrypted with Data Protection; keys persist in DataProtection:KeysPath (a Docker volume).
-        // The application name predates the Vantage rename; keep it, or the existing keys stop decrypting stored secrets.
-        var dp = services.AddDataProtection().SetApplicationName("RdDashboard");
+        // Keep this application name: changing it makes stored tenant secrets unreadable.
+        var dp = services.AddDataProtection().SetApplicationName("Vantage");
         if (config["DataProtection:KeysPath"] is { Length: > 0 } keysPath) dp.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
         services.AddScoped<ISecretStore, DbSecretStore>();
         services.AddScoped<IPowerBiTokenProvider, MsalPowerBiTokenProvider>();
