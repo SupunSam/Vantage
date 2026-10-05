@@ -255,7 +255,7 @@ Done:
 - Follow-ups (C39 to C44): Super Admin-only user creation and publishing, separate portal sessions, Analytics dashboard-type filter, dashboards go Inactive when their owners leave.
 - GenAI dashboards (C32, C33): starter template, vetted upload (rule check plus optional ClamAV scan, Super Admin only), publish/modify/restore, signed links on a separate origin, sandboxed viewer in both portals.
 - Names unified (C48): database `Vantage`, login `vantage_app`, volumes `vantage_*`, Data Protection names, browser storage keys. One-time upgrade for older installs in `docs/deployment/04-upgrade-from-the-old-names.md`.
-- Deployment guides (`docs/deployment/`): Docker on Windows 11, Visual Studio without Docker, and Azure DevOps to AWS Dev with a proposed Dev costing. The AWS deploy is a plan only: the API still starts only in Development (real sign-in, migrations on deploy, S3 and durable keys come first).
+- Deployment guides (`docs/deployment/`): Docker on Windows 11, Visual Studio without Docker, Visual Studio Code (Docker or not), and Azure DevOps to AWS Dev with a proposed Dev costing. The AWS deploy is a plan only: the API still starts only in Development (real sign-in, migrations on deploy, S3 and durable keys come first).
 
 Next (parked by the owner for now): Tableau Server test site, real ADFS/Cognito sign-in with separate sessions per portal, the AWS environments, and the migration from the .NET 4.8 portal (U7, in scope, last).
 

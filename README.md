@@ -64,8 +64,8 @@ The first start takes a few minutes while the images build. In Docker Desktop th
 six containers: `vantage-db`, `db-init` (runs once and stops, which is expected), `vantage-api`, `vantage-admin`,
 `vantage-user` and `vantage-mail`.
 
-Deployment guides (run with Docker on Windows 11, run without Docker in Visual Studio, and the Azure DevOps to AWS
-plan) are in `docs/deployment/`. If you ran Vantage before 4 Oct 2026, follow
+Deployment guides (run with Docker on Windows 11, run without Docker in Visual Studio or in Visual Studio Code, and the
+Azure DevOps to AWS plan) are in `docs/deployment/`. If you ran Vantage before 4 Oct 2026, follow
 `docs/deployment/04-upgrade-from-the-old-names.md` once before you start the new version.
 
 ## Settings
