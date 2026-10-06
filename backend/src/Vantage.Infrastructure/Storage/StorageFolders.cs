@@ -43,7 +43,7 @@ public static class StorageFolders
     /// <summary>`folder/dashboardId/vN/name_yyyyMMdd-HHmmss.ext`; the stored FileName stays the original name.</summary>
     public static string Key(string folder, int dashboardId, int version, string fileName, DateTime utcNow)
     {
-        var name = Path.GetFileName(fileName);
+        var name = Path.GetFileName(fileName.Replace('\\', '/'));
         return $"{folder}/{dashboardId}/v{version}/{Path.GetFileNameWithoutExtension(name)}_{utcNow:yyyyMMdd-HHmmss}{Path.GetExtension(name)}";
     }
 }
