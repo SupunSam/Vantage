@@ -1,4 +1,5 @@
 import { ToastProvider } from "./Toast";
+import { ConfirmProvider } from "./Feedback";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, getDevUser, setDevUser, type Branding, type Me } from "./api";
 
@@ -137,5 +138,5 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => { events.forEach((e) => window.removeEventListener(e, touch)); window.clearInterval(timer); };
   }, [me, settings.idleTimeoutMinutes, endSession]);
 
-  return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}><ToastProvider seconds={settings.toastSeconds}>{children}</ToastProvider></SessionContext.Provider>;
+  return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}><ToastProvider seconds={settings.toastSeconds}><ConfirmProvider>{children}</ConfirmProvider></ToastProvider></SessionContext.Provider>;
 }

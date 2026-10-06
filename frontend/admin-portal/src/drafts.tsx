@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, Icon, useFlash } from "@vantage/shared";
+import { api, Icon, useFlash, useConfirm } from "@vantage/shared";
 import { errorText, when } from "@vantage/shared";
 
 type DraftRow = { id: number; type: string; title: string; payload: string; updatedAtUtc: string };
@@ -68,6 +68,7 @@ export type DraftState = ReturnType<typeof useDraft>;
 
 /** Resume or delete a saved draft. Shown above the publish form; hidden when there are none. */
 export function DraftPicker({ draft }: { draft: DraftState }) {
+  const confirm = useConfirm();
   if (draft.drafts.length === 0) return null;
   return (
     <div className="draft-picker">
@@ -80,7 +81,7 @@ export function DraftPicker({ draft }: { draft: DraftState }) {
       </label>
       {draft.id !== null && (
         <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" title="Delete this draft" aria-label="Delete this draft"
-          onClick={() => window.confirm("Delete this draft?") && void draft.remove(draft.id!)}><Icon name="trash" size={18} /></button>
+          onClick={async () => { if (await confirm({ title: "Delete Draft", message: "Delete this draft? You can't get it back.", confirmLabel: "Delete", danger: true })) void draft.remove(draft.id!); }}><Icon name="trash" size={18} /></button>
       )}
     </div>
   );

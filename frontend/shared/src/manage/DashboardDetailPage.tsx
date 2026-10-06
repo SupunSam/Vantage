@@ -12,6 +12,8 @@ import { errorText, Modal, Notice, StatusPill, useApi, when } from "./ui";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "./fields";
 import type { CategoryNode } from "./fields";
 import { useManage } from "./routes";
+import { PageSkeleton, ErrorState, EmptyState } from "../Feedback";
+import { useConfirm } from "../Feedback";
 
 type Group = { id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; members: { email: string; displayName: string | null; source: string }[] };
 type Detail = {
@@ -85,8 +87,8 @@ export function DashboardDetailPage() {
     return () => { stop = true; window.clearTimeout(timer); };
   }, [replacing, id, reload]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="detail" />;
   const d = data.dashboard;
   const say = (ok: boolean, text: string) => setMessage({ ok, text });
   const needsRls = d.rlsEnabled && d.groups.some((g) => g.status === "Active" && !g.rlsValue);
@@ -211,6 +213,7 @@ function ModifyDialog({ dashboard, onClose, onDone }: { dashboard: Detail["dashb
 }
 
 function VersionsTab({ data, onRestored, onError }: { data: Detail; onRestored: (r: ReplaceStatus) => void; onError: (t: string) => void }) {
+  const confirm = useConfirm();
   const d = data.dashboard;
   const [downloading, setDownloading] = useState<number | null>(null);
   const busy = d.replaceVersionNumber != null;
@@ -235,7 +238,7 @@ function VersionsTab({ data, onRestored, onError }: { data: Detail; onRestored: 
 
   async function restore(v: Version) {
     const what = d.type === "GenAi" ? "That file goes live again" : "Power BI re-imports that file over the live report";
-    if (!window.confirm(`Restore version ${v.versionNumber} (${v.fileName})? ${what}. It becomes the newest version; the current file stays available as a version.`)) return;
+    if (!(await confirm({ title: "Restore Version", message: `Restore version ${v.versionNumber} (${v.fileName})? ${what}. It becomes the newest version; the current file stays available as a version.`, confirmLabel: "Restore" }))) return;
     try {
       const r = await api<ReplaceStatus>(`/api/admin/dashboards/${d.id}/versions/${v.versionNumber}/restore`, { method: "POST" });
       onRestored(r);
@@ -382,6 +385,7 @@ function DetailsTab({ data, onSaved, onError }: { data: Detail; onSaved: (t: str
 }
 
 function ThumbnailPanel({ data, onSaved, onError }: { data: Detail; onSaved: (t: string) => void; onError: (t: string) => void }) {
+  const confirm = useConfirm();
   const d = data.dashboard;
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -403,7 +407,7 @@ function ThumbnailPanel({ data, onSaved, onError }: { data: Detail; onSaved: (t:
   }
 
   async function remove() {
-    if (!window.confirm("Remove the thumbnail? The type drawing is shown instead.")) return;
+    if (!(await confirm({ title: "Remove Thumbnail", message: "Remove the thumbnail? The type drawing is shown instead.", confirmLabel: "Remove", danger: true }))) return;
     try {
       await api(`/api/admin/dashboards/${d.id}/thumbnail`, { method: "DELETE" });
       onSaved("Thumbnail removed.");
@@ -445,7 +449,7 @@ function DetailsForm({ data, onCancel, onSaved, onError }: { data: Detail; onCan
   const [subFolder, setSubFolder] = useState(d.sharePointSubFolder ?? "");
   const [busy, setBusy] = useState(false);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <ErrorState>{error}</ErrorState>;
   if (!options) return <p className="muted">Loading…</p>;
 
   async function save(e: FormEvent) {
@@ -660,9 +664,9 @@ function PreviewTab({ data }: { data: Detail }) {
   const [show, setShow] = useState(false);
   const group = usable.find((g) => g.id === groupId);
 
-  if (d.status !== "Active") return <div className="empty"><h2>Preview Is Available Once the Dashboard Is Active</h2><p>It's {d.status.toLowerCase()} right now.</p></div>;
-  if (!data.canPreview) return <div className="empty"><h2>Previews Are for Super Admins</h2><p>Open the dashboards you have access to in the User Portal.</p></div>;
-  if (usable.length === 0) return <div className="empty"><h2>No Group to Preview Through</h2><p>This report uses row-level security and none of its groups has an RLS value yet. Set one on the Access Groups tab.</p></div>;
+  if (d.status !== "Active") return <EmptyState icon="dashboards" title="Preview Is Available Once the Dashboard Is Active">It's {d.status.toLowerCase()} right now.</EmptyState>;
+  if (!data.canPreview) return <EmptyState icon="dashboards" title="Previews Are for Super Admins">Open the dashboards you have access to in the User Portal.</EmptyState>;
+  if (usable.length === 0) return <EmptyState icon="dashboards" title="No Group to Preview Through">This report uses row-level security and none of its groups has an RLS value yet. Set one on the Access Groups tab.</EmptyState>;
 
   return (
     <section className="panel">

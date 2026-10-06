@@ -6,6 +6,7 @@ import { api } from "../api";
 import { can, useGridPageSize, useSession } from "../session";
 import { errorText, Modal, Notice, StatusPill, useApi } from "./ui";
 import { useManage } from "./routes";
+import { PageSkeleton, ErrorState } from "../Feedback";
 
 export type GroupRow = {
   id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; createdAtUtc: string;
@@ -37,8 +38,8 @@ export function AccessGroupsPage() {
 
   const paged = usePaged(rows, useGridPageSize(), `${q}|${status}|${dashboardId}`);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" />;
 
   const totalMembers = data.filter((g) => g.status === "Active").reduce((n, g) => n + g.members, 0);
 

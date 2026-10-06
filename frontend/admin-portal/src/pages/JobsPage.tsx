@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, can, Icon, useGridPageSize, useSession, useFlash } from "@vantage/shared";
+import { api, can, Icon, useGridPageSize, useSession, useFlash, PageSkeleton } from "@vantage/shared";
 import { Link } from "react-router-dom";
 import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
@@ -88,7 +88,7 @@ export function JobsPage() {
         <button className="btn" type="button" onClick={refresh}><Icon name="refresh" size={18} /> Refresh</button>
       </div>
 
-      {!jobs.data ? <p className="muted">Loading…</p> : (
+      {!jobs.data ? <PageSkeleton kind="table" head={false} /> : (
         <div className="stack">
           {jobs.data.map((j) => (
             <section key={j.name} className="panel job-card">

@@ -1,5 +1,5 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
-import { AppShell, can, SignInPage, useSession, type NavSection, AccessGroupDetailPage, DashboardDetailPage, DashboardsPage, ManageScope, ownerRoutes } from "@vantage/shared";
+import { AppShell, can, SignInPage, useSession, type NavSection, AccessGroupDetailPage, DashboardDetailPage, DashboardsPage, ManageScope, ownerRoutes, PageSkeleton } from "@vantage/shared";
 import { HomePage } from "./pages/HomePage";
 import { ViewerPage } from "./pages/ViewerPage";
 import { CataloguePage } from "./pages/CataloguePage";
@@ -18,7 +18,7 @@ const adminModules = ["publishing", "dashboard-config", "directory", "categories
 export function App() {
   const { me, loading } = useSession();
 
-  if (loading) return <p className="content muted">Loading…</p>;
+  if (loading) return <div className="content"><PageSkeleton kind="page" /></div>;
   if (!me) return <SignInPage portalLabel="User Portal" />;
 
   const isOwner = me.roles.includes("Dashboard Owner");

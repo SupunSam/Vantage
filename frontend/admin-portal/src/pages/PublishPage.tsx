@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, useSession, useFlash, useBiTypes } from "@vantage/shared";
+import { api, can, useSession, useFlash, useBiTypes, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
@@ -92,18 +92,14 @@ function PublishPowerBiPage() {
     if (me) setPrimaryOwnerId(String(me.id));
   }, [options, tenantId, me]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!options || !me) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!options || !me) return <PageSkeleton kind="page" />;
 
   if (options.categories.length === 0) {
     return (
       <>
         <div className="page-head"><div><h1>Publish a Power BI Dashboard</h1></div></div>
-        <div className="empty">
-          <h2>Add a Category First</h2>
-          <p>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</p>
-          {can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}
-        </div>
+        <EmptyState icon="categories" title="Add a Category First" action={<>{can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}</>}>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</EmptyState>
       </>
     );
   }
@@ -112,11 +108,7 @@ function PublishPowerBiPage() {
     return (
       <>
         <div className="page-head"><div><h1>Publish a Power BI Dashboard</h1></div></div>
-        <div className="empty">
-          <h2>No Verified Tenant Yet</h2>
-          <p>Publishing needs a Power BI tenant whose connection and permissions have been verified.</p>
-          <Link className="btn btn-primary" to="/tenants">Go to Tenants</Link>
-        </div>
+        <EmptyState icon="server" title="No Verified Tenant Yet" action={<><Link className="btn btn-primary" to="/tenants">Go to Tenants</Link></>}>Publishing needs a Power BI tenant whose connection and permissions have been verified.</EmptyState>
       </>
     );
   }

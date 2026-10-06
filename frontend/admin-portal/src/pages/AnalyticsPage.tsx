@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, Pager, RangePicker, TypePicker, typeParam, usePaged, type Overview } from "@vantage/shared";
+import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, Pager, RangePicker, TypePicker, typeParam, usePaged, type Overview, PageSkeleton } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 const BASE = "/api/admin/analytics";
@@ -47,7 +47,7 @@ export function AnalyticsPage() {
 
       {tab === "overview" && (
         overview.error ? <Notice tone="error">{overview.error}</Notice>
-          : !overview.data ? <p className="muted">Loading…</p>
+          : !overview.data ? <PageSkeleton kind="tiles" head={false} />
           : <OverviewPanel o={overview.data} scopeLabel="active dashboards" onOpenDashboard={setSelected} />
       )}
       {tab === "dashboards" && <DashboardsPanel base={BASE} days={days} type={type} exportPath={`${BASE}/dashboards/export`} onOpen={setSelected} />}

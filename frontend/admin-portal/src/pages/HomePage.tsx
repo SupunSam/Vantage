@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { TrendChart, useSession } from "@vantage/shared";
-import { Notice, useApi, when } from "@vantage/shared";
+import { TrendChart, useSession, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
+import { useApi, when } from "@vantage/shared";
 
 type Home = {
   dashboards: { live: number; inactive: number; notLive: number; liveByType: { key: string; count: number }[] } | null;
@@ -27,8 +27,8 @@ const n = (v: number) => v.toLocaleString();
 export function HomePage() {
   const { me } = useSession();
   const { data, error } = useApi<Home>("/api/admin/home");
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="tiles" />;
 
   const firstName = me?.displayName.split(" ")[0];
   const waiting = data.requests ? data.requests.accessRequests + data.requests.groupAdditions : 0;
@@ -43,7 +43,7 @@ export function HomePage() {
         </div>
       </div>
 
-      {!hasAnything && <div className="empty"><h2>Welcome</h2><p>Use the menu to open the parts of the Admin Portal your role allows.</p></div>}
+      {!hasAnything && <EmptyState icon="home" title="Welcome">Use the menu to open the parts of the Admin Portal your role allows.</EmptyState>}
 
       <div className="an-tiles">
         {data.dashboards && <HomeTile to="/dashboards" label="Live Dashboards" value={n(data.dashboards.live)} hint={data.dashboards.inactive ? `${n(data.dashboards.inactive)} inactive` : "all live"} />}

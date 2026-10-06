@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiObjectUrl, Icon, useGridPageSize } from "@vantage/shared";
+import { api, apiObjectUrl, Icon, useGridPageSize, PageSkeleton, ErrorState } from "@vantage/shared";
 import { errorText, Modal, Notice, useApi, when } from "@vantage/shared";
 
 type Row = {
@@ -63,7 +63,7 @@ export function AuditLogPage() {
     } catch (e) { setExportError(errorText(e)); } finally { setExporting(false); }
   }
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <ErrorState>{error}</ErrorState>;
 
   return (
     <>
@@ -109,7 +109,7 @@ export function AuditLogPage() {
         <span className="muted small filters-count">{data ? `${data.total.toLocaleString()} ${data.total === 1 ? "entry" : "entries"}` : ""}</span>
       </div>
 
-      {!data ? <p className="muted">Loading…</p> : data.rows.length === 0 ? (
+      {!data ? <PageSkeleton kind="table" head={false} /> : data.rows.length === 0 ? (
         <p className="muted">{filtered ? "No entries match these filters." : "Nothing has been logged yet."}</p>
       ) : (
         <div className="table-wrap" aria-busy={loading}>

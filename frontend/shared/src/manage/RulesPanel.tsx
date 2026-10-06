@@ -7,6 +7,8 @@ import { api } from "../api";
 import { errorText, Modal, Notice, Pill, useApi, when } from "./ui";
 import type { GroupRow } from "./AccessGroupsPage";
 import { useManage } from "./routes";
+import { PageSkeleton, ErrorState, EmptyState } from "../Feedback";
+import { useConfirm } from "../Feedback";
 
 type Condition = { field: string; value: string };
 type Rule = {
@@ -30,6 +32,7 @@ const toBody = (r: Rule): Draft => ({ groupId: r.groupId, name: r.name, action: 
  */
 export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged?: () => void }) {
   const routes = useManage();
+  const confirm = useConfirm();
   const { data, error, reload } = useApi<Data>(`/api/admin/access-rules${fixed ? `?groupId=${fixed.groupId}` : ""}`);
   const groups = useApi<GroupRow[]>(fixed ? null : "/api/admin/access-groups");
   const values = useApi<Record<string, string[]>>("/api/admin/access-rules/field-values");
@@ -39,8 +42,8 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
   const [busy, setBusy] = useState<number | "all" | null>(null);
   const paged = usePaged(data?.rules ?? [], 10);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" head={false} />;
   const fieldLabel = (key: string) => data.fields.find((f) => f.key === key)?.label ?? key;
   const changed = () => { reload(); onChanged?.(); };
 
@@ -65,7 +68,7 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
   }
 
   async function remove(rule: Rule) {
-    if (!window.confirm(`Delete the rule “${rule.name}”? Requests it already sent to the owners stay as they are.`)) return;
+    if (!(await confirm({ title: "Delete Rule", message: `Delete the rule “${rule.name}”? Requests it already sent to the owners stay as they are.`, confirmLabel: "Delete", danger: true }))) return;
     try { await api(`/api/admin/access-rules/${rule.id}`, { method: "DELETE" }); setMessage({ ok: true, text: `Deleted “${rule.name}”.` }); changed(); } catch (e) { setMessage({ ok: false, text: errorText(e) }); }
   }
 
@@ -85,7 +88,7 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
       {!data.canEdit && <Notice>Only Super Admins can create, change or run rules. You can see them here.</Notice>}
 
       {data.rules.length === 0 ? (
-        <div className="empty"><h2>No Rules Yet</h2><p>{data.canEdit ? "Create a rule to keep this access group in step with the HRMS data, with the owners always confirming." : "No Super Admin has created a rule yet."}</p></div>
+        <EmptyState icon="list" title="No Rules Yet">{data.canEdit ? "Create a rule to keep this access group in step with the HRMS data, with the owners always confirming." : "No Super Admin has created a rule yet."}</EmptyState>
       ) : (
         <>
           <div className="table-wrap">

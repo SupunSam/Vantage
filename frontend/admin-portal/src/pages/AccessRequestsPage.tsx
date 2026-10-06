@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash } from "@vantage/shared";
-import { Notice, useApi } from "@vantage/shared";
+import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash, PageSkeleton, ErrorState } from "@vantage/shared";
+import { useApi } from "@vantage/shared";
 
 type Data = { pending: number; canDecide: boolean; rows: AccessRequestRow[] };
 const filters = [
@@ -18,7 +18,7 @@ export function AccessRequestsPage() {
   const adds = useApi<{ pending: number; rows: GroupAddRow[] }>(`/api/admin/group-add-requests${status ? `?status=${status}` : ""}`);
   const setMessage = useFlash();
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
 
   return (
     <>
@@ -49,7 +49,7 @@ export function AccessRequestsPage() {
           <h2 className="requests-sub">Requests From People</h2>
         </>
       )}
-      {!data ? <p className="muted">Loading…</p> : (
+      {!data ? <PageSkeleton kind="table" head={false} /> : (
         <RequestReviewList rows={data.rows} canDecide={data.canDecide} onChanged={(m) => { setMessage(m); reload(); }}
           dashboardLink={(id) => `/dashboards/${id}`}
           emptyText={status === "Pending" ? "No requests are waiting." : "No requests here."} />

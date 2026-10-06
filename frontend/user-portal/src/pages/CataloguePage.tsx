@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, whenText, useFlash, BiInactiveBadge } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, whenText, useFlash, BiInactiveBadge, PageSkeleton, ErrorState } from "@vantage/shared";
 
 type Item = {
   id: number; name: string; description: string | null; type: string; categoryPath: string | null; thumbnail: string | null;
@@ -37,8 +37,8 @@ export function CataloguePage() {
       && (!needle || [i.name, i.description, i.owner, i.categoryPath, ...i.tags].some((v) => v?.toLowerCase().includes(needle))));
   }, [items, q, primary, onlyNew]);
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!items) return <p className="muted">Loading the catalogue…</p>;
+  if (error) return <ErrorState onRetry={() => { setError(null); load(); }}>{error}</ErrorState>;
+  if (!items) return <PageSkeleton kind="cards" />;
 
   const recent = mine.filter((r) => r.status === "Pending" || (r.decidedAtUtc && Date.now() - new Date(r.decidedAtUtc + "Z").getTime() < 30 * 86_400_000));
 

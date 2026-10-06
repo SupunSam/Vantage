@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash } from "@vantage/shared";
+import { api, ApiError, GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash, PageSkeleton, ErrorState } from "@vantage/shared";
 
 /** Owner workspace: access requests for the dashboards this person owns. */
 export function ApprovalsPage() {
@@ -14,8 +14,8 @@ export function ApprovalsPage() {
   }, []);
   useEffect(load, [load]);
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!rows || !groupAdds) return <p className="muted">Loading requests…</p>;
+  if (error) return <ErrorState onRetry={() => { setError(null); load(); }}>{error}</ErrorState>;
+  if (!rows || !groupAdds) return <PageSkeleton kind="table" />;
   const pendingSingles = rows.filter((r) => r.status === "Pending").length;
   const pendingAdds = groupAdds.filter((r) => r.status === "Pending").length;
   const pending = pendingSingles + pendingAdds;

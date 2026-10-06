@@ -4,6 +4,7 @@ import { Icon } from "./Icon";
 import { useBiTypes } from "./session";
 import { Pager, usePaged } from "./Pager";
 import { TrendChart, type TrendPoint } from "./TrendChart";
+import { ErrorState, PageSkeleton } from "./Feedback";
 
 export type TopDashboard = { id: number; name: string; type: string; views: number; users: number; lastViewedAtUtc: string | null };
 export type TopUser = { id: number; name: string; email: string; views: number; dashboards: number; lastViewedAtUtc: string | null };
@@ -153,8 +154,8 @@ export function DashboardsPanel({ base, days, type = "", exportPath, onOpen }: {
   }, [rows, q, sort]);
   const paged = usePaged(sorted, 25, `${q}|${days}|${type}`);
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!rows) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={() => window.location.reload()}>{error}</ErrorState>;
+  if (!rows) return <PageSkeleton kind="table" head={false} />;
 
   const Th = ({ k, label, num }: { k: SortKey; label: string; num?: boolean }) => (
     <th className={num ? "num" : ""} aria-sort={sort.key === k ? (sort.desc ? "descending" : "ascending") : "none"}>

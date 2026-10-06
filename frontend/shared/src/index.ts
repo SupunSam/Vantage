@@ -1,3 +1,4 @@
+import "@fontsource-variable/schibsted-grotesk";
 export * from "./api";
 export * from "./session";
 export * from "./SignInPage";
@@ -15,6 +16,7 @@ export * from "./AnalyticsViews";
 export * from "./TableauViz";
 export * from "./TypeIcon";
 export * from "./Toast";
+export * from "./Feedback";
 import "./manage.css";
 export * from "./manage/routes";
 export * from "./manage/ui";

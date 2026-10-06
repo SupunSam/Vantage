@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { api, can, Icon, Pager, usePaged, useBiTypes, useGridPageSize, useSession, useFlash } from "@vantage/shared";
+import { api, can, Icon, Pager, usePaged, useBiTypes, useGridPageSize, useSession, useFlash, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
 import { errorText, MenuButton, Modal, Notice, Pill, useApi, when } from "@vantage/shared";
 
 type Check = { name: string; result: "Pass" | "Warn" | "Fail"; detail: string };
@@ -53,8 +53,8 @@ export function TenantsPage() {
     }
   }
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" />;
 
   const opened = data.find((t) => t.id === openId) ?? null;
   // A BI type switched off in Configuration can't get new tenants (C56).
@@ -74,10 +74,7 @@ export function TenantsPage() {
       </div>
 
       {data.length === 0 ? (
-        <div className="empty">
-          <h2>No Tenants Yet</h2>
-          <p>Add your Power BI tenant: its Azure tenant ID, the service principal's client ID and secret, and the workspace dashboards will be published into.</p>
-        </div>
+        <EmptyState icon="server" title="No Tenants Yet">Add your Power BI tenant: its Azure tenant ID, the service principal's client ID and secret, and the workspace dashboards will be published into.</EmptyState>
       ) : (
         <>
           <div className="filters">

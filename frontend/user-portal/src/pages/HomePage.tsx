@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, useSession, useFlash, BiInactiveBadge } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, useSession, useFlash, BiInactiveBadge, PageSkeleton, ErrorState } from "@vantage/shared";
 import { FolderMenu } from "./FolderMenu";
 import { FoldersPage } from "./FoldersPage";
 import { Crumbs, FolderGrid, plural } from "./FolderGrid";
@@ -133,11 +133,14 @@ function MyDashboards() {
     return rows.filter((d) => [d.name, d.description, d.owner, d.categoryPath, d.code, ...d.tags].some((v) => v?.toLowerCase().includes(needle)));
   }, [rows, q]);
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!rows) return <p className="muted">Loading your dashboards…</p>;
+  if (error) return <ErrorState onRetry={() => window.location.reload()}>{error}</ErrorState>;
+  if (!rows) return <PageSkeleton kind="cards" />;
 
   const pinned = filtered.filter((r) => r.pinned).sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0));
   const pinCount = rows.filter((r) => r.pinned).length;
+  // Pinned dashboards sit on top, so they are left out of the list below instead of showing twice.
+  const showPinned = pinned.length > 0 && !q && !(prefs.grouping === "category" && cat);
+  const rest = showPinned && prefs.grouping === "all" ? filtered.filter((r) => !r.pinned) : filtered;
 
   return (
     <>
@@ -157,8 +160,9 @@ function MyDashboards() {
           <div className="home-tools">
             <label className="home-search">
               <Icon name="search" size={20} />
-              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, description, owner, category or tag" aria-label="Search your dashboards" />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search dashboards" title="Search by name, description, owner, category or tag" aria-label="Search your dashboards by name, description, owner, category or tag" />
             </label>
+            <div className="home-controls">
             {prefs.layout === "cards" && <div className="seg" role="group" aria-label="Arrange">
               <button type="button" aria-pressed={prefs.grouping === "all"} onClick={() => setPref({ grouping: "all" })}>By Name</button>
               <button type="button" aria-pressed={prefs.grouping === "category"} onClick={() => setPref({ grouping: "category" })}>By Category</button>
@@ -177,6 +181,7 @@ function MyDashboards() {
                 <Icon name={prefs.sort.desc ? "arrowDown" : "arrowUp"} size={18} />
               </button>
             </div>
+            </div>
           </div>
 
 
@@ -186,17 +191,17 @@ function MyDashboards() {
             <ListView rows={sortRows(filtered, prefs.sort)} sort={prefs.sort} onSort={(key) => setPref({ sort: { key, desc: prefs.sort.key === key ? !prefs.sort.desc : key === "published" } })} onPin={togglePin} />
           ) : (
             <>
-              {pinned.length > 0 && !q && !(prefs.grouping === "category" && cat) && (
+              {showPinned && (
                 <section className="home-section">
                   <h2>Pinned <span className="muted">{pinned.length} of {MAX_PINS}</span></h2>
                   <Cards rows={pinned} onPin={togglePin} />
                 </section>
               )}
               {prefs.grouping === "all" ? (
-                filtered.length > 0 && (
+                rest.length > 0 && (
                   <section className="home-section">
-                    {pinned.length > 0 && !q && <h2>All Dashboards</h2>}
-                    <Cards rows={sortRows(filtered, prefs.sort)} onPin={togglePin} />
+                    {showPinned && <h2>Other Dashboards</h2>}
+                    <Cards rows={sortRows(rest, prefs.sort)} onPin={togglePin} />
                   </section>
                 )
               ) : q ? (

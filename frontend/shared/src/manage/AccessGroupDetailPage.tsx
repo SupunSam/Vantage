@@ -9,6 +9,8 @@ import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "
 import { NewGroupModal, type GroupRow, type MemberResult } from "./AccessGroupsPage";
 import { RulesPanel } from "./RulesPanel";
 import { useManage } from "./routes";
+import { PageSkeleton, ErrorState } from "../Feedback";
+import { useConfirm } from "../Feedback";
 
 type Member = { userId: number; email: string; displayName: string | null; userType: string; userStatus: string; source: string; addedAtUtc: string; addedBy: string | null };
 type Sibling = { id: number; name: string; rlsValue: string | null; status: string; isDefault: boolean };
@@ -43,6 +45,7 @@ const sourceLabel: Record<string, string> = {
 /** One access group: its settings, then tabs for its members (add, move, remove), its rules and its history. */
 export function AccessGroupDetailPage() {
   const routes = useManage();
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const { data, error, reload } = useApi<Detail>(`/api/admin/access-groups/${id}`);
@@ -63,8 +66,8 @@ export function AccessGroupDetailPage() {
   }, [data, q]);
   const memberPage = usePaged(members, useGridPageSize(), q);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="detail" />;
   const g = data.group;
   const d = g.dashboard;
   const editable = data.canEdit && g.status !== "Retired" && d.status !== "Retired";
@@ -75,7 +78,7 @@ export function AccessGroupDetailPage() {
   const moveTargets = g.siblings.filter((s) => s.status === "Active");
 
   async function remove(m: Member) {
-    if (!window.confirm(`Remove ${m.displayName ?? m.email} from ${g.name}? They lose access to ${d.name}.`)) return;
+    if (!(await confirm({ title: "Remove Member", message: `Remove ${m.displayName ?? m.email} from ${g.name}? They lose access to ${d.name}.`, confirmLabel: "Remove", danger: true }))) return;
     try {
       await api(`/api/admin/access-groups/${g.id}/members/${m.userId}`, { method: "DELETE" });
       ok(`Removed ${m.displayName ?? m.email}.`);
@@ -245,6 +248,7 @@ export function AccessGroupDetailPage() {
 // ---------------------------------------------------------------- Details
 
 function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boolean; onSaved: (text: string) => void }) {
+  const confirm = useConfirm();
   const routes = useManage();
   const g = data.group;
   const d = g.dashboard;
@@ -265,7 +269,7 @@ function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boo
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!active && g.status === "Active" && !window.confirm(`Set ${g.name} to Inactive? Its ${g.members.length} member(s) lose access to ${d.name} until it's active again.`)) return;
+    if (!active && g.status === "Active" && !(await confirm({ title: "Set Group Inactive", message: `Set ${g.name} to Inactive? Its ${g.members.length} member(s) lose access to ${d.name} until it's active again.`, confirmLabel: "Set Inactive", danger: true }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -540,7 +544,7 @@ function HistoryPanel({ groupId, created }: { groupId: number; created: string }
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
   const { data, error } = useApi<HistoryPage>(`/api/admin/access-groups/${groupId}/history?page=${page}&pageSize=${size}`);
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <ErrorState>{error}</ErrorState>;
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   return (
     <section className="panel">

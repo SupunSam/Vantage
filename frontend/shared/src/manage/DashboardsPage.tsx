@@ -6,6 +6,7 @@ import { TypeIcon } from "../TypeIcon";
 import { can, useSession } from "../session";
 import { Notice, StatusPill, useApi, when } from "./ui";
 import { useManage } from "./routes";
+import { PageSkeleton, ErrorState, EmptyState } from "../Feedback";
 
 type Row = {
   id: number; code: string; name: string; description: string | null; type: string; status: string; rlsEnabled: boolean; lastError: string | null;
@@ -35,8 +36,8 @@ export function DashboardsPage() {
       && (!needle || [d.name, d.code, d.description, d.owner, d.backupOwner, d.categoryPath, ...d.tags].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, status, primary]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" />;
 
   const uncategorised = data.filter((d) => !d.categoryPath && d.status !== "Retired").length;
 
@@ -59,7 +60,7 @@ export function DashboardsPage() {
       )}
 
       {data.length === 0 ? (
-        <div className="empty"><h2>{owner ? "No Dashboards Yet" : "Nothing Published Yet"}</h2><p>{owner ? "Dashboards you are named as an owner of appear here." : "Publish a .pbix and it appears here."}</p></div>
+        <EmptyState icon="dashboards" title={owner ? "No Dashboards Yet" : "Nothing Published Yet"}>{owner ? "Dashboards you are named as an owner of appear here." : "Publish a .pbix and it appears here."}</EmptyState>
       ) : (
         <>
           <div className="filters">

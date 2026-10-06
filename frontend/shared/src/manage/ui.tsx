@@ -37,16 +37,24 @@ export function errorText(e: unknown) {
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const [closing, setClosing] = useState(false);
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
     return () => d?.close();
   }, []);
+  // The window eases out before it is taken away; with reduced motion it goes at once.
+  const close = useCallback(() => {
+    if (closing) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { onClose(); return; }
+    setClosing(true);
+    window.setTimeout(onClose, 150);
+  }, [closing, onClose]);
   return (
-    <dialog ref={ref} className={`modal ${wide ? "modal-wide" : ""}`} onCancel={(e) => { e.preventDefault(); onClose(); }}>
+    <dialog ref={ref} className={`modal ${wide ? "modal-wide" : ""} ${closing ? "modal-closing" : ""}`} onCancel={(e) => { e.preventDefault(); close(); }}>
       <div className="modal-head">
         <h2>{title}</h2>
-        <button type="button" className="modal-x" onClick={onClose} aria-label="Close" title="Close"><Icon name="close" size={20} /></button>
+        <button type="button" className="modal-x" onClick={close} aria-label="Close" title="Close"><Icon name="close" size={20} /></button>
       </div>
       <div className="modal-body">{children}</div>
     </dialog>
