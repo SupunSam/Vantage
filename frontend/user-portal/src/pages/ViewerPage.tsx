@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import * as pbi from "powerbi-client";
-import { api, ApiError, GenAiFrame, TableauViz } from "@vantage/shared";
+import { api, ApiError, GenAiFrame, Icon, TableauViz } from "@vantage/shared";
 
 type EmbedInfo = {
   type: "powerbi" | "tableau" | "genai";
@@ -31,12 +31,50 @@ const friendly: Record<string, string> = {
   timeout: "The dashboard took more than 30 seconds to load.",
 };
 
+type ViewMode = "default" | "wide";
+const VIEW_KEY = "vantage.viewerMode";
+const readMode = (): ViewMode => {
+  try { return localStorage.getItem(VIEW_KEY) === "wide" ? "wide" : "default"; } catch { return "default"; }
+};
+
 export function ViewerPage() {
   const { id } = useParams();
+  const [mode, setMode] = useState<ViewMode>(readMode);
+  const [full, setFull] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
   const [info, setInfo] = useState<EmbedInfo | null>(null);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [attempt, setAttempt] = useState(0);
   const hostRef = useRef<HTMLDivElement>(null);
+
+  // Wide drops the width cap on the page (a class on the body, read by .content); full screen belongs to the stage element.
+  useEffect(() => {
+    document.body.classList.toggle("viewer-wide", mode === "wide");
+    return () => document.body.classList.remove("viewer-wide");
+  }, [mode]);
+  useEffect(() => {
+    const sync = () => setFull(stageRef.current !== null && document.fullscreenElement === stageRef.current);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+  const pick = (m: ViewMode) => {
+    setMode(m);
+    try { localStorage.setItem(VIEW_KEY, m); } catch { /* the choice lasts for this page only */ }
+    if (document.fullscreenElement) void document.exitFullscreen();
+  };
+  const toggleFull = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void stageRef.current?.requestFullscreen?.().catch(() => {});
+  }, []);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key.toLowerCase() !== "f" || e.ctrlKey || e.metaKey || e.altKey || t?.closest("input, textarea, select, [contenteditable]")) return;
+      toggleFull();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [toggleFull]);
 
   const fetchEmbed = useCallback(() => api<EmbedInfo>(`/api/dashboards/${id}/embed`), [id]);
 
@@ -112,6 +150,13 @@ export function ViewerPage() {
       <div className="viewer-bar">
         <Link to="/" className="btn">Home</Link>
         <h1>{info?.name ?? (failure && "name" in failure ? failure.name : null) ?? "Dashboard"}</h1>
+        {info && !failure && (
+          <div className="view-modes" role="group" aria-label="View size">
+            <button type="button" className={`view-mode ${mode === "default" ? "on" : ""}`} aria-pressed={mode === "default"} title="Default view" onClick={() => pick("default")}><Icon name="viewDefault" size={22} /></button>
+            <button type="button" className={`view-mode ${mode === "wide" ? "on" : ""}`} aria-pressed={mode === "wide"} title="Wide view: the full width of the page" onClick={() => pick("wide")}><Icon name="viewWide" size={22} /></button>
+            <button type="button" className="view-mode" title={full ? "Exit full screen (Esc)" : "Full screen (F)"} aria-label={full ? "Exit full screen" : "Full screen"} onClick={toggleFull}><Icon name={full ? "exitFullscreen" : "fullscreen"} size={20} /></button>
+          </div>
+        )}
       </div>
 
       {failure?.kind === "no-access" && (
@@ -133,18 +178,23 @@ export function ViewerPage() {
 
       {!failure && !info && <p className="muted">Loading…</p>}
 
-      {!failure && info?.type === "genai" && info.embedUrl && (
-        <div className="embed-host"><GenAiFrame url={info.embedUrl} title={info.name} /></div>
-      )}
+      {/* The frame keeps a 16:9 shape and is only ever scaled, never stretched; the stage is what goes full screen. */}
+      <div ref={stageRef} className={`viewer-stage ${!failure && info ? "" : "viewer-stage-empty"}`}>
+        <div className="embed-frame">
+          {!failure && info?.type === "genai" && info.embedUrl && (
+            <div className="embed-host"><GenAiFrame url={info.embedUrl} title={info.name} /></div>
+          )}
 
-      {!failure && info?.type === "tableau" && info.embedUrl && info.tableauScriptUrl && (
-        <div className="embed-host">
-          <TableauViz src={info.embedUrl} token={info.token} scriptUrl={info.tableauScriptUrl}
-            onError={(message) => setFailure({ kind: "error", code: "tableau-load", message, name: info.name })} />
+          {!failure && info?.type === "tableau" && info.embedUrl && info.tableauScriptUrl && (
+            <div className="embed-host">
+              <TableauViz src={info.embedUrl} token={info.token} scriptUrl={info.tableauScriptUrl}
+                onError={(message) => setFailure({ kind: "error", code: "tableau-load", message, name: info.name })} />
+            </div>
+          )}
+
+          {!failure && info?.type === "powerbi" && <div ref={hostRef} className="embed-host" />}
         </div>
-      )}
-
-      {!failure && info?.type === "powerbi" && <div ref={hostRef} className="embed-host" />}
+      </div>
     </div>
   );
 }

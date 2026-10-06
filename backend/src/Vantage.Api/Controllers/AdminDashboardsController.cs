@@ -1,7 +1,9 @@
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Vantage.Api.Auth;
 using Vantage.Domain;
+using Vantage.Domain.Entities;
 using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.GenAi;
 using Vantage.Infrastructure.Services;
@@ -22,9 +24,24 @@ public sealed class AdminDashboardsController(
     public async Task<IActionResult> List(CancellationToken ct)
     {
         if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
+        return await ListAsync(null, ct);
+    }
+
+    /// <summary>My Dashboards (User Portal): the dashboards the signed-in person owns, in the same shape as the Dashboards Master grid (C59).</summary>
+    [HttpGet("mine")]
+    public async Task<IActionResult> Mine(CancellationToken ct)
+    {
+        var me = await Current.GetAsync(ct);
+        if (me is null) return Unauthorized();
+        return await ListAsync(d => d.Status != DashboardStatus.Retired && (d.PrimaryOwnerId == me.Id || d.BackupOwnerId == me.Id), ct);
+    }
+
+    private async Task<IActionResult> ListAsync(Expression<Func<Dashboard, bool>>? filter, CancellationToken ct)
+    {
         var me = (await Current.GetAsync(ct))!;
         var paths = await categories.PathsAsync(ct);
         var rows = await db.Dashboards.AsNoTracking()
+            .Where(filter ?? (d => true))
             .OrderByDescending(d => d.CreatedAtUtc)
             .Select(d => new
             {
@@ -55,7 +72,7 @@ public sealed class AdminDashboardsController(
     [HttpGet("form-options")]
     public async Task<IActionResult> FormOptions(CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOrOwnerAsync(db, AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
         var users = await db.Users.AsNoTracking().Where(u => u.Status == UserStatus.Active).OrderBy(u => u.DisplayName)
             .Select(u => new { u.Id, u.Email, u.DisplayName }).ToListAsync(ct);
         var tableauTenants = await db.BiTenants.AsNoTracking().Where(t => t.Platform == BiPlatform.Tableau && t.IsActive).OrderBy(t => t.Name)
@@ -66,8 +83,9 @@ public sealed class AdminDashboardsController(
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.View, id, ct) is { } denied) return denied;
         var me = (await Current.GetAsync(ct))!;
+        var owns = await DashboardOwners.IsAsync(db, me.Id, id, ct);
         var d = await db.Dashboards.AsNoTracking().Where(x => x.Id == id).Select(x => new
         {
             x.Id, x.Code, x.Name, x.Description, type = x.Type.ToString(), status = x.Status.ToString(), x.RlsEnabled, x.LastError,
@@ -100,9 +118,12 @@ public sealed class AdminDashboardsController(
             categoryPath = d.CategoryId is { } c ? paths.GetValueOrDefault(c) : null,
             thumbnail = ThumbnailVersion(d.ThumbnailKey),
             canPreview = me.IsSuperAdmin,
-            canEdit = me.Can(AppModules.DashboardConfig, PermissionLevel.Edit),
-            canEditGroups = me.Can(AppModules.Groups, PermissionLevel.Edit),
-            canModify = me.IsSuperAdmin && me.Can(AppModules.Publishing, PermissionLevel.Edit),   // Super Admins are the publishers (C40)
+            canEdit = me.Can(AppModules.DashboardConfig, PermissionLevel.Edit) || owns,
+            canEditGroups = me.Can(AppModules.Groups, PermissionLevel.Edit) || owns,
+            // Super Admins publish (C40); owners may modify their own Power BI dashboards (C59). GenAI files stay with Super Admins (C33).
+            canModify = (me.IsSuperAdmin && me.Can(AppModules.Publishing, PermissionLevel.Edit)) || (owns && d.type != "GenAi"),
+            isOwner = owns,
+            canEditOwners = me.Can(AppModules.DashboardConfig, PermissionLevel.Edit),
             isSuperAdmin = me.IsSuperAdmin,
             versionsKept = Rules.VersionsKept,
             noRlsMessage = GroupService.NoRlsMessage,
@@ -116,7 +137,14 @@ public sealed class AdminDashboardsController(
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, DetailsBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.Edit, id, ct) is { } denied) return denied;
+        // Owners edit the details but don't pick owners: that stays with the Super Admins (C43).
+        if (!(await Current.GetAsync(ct))!.Can(AppModules.DashboardConfig, PermissionLevel.Edit))
+        {
+            var current = await db.Dashboards.AsNoTracking().Where(d => d.Id == id).Select(d => new { d.PrimaryOwnerId, d.BackupOwnerId }).SingleOrDefaultAsync(ct);
+            if (current?.PrimaryOwnerId is not { } primary) return NotFound();
+            body = body with { PrimaryOwnerId = primary, BackupOwnerId = current.BackupOwnerId };
+        }
         return await Guard(async () =>
         {
             await master.UpdateAsync(id, new DashboardDetailsInput(body.Name, body.Description, body.CategoryId, body.PrimaryOwnerId, body.BackupOwnerId,
@@ -131,7 +159,7 @@ public sealed class AdminDashboardsController(
     [HttpPut("{id:int}/tableau-view")]
     public async Task<IActionResult> SetTableauView(int id, TableauViewBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.Edit, id, ct) is { } denied) return denied;
         return await Guard(async () =>
         {
             await master.SetTableauViewAsync(id, body.TenantId, body.ViewUrl, Current.UserId!.Value, ct);
@@ -143,7 +171,7 @@ public sealed class AdminDashboardsController(
     [RequestSizeLimit(2 * 1024 * 1024)]
     public async Task<IActionResult> SetThumbnail(int id, IFormFile? file, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.Edit, id, ct) is { } denied) return denied;
         if (file is null || file.Length == 0) return BadRequest(new { message = "Choose a PNG or JPG image." });
         if (file.Length > Rules.ThumbnailMaxBytes) return BadRequest(new { message = "The thumbnail is larger than 1 MB." });
         var data = new byte[file.Length];
@@ -158,7 +186,7 @@ public sealed class AdminDashboardsController(
     [HttpDelete("{id:int}/thumbnail")]
     public async Task<IActionResult> RemoveThumbnail(int id, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.Edit, id, ct) is { } denied) return denied;
         return await Guard(async () => { await master.RemoveThumbnailAsync(id, ct); return NoContent(); });
     }
 
@@ -166,7 +194,7 @@ public sealed class AdminDashboardsController(
     [HttpPost("{id:int}/check-rls")]
     public async Task<IActionResult> CheckRls(int id, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.Edit, id, ct) is { } denied) return denied;
         return await Guard(async () =>
         {
             var (rls, changed) = await master.SyncRlsAsync(id, ct);
@@ -179,10 +207,12 @@ public sealed class AdminDashboardsController(
     [RequestSizeLimit(1L * 1024 * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024)]
     public async Task<IActionResult> Modify(int id, IFormFile? file, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Publishing, PermissionLevel.Edit, ct) is { } denied) return denied;
-        if (await RequireSuperAdminAsync("modify a dashboard", ct) is { } notSuper) return notSuper;
+        var me = await Current.GetAsync(ct);
+        if (me is null) return Unauthorized();
         var isGenAi = await IsGenAiAsync(id, ct);
-        if (isGenAi && !(await Current.GetAsync(ct))!.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can modify GenAI dashboards." });
+        if (isGenAi && !me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can modify GenAI dashboards." });
+        if (!(me.IsSuperAdmin && me.Can(AppModules.Publishing, PermissionLevel.Edit)) && !await DashboardOwners.IsAsync(db, me.Id, id, ct))
+            return StatusCode(403, new { message = "Only Super Admins and the dashboard's owners can modify a dashboard." });
         if (file is null || file.Length == 0) return BadRequest(new { message = isGenAi ? "Choose a .html file." : "Choose a .pbix file." });
         return await Guard(async () =>
         {
@@ -197,7 +227,7 @@ public sealed class AdminDashboardsController(
     [HttpGet("{id:int}/modify-status")]
     public async Task<IActionResult> ModifyStatus(int id, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.DashboardConfig, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.DashboardConfig, PermissionLevel.View, id, ct) is { } denied) return denied;
         return await Guard(async () => Ok(await versions.GetStatusAsync(id, ct)));
     }
 
@@ -207,7 +237,7 @@ public sealed class AdminDashboardsController(
     {
         var me = await Current.GetAsync(ct);
         if (me is null) return Unauthorized();
-        if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can download file versions." });
+        if (!await CanHandleVersionsAsync(me, id, ct)) return StatusCode(403, new { message = "Only Super Admins and the dashboard's owners can download file versions." });
         try
         {
             var (content, name) = await versions.OpenVersionAsync(id, number, ct);
@@ -225,7 +255,7 @@ public sealed class AdminDashboardsController(
     {
         var me = await Current.GetAsync(ct);
         if (me is null) return Unauthorized();
-        if (!me.IsSuperAdmin) return StatusCode(403, new { message = "Only Super Admins can restore file versions." });
+        if (!await CanHandleVersionsAsync(me, id, ct)) return StatusCode(403, new { message = "Only Super Admins and the dashboard's owners can restore file versions." });
         if (await IsGenAiAsync(id, ct)) return await Guard(async () => Ok(await genAi.RestoreAsync(id, number, me.Id, ct)));
         return await Guard(async () => Ok(await versions.RestoreAsync(id, number, me.Id, ct)));
     }
@@ -236,7 +266,7 @@ public sealed class AdminDashboardsController(
     [HttpPost("{id:int}/groups")]
     public async Task<IActionResult> AddGroup(int id, GroupBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.Groups, PermissionLevel.Edit, id, ct) is { } denied) return denied;
         return await Guard(async () =>
         {
             var g = await groups.AddAsync(id, body.Name, body.RlsValue, Current.UserId!.Value, ct);
@@ -250,7 +280,7 @@ public sealed class AdminDashboardsController(
     [HttpPut("{id:int}/groups/{groupId:int}")]
     public async Task<IActionResult> UpdateGroup(int id, int groupId, GroupRlsBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.Groups, PermissionLevel.Edit, id, ct) is { } denied) return denied;
         return await Guard(async () =>
         {
             var g = await groups.SetRlsAsync(id, groupId, body.RlsValue, ct);
@@ -271,7 +301,11 @@ public sealed class AdminDashboardsController(
         return await Guard(async () => Ok(await embed.PreviewAsync(id, groupId, me.Id, ct)));
     }
 
-    private Task<bool> IsGenAiAsync(int id, CancellationToken ct) => db.Dashboards.AnyAsync(d => d.Id == id && d.Type == DashboardType.GenAi, ct);
+    /// <summary>Super Admins may download and restore any version; an owner only for a Power BI dashboard they own (GenAI files stay with Super Admins, C33).</summary>
+    private async Task<bool> CanHandleVersionsAsync(CurrentUserInfo me, int dashboardId, CancellationToken ct) =>
+        me.IsSuperAdmin || (!await IsGenAiAsync(dashboardId, ct) && await DashboardOwners.IsAsync(db, me.Id, dashboardId, ct));
+
+    private Task<bool> IsGenAiAsync(int id, CancellationToken ct) => db.Dashboards.AnyAsync(d => d.Id == id && d.Type == BiType.GenAi, ct);
 
     private static object Limits => new
     {

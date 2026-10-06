@@ -9,11 +9,11 @@ public enum PermissionLevel { None = 0, View = 1, Edit = 2 }
 
 public enum BiPlatform { PowerBi, Tableau }
 
-public enum DashboardType { PowerBi, Tableau, GenAi }
+public enum BiType { PowerBi, Tableau, GenAi }
 
 public enum DashboardStatus { Draft, Publishing, Active, Failed, Inactive, Retired }
 
-public enum Audience { Internal, Client }
+public enum Audience { Internal, Client, Both }
 
 public enum DataClassification { Public, Internal, Confidential, Restricted }
 

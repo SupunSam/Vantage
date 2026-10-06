@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiError, GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow } from "@vantage/shared";
+import { api, ApiError, GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash } from "@vantage/shared";
 
 /** Owner workspace: access requests for the dashboards this person owns. */
 export function ApprovalsPage() {
   const [rows, setRows] = useState<AccessRequestRow[] | null>(null);
   const [groupAdds, setGroupAdds] = useState<GroupAddRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const setMessage = useFlash();
 
   const load = useCallback(() => {
     api<AccessRequestRow[]>("/api/access-requests/to-approve").then(setRows).catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
@@ -29,7 +29,6 @@ export function ApprovalsPage() {
           As an owner you decide who can open your dashboards, and on dashboards with row-level security, which data they see.
         </p>
       </div>
-      {message && <p className="notice notice-ok">{message}</p>}
       {groupAdds.length > 0 && (
         <section className="home-section">
           <h2>Access Group Additions{pendingAdds > 0 && <span className="muted"> {pendingAdds} waiting</span>}</h2>

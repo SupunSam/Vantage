@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { can, Icon, Thumbnail, TypeIcon, useSession } from "@vantage/shared";
-import { Notice, StatusPill, useApi, when } from "../ui";
+import { Icon } from "../Icon";
+import { Thumbnail } from "../Thumbnail";
+import { TypeIcon } from "../TypeIcon";
+import { can, useSession } from "../session";
+import { Notice, StatusPill, useApi, when } from "./ui";
+import { useManage } from "./routes";
 
 type Row = {
   id: number; code: string; name: string; description: string | null; type: string; status: string; rlsEnabled: boolean; lastError: string | null;
@@ -15,7 +19,9 @@ type Row = {
 export function DashboardsPage() {
   const { me } = useSession();
   const navigate = useNavigate();
-  const { data, error } = useApi<Row[]>("/api/admin/dashboards");
+  const routes = useManage();
+  const owner = routes.mode === "owner";
+  const { data, error } = useApi<Row[]>(routes.listApi);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [primary, setPrimary] = useState("");
@@ -38,10 +44,10 @@ export function DashboardsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Dashboards Master</h1>
-          <p>Every dashboard in the portal, newest first. Open one to edit its details, thumbnail and groups, or to preview it.</p>
+          <h1>{routes.dashboardsLabel}</h1>
+          <p>{owner ? "The dashboards you own, newest first. Open one to edit its details, thumbnail and groups, or to add people." : "Every dashboard in the portal, newest first. Open one to edit its details, thumbnail and groups, or to preview it."}</p>
         </div>
-        {can(me, "publishing", "Edit") && (
+        {!owner && can(me, "publishing", "Edit") && (
           <Link className="btn btn-primary" to="/publish"><Icon name="upload" size={18} /> Publish Dashboard</Link>
         )}
       </div>
@@ -53,7 +59,7 @@ export function DashboardsPage() {
       )}
 
       {data.length === 0 ? (
-        <div className="empty"><h2>Nothing Published Yet</h2><p>Publish a .pbix and it appears here.</p></div>
+        <div className="empty"><h2>{owner ? "No Dashboards Yet" : "Nothing Published Yet"}</h2><p>{owner ? "Dashboards you are named as an owner of appear here." : "Publish a .pbix and it appears here."}</p></div>
       ) : (
         <>
           <div className="filters">
@@ -86,10 +92,10 @@ export function DashboardsPage() {
               </thead>
               <tbody>
                 {rows.map((d) => (
-                  <tr key={d.id} onClick={() => navigate(`/dashboards/${d.id}`)}>
+                  <tr key={d.id} onClick={() => navigate(routes.dashboard(d.id))}>
                     <td className="col-thumb"><div className="mini-thumb"><Thumbnail dashboardId={d.id} version={d.thumbnail} type={d.type} /></div></td>
                     <td>
-                      <Link to={`/dashboards/${d.id}`} onClick={(e) => e.stopPropagation()}>{d.name}</Link>
+                      <Link to={routes.dashboard(d.id)} onClick={(e) => e.stopPropagation()}>{d.name}</Link>
                       <div className="muted small">{d.code} (#{d.id})</div>
                     </td>
                     <td className="small" title={d.categoryPath ?? undefined}>{d.categoryPath ? d.categoryPath.split(" / ")[0] : <span className="warn-text">No category</span>}</td>

@@ -1,7 +1,11 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, can, Icon, Pager, useGridPageSize, useSession, usePaged } from "@vantage/shared";
-import { errorText, Modal, Notice, StatusPill, useApi } from "../ui";
+import { Icon } from "../Icon";
+import { Pager, usePaged } from "../Pager";
+import { api } from "../api";
+import { can, useGridPageSize, useSession } from "../session";
+import { errorText, Modal, Notice, StatusPill, useApi } from "./ui";
+import { useManage } from "./routes";
 
 export type GroupRow = {
   id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; createdAtUtc: string;
@@ -12,6 +16,7 @@ export type MemberResult = { email: string; outcome: string; detail: string | nu
 
 /** Access Groups: every dashboard's groups in one list. Open a group to manage its members. */
 export function AccessGroupsPage() {
+  const routes = useManage();
   const { me } = useSession();
   const navigate = useNavigate();
   const { data, error, reload } = useApi<GroupRow[]>("/api/admin/access-groups");
@@ -79,9 +84,9 @@ export function AccessGroupsPage() {
           <thead><tr><th>Access group</th><th>Dashboard</th><th>RLS value</th><th className="num">Members</th><th>Status</th></tr></thead>
           <tbody>
             {paged.rows.map((g) => (
-              <tr key={g.id} onClick={() => navigate(`/access-groups/${g.id}`)}>
+              <tr key={g.id} onClick={() => navigate(routes.group(g.id))}>
                 <td>
-                  <Link to={`/access-groups/${g.id}`} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
+                  <Link to={routes.group(g.id)} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
                   {g.isDefault && <div className="muted small">Default group</div>}
                 </td>
                 <td className="small">{g.dashboard}<div className="muted">{g.rlsEnabled ? "RLS on" : "No RLS"}{g.dashboardStatus !== "Active" ? `, ${g.dashboardStatus.toLowerCase()}` : ""}</div></td>
@@ -99,7 +104,7 @@ export function AccessGroupsPage() {
       </div>
       <Pager {...paged.pager} />
 
-      {creating && <NewGroupModal groups={data} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); reload(); navigate(`/access-groups/${id}`); }} />}
+      {creating && <NewGroupModal groups={data} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); reload(); navigate(routes.group(id)); }} />}
     </>
   );
 }

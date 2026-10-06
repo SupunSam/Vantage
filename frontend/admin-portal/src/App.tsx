@@ -1,22 +1,17 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AppShell, can, SignInPage, useSession, type NavSection } from "@vantage/shared";
+import { AppShell, can, SignInPage, useSession, type NavSection, ManageScope, DashboardsPage, DashboardDetailPage, AccessGroupsPage, AccessGroupDetailPage } from "@vantage/shared";
 import { HomePage } from "./pages/HomePage";
 import { RolesPage } from "./pages/RolesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { TenantsPage } from "./pages/TenantsPage";
 import { PublishPage } from "./pages/PublishPage";
-import { DashboardsPage } from "./pages/DashboardsPage";
-import { DashboardDetailPage } from "./pages/DashboardDetailPage";
 import { CategoriesPage } from "./pages/CategoriesPage";
-import { AccessGroupsPage } from "./pages/AccessGroupsPage";
-import { AccessGroupDetailPage } from "./pages/AccessGroupDetailPage";
 import { AccessRequestsPage } from "./pages/AccessRequestsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { AccessRulesPage } from "./pages/AccessRulesPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { JobsPage } from "./pages/JobsPage";
-import "./admin.css";
 
 /** The User Portal runs next to this one: port 8081 in the local Docker build. */
 const userPortalUrl = `${window.location.protocol}//${window.location.hostname}:8081`;
@@ -62,6 +57,7 @@ export function App() {
 
   return (
     <AppShell portalLabel="Admin Portal" sections={sections} otherPortal={{ label: "Open User Portal", href: userPortalUrl }}>
+      <ManageScope>
       <Routes>
         <Route path="/" element={<HomePage />} />
         {show("roles") && <Route path="/roles" element={<RolesPage />} />}
@@ -81,6 +77,7 @@ export function App() {
         {show("dashboard-config") && <Route path="/dashboards/:id" element={<DashboardDetailPage />} />}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      </ManageScope>
     </AppShell>
   );
 }

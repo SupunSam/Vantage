@@ -34,7 +34,7 @@ public class AdminHomeTests(SqlServerFixture fx) : IClassFixture<SqlServerFixtur
         return u;
     }
 
-    private static async Task<Dashboard> DashboardAsync(AppDbContext db, User owner, DashboardType type, DashboardStatus status = DashboardStatus.Active)
+    private static async Task<Dashboard> DashboardAsync(AppDbContext db, User owner, BiType type, DashboardStatus status = DashboardStatus.Active)
     {
         var clock = TimeProvider.System;
         return await new DashboardFactory(db, new OwnershipService(db, clock), new AuditWriter(db, new Ctx(), clock), clock).CreateAsync(new Dashboard
@@ -66,10 +66,10 @@ public class AdminHomeTests(SqlServerFixture fx) : IClassFixture<SqlServerFixtur
         var owner = await PersonAsync(db);
         await PersonAsync(db, UserType.External);
         await PersonAsync(db, UserType.Internal, UserStatus.Inactive);
-        await DashboardAsync(db, owner, DashboardType.Tableau);
-        await DashboardAsync(db, owner, DashboardType.Tableau);
-        await DashboardAsync(db, owner, DashboardType.GenAi);
-        await DashboardAsync(db, owner, DashboardType.PowerBi, DashboardStatus.Inactive);
+        await DashboardAsync(db, owner, BiType.Tableau);
+        await DashboardAsync(db, owner, BiType.Tableau);
+        await DashboardAsync(db, owner, BiType.GenAi);
+        await DashboardAsync(db, owner, BiType.PowerBi, DashboardStatus.Inactive);
 
         var after = await service.GetAsync(All);
 
@@ -94,9 +94,9 @@ public class AdminHomeTests(SqlServerFixture fx) : IClassFixture<SqlServerFixtur
         var service = ServiceFor(db);
         var before = await service.GetAsync(All);
         var owner = await PersonAsync(db);
-        var orphan = await DashboardAsync(db, owner, DashboardType.PowerBi, DashboardStatus.Inactive);
+        var orphan = await DashboardAsync(db, owner, BiType.PowerBi, DashboardStatus.Inactive);
         await db.Dashboards.Where(d => d.Id == orphan.Id).ExecuteUpdateAsync(u => u.SetProperty(d => d.OwnershipPendingReview, true));
-        var flagged = await DashboardAsync(db, owner, DashboardType.PowerBi);
+        var flagged = await DashboardAsync(db, owner, BiType.PowerBi);
         await db.Dashboards.Where(d => d.Id == flagged.Id).ExecuteUpdateAsync(u => u.SetProperty(d => d.InactivityFlaggedAtUtc, DateTime.UtcNow));
 
         var after = await service.GetAsync(All);

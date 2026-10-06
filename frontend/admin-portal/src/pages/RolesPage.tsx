@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { api, can, Icon, useSession } from "@vantage/shared";
-import { errorText, Modal, Notice, useApi } from "../ui";
+import { api, can, Icon, useSession, useFlash } from "@vantage/shared";
+import { errorText, Modal, Notice, useApi } from "@vantage/shared";
 
 type Level = "None" | "View" | "Edit";
 type Role = { id: number; name: string; description: string | null; isSystem: boolean; locked: boolean; users: number; permissions: { module: string; level: Level }[] };
@@ -11,7 +11,7 @@ export function RolesPage() {
   const { me } = useSession();
   const { data, error, reload } = useApi<Data>("/api/admin/roles");
   const [editing, setEditing] = useState<Role | "new" | null>(null);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
   const canEdit = can(me, "roles", "Edit");
 
   if (error) return <Notice tone="error">{error}</Notice>;
@@ -39,7 +39,6 @@ export function RolesPage() {
         </div>
         {canEdit && <button className="btn btn-primary" type="button" onClick={() => setEditing("new")}><Icon name="plus" size={18} /> Add Role</button>}
       </div>
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       <div className="perm-legend small muted">
         <span><span className="perm perm-edit"><Icon name="check" size={16} /></span> Edit: can view and change</span>

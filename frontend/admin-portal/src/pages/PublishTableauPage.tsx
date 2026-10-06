@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, useSession } from "@vantage/shared";
-import { errorText, Notice, useApi } from "../ui";
-import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
-import type { CategoryNode } from "./CategoriesPage";
+import { api, can, useSession, useFlash } from "@vantage/shared";
+import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
+import { errorText, Notice, useApi } from "@vantage/shared";
+import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
+import type { CategoryNode } from "@vantage/shared";
 
 type Options = {
   tableauTenants: { id: number; name: string; serverUrl: string | null; siteContentUrl: string | null; verified: boolean }[];
@@ -37,7 +38,7 @@ export function PublishTableauPage() {
   const [check, setCheck] = useState<ViewCheck | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const code = useGeneratedCode(name);
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -48,7 +49,14 @@ export function PublishTableauPage() {
   const [backupOwnerId, setBackupOwnerId] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<PublishStatus | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const draft = useDraft("Tableau", name, () => ({ name, description, categoryId, tags, audience, classification, primaryOwnerId, backupOwnerId, viewUrl, tenantId }), (v) => {
+    setName(String(v.name ?? "")); setDescription(String(v.description ?? "")); setCategoryId((v.categoryId as number | null) ?? null);
+    setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
+    setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
+    setViewUrl(String(v.viewUrl ?? "")); setTenantId(String(v.tenantId ?? ""));
+  });
+  useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMessage = useFlash();
 
   useEffect(() => {
     if (me && !primaryOwnerId) setPrimaryOwnerId(String(me.id));
@@ -120,6 +128,7 @@ export function PublishTableauPage() {
       </div>
 
       <section className="panel">
+        <DraftPicker draft={draft} />
         <form className="form-sections" onSubmit={submit}>
           <fieldset className="form-section">
             <legend>Tableau View</legend>
@@ -163,8 +172,8 @@ export function PublishTableauPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code (up to {options.limits.codeMax} characters)</span>
-                <input required maxLength={options.limits.codeMax} pattern="[A-Za-z0-9_\-]+" title="Letters, digits, hyphens and underscores" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -196,6 +205,7 @@ export function PublishTableauPage() {
                 <select value={audience} onChange={(e) => setAudience(e.target.value)}>
                   <option value="Internal">Internal</option>
                   <option value="Client">Client</option>
+                  <option value="Both">Both (Internal and Client)</option>
                 </select>
               </label>
               <label className="field">
@@ -214,12 +224,12 @@ export function PublishTableauPage() {
 
           <div className="actions">
             <button className="btn btn-primary" type="submit" disabled={busy || !categoryId || !check}>{busy ? "Publishing…" : "Publish"}</button>
+            <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}
             {categoryId && !check && <span className="muted small">Enter a valid view address to publish.</span>}
           </div>
         </form>
 
-        {message && <Notice tone="error">{message}</Notice>}
         {status && (
           <Notice tone="ok">
             Published. “{status.name}” is live, and its owners are in the default group <strong>{status.defaultGroup}</strong>.{" "}

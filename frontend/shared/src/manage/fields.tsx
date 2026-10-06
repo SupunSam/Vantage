@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Icon } from "@vantage/shared";
-import type { CategoryNode } from "./pages/CategoriesPage";
+import { Icon } from "../Icon";
+
+export type CategoryNode = { id: number; name: string; parentId: number | null; level: number; sortOrder: number; path: string; dashboardCount: number; childCount: number };
 
 /**
  * Primary (required), Secondary and Tertiary category pickers. The value is the deepest category chosen,

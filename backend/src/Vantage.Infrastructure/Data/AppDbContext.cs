@@ -15,13 +15,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<BiTenant> BiTenants => Set<BiTenant>();
     public DbSet<PowerBiWorkspace> PowerBiWorkspaces => Set<PowerBiWorkspace>();
-    public DbSet<BiServiceType> BiServiceTypes => Set<BiServiceType>();
+    public DbSet<BiTypeConfig> BiTypes => Set<BiTypeConfig>();
     public DbSet<ApprovedCdn> ApprovedCdns => Set<ApprovedCdn>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<AppSecret> AppSecrets => Set<AppSecret>();
     public DbSet<Dashboard> Dashboards => Set<Dashboard>();
     public DbSet<DashboardTag> DashboardTags => Set<DashboardTag>();
     public DbSet<DashboardVersion> DashboardVersions => Set<DashboardVersion>();
+    public DbSet<PublishDraft> PublishDrafts => Set<PublishDraft>();
     public DbSet<RefreshSchedule> RefreshSchedules => Set<RefreshSchedule>();
     public DbSet<DashboardGroup> DashboardGroups => Set<DashboardGroup>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
@@ -148,9 +149,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Tenant).WithMany(x => x.Workspaces).HasForeignKey(x => x.TenantId);
         });
 
-        m.Entity<BiServiceType>(e =>
+        m.Entity<BiTypeConfig>(e =>
         {
+            e.ToTable("BiTypes");
             e.HasKey(x => x.Type);
+            e.Property(x => x.Type).HasColumnName("BiType");
             e.Property(x => x.DisplayName).HasMaxLength(60);
             e.Property(x => x.AllowedExtensions).HasMaxLength(60);
         });
@@ -168,6 +171,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // ---------- Dashboards ----------
         m.Entity<Dashboard>(e =>
         {
+            e.Property(x => x.Type).HasColumnName("BiType");
             e.HasIndex(x => x.Name).IsUnique();
             e.HasIndex(x => x.Code);
             e.HasIndex(x => x.Status);
@@ -195,6 +199,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Tag).HasMaxLength(Rules.TagMax);
             e.HasIndex(x => x.Tag);
             e.HasOne(x => x.Dashboard).WithMany(x => x.Tags).HasForeignKey(x => x.DashboardId);
+        });
+
+        m.Entity<PublishDraft>(e =>
+        {
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Type).HasColumnName("BiType");
+            e.Property(x => x.Payload).HasColumnType("nvarchar(max)");
+            e.HasIndex(x => x.UserId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         m.Entity<DashboardVersion>(e =>

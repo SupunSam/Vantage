@@ -40,7 +40,7 @@ public sealed class AdminHomeService(AppDbContext db, AnalyticsService analytics
             dashboards = new HomeDashboards(Of(DashboardStatus.Active), Of(DashboardStatus.Inactive),
                 Of(DashboardStatus.Draft) + Of(DashboardStatus.Publishing) + Of(DashboardStatus.Failed),
                 // Always the same three types in the same order, so a chart never repaints or reorders its colours.
-                Enum.GetValues<DashboardType>().Select(t => new CountBy(t.ToString(), liveByType.Where(x => x.Key == t).Sum(x => x.N))).ToList());
+                Enum.GetValues<BiType>().Select(t => new CountBy(t.ToString(), liveByType.Where(x => x.Key == t).Sum(x => x.N))).ToList());
         }
 
         HomeUsers? users = null;

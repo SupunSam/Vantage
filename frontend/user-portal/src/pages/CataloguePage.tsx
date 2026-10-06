@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, whenText } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, whenText, useFlash, BiInactiveBadge } from "@vantage/shared";
 
 type Item = {
   id: number; name: string; description: string | null; type: string; categoryPath: string | null; thumbnail: string | null;
@@ -17,7 +17,7 @@ export function CataloguePage() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [mine, setMine] = useState<MyRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const setNotice = useFlash();
   const [q, setQ] = useState("");
   const [primary, setPrimary] = useState("");
   const [onlyNew, setOnlyNew] = useState(false);
@@ -59,7 +59,6 @@ export function CataloguePage() {
         <p className="muted">Every dashboard in Vantage. Open the ones you have access to, or ask the owner for access to the others.</p>
       </div>
 
-      {notice && <p className={`notice ${notice.ok ? "notice-ok" : "notice-error"}`}>{notice.text}</p>}
 
       {recent.length > 0 && (
         <section className="home-section">
@@ -126,7 +125,7 @@ function CatalogueCard({ item, onRequested, onError }: { item: Item; onRequested
           {item.categoryPath && <p className="card-cat">{item.categoryPath}</p>}
           <h3>{item.name}</h3>
           {item.description && <p className="card-desc">{item.description}</p>}
-          <p className="card-meta"><span>{typeLabel[item.type] ?? item.type}</span>{item.owner && <span>Owner: {item.owner}</span>}</p>
+          <p className="card-meta"><span>{typeLabel[item.type] ?? item.type}<BiInactiveBadge type={item.type} /></span>{item.owner && <span>Owner: {item.owner}</span>}</p>
 
           <div className="card-action">
             {item.state === "Open" && <Link className="btn btn-primary" to={`/dashboards/${item.id}`}>Open Dashboard</Link>}

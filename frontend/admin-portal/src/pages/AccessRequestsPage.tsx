@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow } from "@vantage/shared";
-import { Notice, useApi } from "../ui";
+import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash } from "@vantage/shared";
+import { Notice, useApi } from "@vantage/shared";
 
 type Data = { pending: number; canDecide: boolean; rows: AccessRequestRow[] };
 const filters = [
@@ -16,7 +16,7 @@ export function AccessRequestsPage() {
   const [status, setStatus] = useState("Pending");
   const { data, error, reload } = useApi<Data>(`/api/admin/access-requests${status ? `?status=${status}` : ""}`);
   const adds = useApi<{ pending: number; rows: GroupAddRow[] }>(`/api/admin/group-add-requests${status ? `?status=${status}` : ""}`);
-  const [message, setMessage] = useState<string | null>(null);
+  const setMessage = useFlash();
 
   if (error) return <Notice tone="error">{error}</Notice>;
 
@@ -38,7 +38,6 @@ export function AccessRequestsPage() {
           </button>
         ))}
       </div>
-      {message && <Notice tone="ok">{message}</Notice>}
       {adds.data && adds.data.rows.length > 0 && (
         <>
           <h2 className="requests-sub">Access Group Additions</h2>

@@ -15,10 +15,13 @@ public sealed record SettingView(
 
 public sealed record CdnView(int Id, string Host, string? Notes, bool IsActive);
 
-public sealed record ServiceTypeView(string Type, string DisplayName, bool IsEnabled, bool RequiresFile, string? AllowedExtensions, int? MaxFileSizeMb);
+public sealed record ServiceTypeView(string Type, string DisplayName, bool IsEnabled, bool HideWhenInactive, bool RequiresFile, string? AllowedExtensions, int? MaxFileSizeMb);
+
+/// <summary>One BI type as the portals need it: whether it is on, and whether its existing dashboards are hidden while it is off.</summary>
+public sealed record BiTypeState(string Type, string DisplayName, bool Enabled, bool HideExisting);
 
 /// <summary>What the browser needs after sign-in: values that change how the portals behave.</summary>
-public sealed record UiSettings(int IdleTimeoutMinutes, int GridPageSize);
+public sealed record UiSettings(int IdleTimeoutMinutes, int GridPageSize, int ToastSeconds, List<BiTypeState> BiTypes);
 
 /// <summary>
 /// Admin Configuration: branding, settings, approved CDNs and the dashboard types. Every value is checked before it is
@@ -36,12 +39,17 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
         new(SettingKeys.BrandPortalName, "Portal name", "Branding", "text", 1, 60),
         new(SettingKeys.BrandPrimaryColor, "Primary colour", "Branding", "color"),
         new(SettingKeys.BrandAccentColor, "Accent colour", "Branding", "color"),
+        new(SettingKeys.BrandFooterText, "Footer text", "Branding", "text", 0, 200),
+
+        new(SettingKeys.StoragePowerBiFolder, "Power BI upload folder", "Storage", "folder"),
+        new(SettingKeys.StorageGenAiFolder, "GenAI upload folder", "Storage", "folder"),
 
         new(SettingKeys.IdleTimeoutMinutes, "Idle timeout (minutes)", "Sign-in and sessions", "int", 5, 480),
         new(SettingKeys.InternalEmailDomain, "Internal email domain", "Sign-in and sessions", "domain"),
 
         new(SettingKeys.ExternalSeeInternalCatalogue, "External users see Internal dashboards in the catalogue", "Catalogue and screens", "bool"),
         new(SettingKeys.DefaultGridPageSize, "Default rows per page", "Catalogue and screens", "choice", Options: ["10", "25", "50", "100"]),
+        new(SettingKeys.ToastSeconds, "Pop-up message time (seconds)", "Catalogue and screens", "int", 2, 30),
 
         new(SettingKeys.EmailEnabled, "Send emails", "Email", "bool"),
 
@@ -117,6 +125,8 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
             case "text":
                 if (v.Length < (d.Min ?? 1) || v.Length > (d.Max ?? 200)) throw new RuleException($"{d.Label} must be {d.Min ?? 1} to {d.Max ?? 200} characters.");
                 return v;
+            case "folder":
+                return StorageFolders.Clean(v, d.Label);
             case "int":
                 if (!int.TryParse(v, out var n) || n < d.Min || n > d.Max) throw new RuleException($"{d.Label} must be a whole number from {d.Min} to {d.Max}.");
                 return n.ToString();
@@ -183,10 +193,12 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
     /// <summary>The values that change how the portals behave for every signed-in person.</summary>
     public async Task<UiSettings> UiAsync(CancellationToken ct = default)
     {
-        var s = await db.SystemSettings.AsNoTracking().Where(x => x.Key == SettingKeys.IdleTimeoutMinutes || x.Key == SettingKeys.DefaultGridPageSize).ToDictionaryAsync(x => x.Key, x => x.Value, ct);
+        var s = await db.SystemSettings.AsNoTracking().Where(x => x.Key == SettingKeys.IdleTimeoutMinutes || x.Key == SettingKeys.DefaultGridPageSize || x.Key == SettingKeys.ToastSeconds).ToDictionaryAsync(x => x.Key, x => x.Value, ct);
         return new UiSettings(
             s.TryGetValue(SettingKeys.IdleTimeoutMinutes, out var idle) && int.TryParse(idle, out var i) ? i : 30,
-            s.TryGetValue(SettingKeys.DefaultGridPageSize, out var grid) && int.TryParse(grid, out var g) ? g : 25);
+            s.TryGetValue(SettingKeys.DefaultGridPageSize, out var grid) && int.TryParse(grid, out var g) ? g : 25,
+            s.TryGetValue(SettingKeys.ToastSeconds, out var toast) && int.TryParse(toast, out var t) ? t : 6,
+            await db.BiTypes.AsNoTracking().OrderBy(x => x.Type).Select(x => new BiTypeState(x.Type.ToString(), x.DisplayName, x.IsEnabled, x.HideWhenInactive)).ToListAsync(ct));
     }
 
     // ------------------------------------------------------------ Logo
@@ -297,26 +309,28 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
         return t;
     }
 
-    // ------------------------------------------------------------ Dashboard types (BI Service Master)
+    // ------------------------------------------------------------ BI types
 
     public async Task<List<ServiceTypeView>> TypesAsync(CancellationToken ct = default) =>
-        await db.BiServiceTypes.AsNoTracking().OrderBy(t => t.Type)
-            .Select(t => new ServiceTypeView(t.Type.ToString(), t.DisplayName, t.IsEnabled, t.RequiresFile, t.AllowedExtensions, t.MaxFileSizeMb)).ToListAsync(ct);
+        await db.BiTypes.AsNoTracking().OrderBy(t => t.Type)
+            .Select(t => new ServiceTypeView(t.Type.ToString(), t.DisplayName, t.IsEnabled, t.HideWhenInactive, t.RequiresFile, t.AllowedExtensions, t.MaxFileSizeMb)).ToListAsync(ct);
 
     /// <summary>Switches a dashboard type on or off and sets its largest upload. At least one type must stay on.</summary>
-    public async Task UpdateTypeAsync(DashboardType type, bool enabled, int? maxFileSizeMb, CancellationToken ct = default)
+    public async Task UpdateTypeAsync(BiType type, bool enabled, bool hideWhenInactive, int? maxFileSizeMb, CancellationToken ct = default)
     {
-        var t = await db.BiServiceTypes.SingleOrDefaultAsync(x => x.Type == type, ct) ?? throw new KeyNotFoundException();
-        if (!enabled && !await db.BiServiceTypes.AnyAsync(x => x.Type != type && x.IsEnabled, ct))
-            throw new RuleException("At least one dashboard type must stay switched on.");
+        var t = await db.BiTypes.SingleOrDefaultAsync(x => x.Type == type, ct) ?? throw new KeyNotFoundException();
+        if (!enabled && !await db.BiTypes.AnyAsync(x => x.Type != type && x.IsEnabled, ct))
+            throw new RuleException("At least one BI type must stay switched on.");
         if (t.RequiresFile)
         {
             if (maxFileSizeMb is not { } mb || mb < 1 || mb > 2048) throw new RuleException("The largest upload must be from 1 to 2048 MB.");
             t.MaxFileSizeMb = mb;
         }
         var wasEnabled = t.IsEnabled;
+        var wasHidden = t.HideWhenInactive;
         t.IsEnabled = enabled;
-        audit.Add("config.service-type-updated", "BiServiceType", t.Type.ToString(), details: new { type = t.DisplayName, enabled, wasEnabled, maxFileSizeMb = t.MaxFileSizeMb });
+        t.HideWhenInactive = hideWhenInactive;
+        audit.Add("config.service-type-updated", "BiType", t.Type.ToString(), details: new { type = t.DisplayName, enabled, wasEnabled, hideWhenInactive, wasHidden, maxFileSizeMb = t.MaxFileSizeMb });
         await db.SaveChangesAsync(ct);
     }
 }
@@ -324,9 +338,9 @@ public sealed class ConfigService(AppDbContext db, AuditWriter audit, IFileStore
 /// <summary>Enforces what Admin Configuration says about a dashboard type (switched on, largest upload).</summary>
 public static class ServiceTypes
 {
-    public static async Task EnsureAllowedAsync(AppDbContext db, DashboardType type, long? sizeBytes, CancellationToken ct = default)
+    public static async Task EnsureAllowedAsync(AppDbContext db, BiType type, long? sizeBytes, CancellationToken ct = default)
     {
-        var t = await db.BiServiceTypes.AsNoTracking().SingleOrDefaultAsync(x => x.Type == type, ct);
+        var t = await db.BiTypes.AsNoTracking().SingleOrDefaultAsync(x => x.Type == type, ct);
         if (t is null) return;
         if (!t.IsEnabled) throw new RuleException($"{t.DisplayName} dashboards are switched off. A Super Admin can switch them on in Admin Configuration.");
         if (t.MaxFileSizeMb is { } mb && sizeBytes is { } size && size > mb * 1024L * 1024L)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, apiObjectUrl } from "./api";
 import { Icon } from "./Icon";
+import { useBiTypes } from "./session";
 import { Pager, usePaged } from "./Pager";
 import { TrendChart, type TrendPoint } from "./TrendChart";
 
@@ -35,7 +36,7 @@ export async function downloadFile(path: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Dashboard types an analytics view can be limited to. The empty value means every type, which is the default. */
+/** BI types an analytics view can be limited to. The empty value means every type, which is the default. */
 export const TYPE_FILTERS = [{ value: "", label: "All Types" }, { value: "PowerBi", label: "Power BI" }, { value: "Tableau", label: "Tableau" }, { value: "GenAi", label: "GenAI" }] as const;
 
 /** `&type=Tableau` for a chosen type, or nothing for all types. */
@@ -43,9 +44,10 @@ export const typeParam = (type: string) => (type ? `&type=${encodeURIComponent(t
 
 /** Limits an analytics view to one dashboard type; All Types is the default. */
 export function TypePicker({ type, onChange }: { type: string; onChange: (t: string) => void }) {
+  const { isEnabled } = useBiTypes();
   return (
     <div className="seg" role="group" aria-label="Dashboard type">
-      {TYPE_FILTERS.map((t) => <button key={t.value} type="button" aria-pressed={type === t.value} onClick={() => onChange(t.value)}>{t.label}</button>)}
+      {TYPE_FILTERS.filter((t) => t.value === "" || isEnabled(t.value)).map((t) => <button key={t.value} type="button" aria-pressed={type === t.value} onClick={() => onChange(t.value)}>{t.label}</button>)}
     </div>
   );
 }

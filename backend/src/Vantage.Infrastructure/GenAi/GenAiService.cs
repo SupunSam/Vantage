@@ -62,7 +62,7 @@ public sealed class GenAiService(
         var ext = Path.GetExtension(fileName);
         if (!ext.Equals(".html", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
             throw new RuleException("Choose a single .html file.");
-        await ServiceTypes.EnsureAllowedAsync(db, DashboardType.GenAi, upload.CanSeek ? upload.Length : null, ct);
+        await ServiceTypes.EnsureAllowedAsync(db, BiType.GenAi, upload.CanSeek ? upload.Length : null, ct);
 
         using var buffer = new MemoryStream();
         var chunk = new byte[81920];
@@ -93,7 +93,7 @@ public sealed class GenAiService(
     {
         var number = (await db.DashboardVersions.Where(v => v.DashboardId == d.Id).MaxAsync(v => (int?)v.VersionNumber, ct) ?? 0) + 1;
         var name = Path.GetFileName(fileName);
-        var key = $"dashboards/{d.Id}/v{number}/{name}";
+        var key = StorageFolders.Key(await StorageFolders.ForAsync(db, BiType.GenAi, ct), d.Id, number, name, Now);
         await using var stream = new MemoryStream(html);
         var (size, sha) = await files.SaveAsync(key, stream, ct);
 
@@ -169,7 +169,7 @@ public sealed class GenAiService(
     private async Task<Dashboard> LoadAsync(int dashboardId, CancellationToken ct)
     {
         var d = await db.Dashboards.SingleOrDefaultAsync(x => x.Id == dashboardId, ct) ?? throw new KeyNotFoundException();
-        if (d.Type != DashboardType.GenAi) throw new RuleException("This isn't a GenAI dashboard.");
+        if (d.Type != BiType.GenAi) throw new RuleException("This isn't a GenAI dashboard.");
         if (d.Status is not (DashboardStatus.Active or DashboardStatus.Inactive))
             throw new RuleException($"A {d.Status.ToString().ToLowerInvariant()} dashboard can't be modified.");
         return d;
@@ -199,7 +199,7 @@ public sealed class GenAiService(
         catch (Exception ex) when (ex is CryptographicException or FormatException) { return null; }
 
         var version = await db.DashboardVersions.AsNoTracking()
-            .Where(v => v.DashboardId == dashboardId && v.IsCurrent && v.Dashboard.Type == DashboardType.GenAi && v.Dashboard.Status == DashboardStatus.Active)
+            .Where(v => v.DashboardId == dashboardId && v.IsCurrent && v.Dashboard.Type == BiType.GenAi && v.Dashboard.Status == DashboardStatus.Active)
             .Select(v => v.FileKey).SingleOrDefaultAsync(ct);
         if (version is null) return null;
         try { return new GenAiContent(files.OpenRead(version), PolicyFor(await ApprovedHostsAsync(ct), (await settings.GetAsync(ct)).FrameAncestors)); }

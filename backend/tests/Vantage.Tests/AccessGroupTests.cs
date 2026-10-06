@@ -47,7 +47,7 @@ public class AccessGroupTests(SqlServerFixture fx) : IClassFixture<SqlServerFixt
         var factory = new DashboardFactory(k.Db, new OwnershipService(k.Db, TimeProvider.System), new AuditWriter(k.Db, new Ctx(), TimeProvider.System), TimeProvider.System);
         var d = await factory.CreateAsync(new Dashboard
         {
-            Code = "AG", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls, PrimaryOwnerId = k.Owner.Id,
+            Code = "AG", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls, PrimaryOwnerId = k.Owner.Id,
         }, rls ? "Region_All" : null, k.Owner.Id);
         var g = await k.Db.DashboardGroups.SingleAsync(x => x.DashboardId == d.Id && x.IsDefault);
         return (d, g);

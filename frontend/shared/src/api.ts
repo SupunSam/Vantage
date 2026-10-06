@@ -82,4 +82,5 @@ export type Branding = {
   logoUrl?: string;
   primaryColor?: string;
   accentColor?: string;
+  footerText?: string;
 };

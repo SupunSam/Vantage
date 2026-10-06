@@ -188,7 +188,7 @@ public class TableauTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         Assert.Equal("Active", status.Status);
         Assert.Contains("anyone who has its address", status.Warning);
         var d = await k.Db.Dashboards.AsNoTracking().SingleAsync(x => x.Id == status.DashboardId);
-        Assert.Equal(DashboardType.Tableau, d.Type);
+        Assert.Equal(BiType.Tableau, d.Type);
         Assert.Equal(DashboardStatus.Active, d.Status);
         Assert.Null(d.TenantId);
         Assert.False(d.RlsEnabled);
@@ -330,7 +330,7 @@ public class TableauTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
         var clock = TimeProvider.System;
         var pbi = await new DashboardFactory(k.Db, new OwnershipService(k.Db, clock), new AuditWriter(k.Db, new Ctx(), clock), clock).CreateAsync(new Dashboard
         {
-            Code = "PB", Name = Unique("Pbi "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, PrimaryOwnerId = k.Owner.Id,
+            Code = "PB", Name = Unique("Pbi "), Type = BiType.PowerBi, Status = DashboardStatus.Active, PrimaryOwnerId = k.Owner.Id,
         }, null, k.Owner.Id);
         await Assert.ThrowsAsync<RuleException>(() => k.Master.SetTableauViewAsync(pbi.Id, null, "https://public.tableau.com/views/A/B", k.Admin.Id));
         await Assert.ThrowsAsync<KeyNotFoundException>(() => k.Master.SetTableauViewAsync(99999999, null, "https://public.tableau.com/views/A/B", k.Admin.Id));

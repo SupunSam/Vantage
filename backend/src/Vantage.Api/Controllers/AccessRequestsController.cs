@@ -28,7 +28,8 @@ public sealed class AccessRequestsController(AppDbContext db, CurrentUser curren
             await db.SystemSettings.Where(s => s.Key == SettingKeys.ExternalSeeInternalCatalogue).Select(s => s.Value).SingleOrDefaultAsync(ct), "true", StringComparison.OrdinalIgnoreCase);
 
         var rows = await db.Dashboards.AsNoTracking()
-            .Where(d => d.Status == DashboardStatus.Active && (showInternal || d.Audience != Audience.Internal))
+            .Where(d => d.Status == DashboardStatus.Active && (showInternal || d.Audience != Audience.Internal)
+                        && !db.BiTypes.Any(t => t.Type == d.Type && !t.IsEnabled && t.HideWhenInactive))
             .OrderBy(d => d.Name)
             .Select(d => new
             {

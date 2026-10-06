@@ -42,7 +42,7 @@ public class AccessGroupRuleTests(SqlServerFixture fx) : IClassFixture<SqlServer
         var super = await PersonAsync(db, null, null);
         var d = await new DashboardFactory(db, new OwnershipService(db, clock), audit, clock).CreateAsync(new Dashboard
         {
-            Code = "AR", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = true, PrimaryOwnerId = owner.Id,
+            Code = "AR", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = true, PrimaryOwnerId = owner.Id,
         }, "Region_All", owner.Id);
         var def = await db.DashboardGroups.SingleAsync(g => g.DashboardId == d.Id && g.IsDefault);
         var north = (await db.DashboardGroups.AddAsync(new DashboardGroup { DashboardId = d.Id, Name = Unique("N"), RlsValue = "Region_North", Status = GroupStatus.Active, CreatedAtUtc = DateTime.UtcNow })).Entity;

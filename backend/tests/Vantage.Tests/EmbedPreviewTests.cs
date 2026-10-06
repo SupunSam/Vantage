@@ -72,7 +72,7 @@ public class EmbedPreviewTests(SqlServerFixture fx) : IClassFixture<SqlServerFix
         var factory = new DashboardFactory(db, new OwnershipService(db, clock), audit, clock);
         var d = await factory.CreateAsync(new Dashboard
         {
-            Code = "PV", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = true, PrimaryOwnerId = owner.Id,
+            Code = "PV", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = true, PrimaryOwnerId = owner.Id,
             TenantId = tenant.Id, WorkspaceId = workspace.Id, PowerBiReportId = Guid.NewGuid(),
         }, "Region_All", owner.Id);
         if (status != DashboardStatus.Active) { d.Status = status; await db.SaveChangesAsync(); }

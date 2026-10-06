@@ -15,6 +15,10 @@ public static class SettingKeys
     public const string IdleTimeoutMinutes = "session.idleTimeoutMinutes";
     public const string NewHireDigestFrequency = "digest.newHireFrequency";
     public const string DefaultGridPageSize = "ui.defaultGridPageSize";
+    public const string ToastSeconds = "ui.toastSeconds";
+    public const string BrandFooterText = "branding.footerText";
+    public const string StoragePowerBiFolder = "storage.powerBiFolder";
+    public const string StorageGenAiFolder = "storage.genAiFolder";
     public const string ExternalSeeInternalCatalogue = "catalogue.externalSeeInternal";
     public const string InternalEmailDomain = "auth.internalEmailDomain";
     public const string EmailEnabled = "email.enabled";
@@ -44,6 +48,10 @@ public static class SettingKeys
         (IdleTimeoutMinutes, "30", "Idle session timeout in minutes"),
         (NewHireDigestFrequency, "Monthly", "How often Super Admins and BPI receive the new-hire list"),
         (DefaultGridPageSize, "25", "Default rows per page in grids"),
+        (BrandFooterText, "", "A line of text shown in the footer of both portals, after the copyright. Leave blank for none"),
+        (StoragePowerBiFolder, "powerbi", "Folder (or, later, the S3 bucket prefix) where uploaded Power BI files are kept"),
+        (StorageGenAiFolder, "genai", "Folder (or, later, the S3 bucket prefix) where uploaded GenAI files are kept"),
+        (ToastSeconds, "6", "How long pop-up messages (saved, added, failed) stay on screen, in seconds"),
         (ExternalSeeInternalCatalogue, "false", "Whether external users see Audience = Internal dashboards in the catalogue"),
         (InternalEmailDomain, "rrd.com", "Email domain that marks a user as internal and routes sign-in to ADFS"),
         (EmailEnabled, "true", "Send the emails the portal queues (access requests, approvals and so on). When off they wait in the outbox"),

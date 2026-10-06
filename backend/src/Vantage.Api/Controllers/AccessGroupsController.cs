@@ -18,8 +18,12 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOrOwnerAsync(db, AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        // Everyone with the Groups permission sees every group; an owner sees the groups of the dashboards they own (C59).
+        var me = (await Current.GetAsync(ct))!;
+        var all = me.Can(AppModules.Groups, PermissionLevel.View);
         var rows = await db.DashboardGroups.AsNoTracking()
+            .Where(g => all || (!g.Dashboard.OwnershipPendingReview && g.Dashboard.Status != DashboardStatus.Retired && (g.Dashboard.PrimaryOwnerId == me.Id || g.Dashboard.BackupOwnerId == me.Id)))
             .OrderBy(g => g.Dashboard.Name).ThenByDescending(g => g.IsDefault).ThenBy(g => g.Name)
             .Select(g => new
             {
@@ -36,8 +40,12 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpGet("dashboards")]
     public async Task<IActionResult> Dashboards(CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
-        var rows = await db.Dashboards.AsNoTracking().Where(d => d.Status != DashboardStatus.Retired).OrderBy(d => d.Name)
+        if (await RequireOrOwnerAsync(db, AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        var me = (await Current.GetAsync(ct))!;
+        var all = me.Can(AppModules.Groups, PermissionLevel.View);
+        var rows = await db.Dashboards.AsNoTracking()
+            .Where(d => d.Status != DashboardStatus.Retired && (all || (!d.OwnershipPendingReview && (d.PrimaryOwnerId == me.Id || d.BackupOwnerId == me.Id))))
+            .OrderBy(d => d.Name)
             .Select(d => new { d.Id, d.Name, d.Code, d.RlsEnabled, status = d.Status.ToString() }).ToListAsync(ct);
         return Ok(new { dashboards = rows, noRlsMessage = GroupService.NoRlsMessage });
     }
@@ -46,7 +54,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpGet("user-search")]
     public async Task<IActionResult> UserSearch(string q, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOrOwnerAsync(db, AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
         var term = (q ?? "").Trim();
         if (term.Length < 2) return Ok(Array.Empty<object>());
         var rows = await db.Users.AsNoTracking()
@@ -60,7 +68,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpGet("{id:int}")]
     public async Task<IActionResult> Get(int id, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.View, id, ct) is { } denied) return denied;
         var me = (await Current.GetAsync(ct))!;
         var g = await db.DashboardGroups.AsNoTracking().Where(x => x.Id == id).Select(x => new
         {
@@ -101,7 +109,8 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
             group = g,
             pendingRequests,
             myId = me.Id,
-            canEdit = me.Can(AppModules.Groups, PermissionLevel.Edit),
+            canEdit = me.Can(AppModules.Groups, PermissionLevel.Edit) || await DashboardOwners.IsAsync(db, me.Id, g.dashboard.Id, ct),
+            isOwner = await DashboardOwners.IsAsync(db, me.Id, g.dashboard.Id, ct),
             isSuperAdmin = me.IsSuperAdmin,
             noRlsMessage = GroupService.NoRlsMessage,
         });
@@ -114,7 +123,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpGet("{id:int}/history")]
     public async Task<IActionResult> History(int id, int page = 1, int pageSize = 20, CancellationToken ct = default)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.View, id, ct) is { } denied) return denied;
         var info = await db.DashboardGroups.AsNoTracking().Where(g => g.Id == id).Select(g => new { g.Name, Dashboard = g.Dashboard.Name }).SingleOrDefaultAsync(ct);
         if (info is null) return NotFound();
         var size = Math.Clamp(pageSize, 5, 100);
@@ -145,10 +154,17 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPost]
     public async Task<IActionResult> Create(CreateBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnDashboardAsync(db, AppModules.Groups, PermissionLevel.Edit, body.DashboardId, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         return await Guard(async () =>
         {
+            if (body.CopyFromGroupId is { } from && !await SameDashboardAsync(from, body.DashboardId, ct)) return StatusCode(403, new { message = "You can only copy members from a group of the same dashboard." });
+            if (await IsOwnerAsync(body.DashboardId, ct))
+            {
+                // An owner decides for their own dashboard, so the copied people are added now (C59).
+                var (og, copied) = await access.CreateAsync(body.DashboardId, body.Name, body.RlsValue, body.CopyFromGroupId, actor, ct, copyMembers: true);
+                return Ok(new { og.Id, og.Name, copied, mode = copied.Count > 0 ? "Added" : null, requestId = (int?)null });
+            }
             // The group itself is created now; the people copied into it go to the owners for approval like any other add.
             var (g, _) = await access.CreateAsync(body.DashboardId, body.Name, body.RlsValue, body.CopyFromGroupId, actor, ct, copyMembers: false);
             AddOutcome? outcome = null;
@@ -164,7 +180,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, DetailsBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         return await Guard(async () => { await access.UpdateDetailsAsync(id, body.Name, body.RlsValue, body.Active, actor, ct); return NoContent(); });
     }
@@ -174,7 +190,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPut("{id:int}/name")]
     public async Task<IActionResult> Rename(int id, RenameBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         return await Guard(async () => { await access.RenameAsync(id, body.Name, actor, ct); return NoContent(); });
     }
@@ -184,7 +200,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPut("{id:int}/rls")]
     public async Task<IActionResult> SetRls(int id, RlsBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         return await Guard(async () =>
         {
             var dashboardId = await db.DashboardGroups.Where(g => g.Id == id).Select(g => (int?)g.DashboardId).SingleOrDefaultAsync(ct) ?? throw new KeyNotFoundException();
@@ -198,7 +214,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPost("{id:int}/status")]
     public async Task<IActionResult> SetStatus(int id, StatusBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         return await Guard(async () => { await access.SetActiveAsync(id, body.Active, actor, ct); return NoContent(); });
     }
@@ -209,18 +225,18 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPost("{id:int}/members")]
     public async Task<IActionResult> AddMembers(int id, MembersBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         var emails = SplitEmails(body.Emails);
         var source = emails.Count == 1 ? MembershipSource.Manual : MembershipSource.BulkUpload;
-        return await Guard(async () => Ok(await addRequests.SubmitAsync(id, emails, body.MoveFromOtherGroups, source, actor, body.ServiceNowReference, body.Note, ct)));
+        return await Guard(async () => Ok(await AddOrRequestAsync(id, emails, body.MoveFromOtherGroups, source, actor, body.ServiceNowReference, body.Note, ct)));
     }
 
     /// <summary>Adds people from an Excel file: emails under an "Email" heading (or in the first column).</summary>
     [HttpPost("{id:int}/members/excel"), RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> AddMembersExcel(int id, IFormFile file, [FromForm] bool moveFromOtherGroups, [FromForm] string? serviceNowReference, [FromForm] string? note, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         List<string> emails;
         try
@@ -233,13 +249,13 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
             return BadRequest(new { message = "That file couldn't be read as an Excel workbook (.xlsx)." });
         }
         if (emails.Count == 0) return BadRequest(new { message = "No email addresses found. Put them under an 'Email' heading in the first sheet." });
-        return await Guard(async () => Ok(await addRequests.SubmitAsync(id, emails, moveFromOtherGroups, MembershipSource.BulkUpload, actor, serviceNowReference, note, ct)));
+        return await Guard(async () => Ok(await AddOrRequestAsync(id, emails, moveFromOtherGroups, MembershipSource.BulkUpload, actor, serviceNowReference, note, ct)));
     }
 
     [HttpGet("members-template")]
     public async Task<IActionResult> Template(CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
+        if (await RequireOrOwnerAsync(db, AppModules.Groups, PermissionLevel.View, ct) is { } denied) return denied;
         using var book = new XLWorkbook();
         var sheet = book.AddWorksheet("Members");
         sheet.Cell(1, 1).Value = "Email";
@@ -255,7 +271,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpDelete("{id:int}/members/{userId:int}")]
     public async Task<IActionResult> RemoveMember(int id, int userId, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         return await Guard(async () => { await access.RemoveMemberAsync(id, userId, actor, ct); return NoContent(); });
     }
@@ -265,7 +281,7 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPost("{id:int}/members/{userId:int}/move")]
     public async Task<IActionResult> MoveMember(int id, int userId, MoveBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
         return await Guard(async () => { await access.MoveMemberAsync(id, userId, body.TargetGroupId, actor, ct); return NoContent(); });
     }
@@ -275,9 +291,54 @@ public sealed class AccessGroupsController(CurrentUser current, AppDbContext db,
     [HttpPost("{id:int}/copy-members")]
     public async Task<IActionResult> CopyMembers(int id, CopyBody body, CancellationToken ct)
     {
-        if (await RequireAsync(AppModules.Groups, PermissionLevel.Edit, ct) is { } denied) return denied;
+        if (await RequireOnGroupAsync(PermissionLevel.Edit, id, ct) is { } denied) return denied;
         var actor = await ActorAsync(ct);
+        var dashboardId = await DashboardOfGroupAsync(id, ct);
+        if (dashboardId is { } d && await IsOwnerAsync(d, ct))
+        {
+            if (!await SameDashboardAsync(body.SourceGroupId, d, ct)) return StatusCode(403, new { message = "You can only copy members from a group of the same dashboard." });
+            return await Guard(async () =>
+            {
+                var results = await access.CopyMembersAsync(body.SourceGroupId, id, actor, ct);
+                return Ok(new AddOutcome(results.Any(r => r.Outcome is "Added" or "Moved") ? "Added" : "Nothing", null, results));
+            });
+        }
         return await Guard(async () => Ok(await addRequests.CopyAsync(body.SourceGroupId, id, actor, body.ServiceNowReference, ct)));
+    }
+
+    private Task<int?> DashboardOfGroupAsync(int groupId, CancellationToken ct) =>
+        db.DashboardGroups.AsNoTracking().Where(g => g.Id == groupId).Select(g => (int?)g.DashboardId).SingleOrDefaultAsync(ct);
+
+    /// <summary>The Groups permission, or owning the dashboard this group belongs to (C59).</summary>
+    private async Task<IActionResult?> RequireOnGroupAsync(PermissionLevel level, int groupId, CancellationToken ct)
+    {
+        var dashboardId = await DashboardOfGroupAsync(groupId, ct);
+        if (dashboardId is null) return await RequireAsync(AppModules.Groups, level, ct) ?? NotFound();
+        return await RequireOnDashboardAsync(db, AppModules.Groups, level, dashboardId.Value, ct);
+    }
+
+    private async Task<bool> IsOwnerAsync(int dashboardId, CancellationToken ct)
+    {
+        var me = await Current.GetAsync(ct);
+        return me is not null && await DashboardOwners.IsAsync(db, me.Id, dashboardId, ct);
+    }
+
+    private Task<bool> SameDashboardAsync(int groupId, int dashboardId, CancellationToken ct) =>
+        db.DashboardGroups.AsNoTracking().AnyAsync(g => g.Id == groupId && g.DashboardId == dashboardId, ct);
+
+    /// <summary>
+    /// Adding people (C26, changed by C59): the owners of a dashboard add people to its groups themselves, at once. Everyone else
+    /// who may add (Super Admins with the Groups permission) sends the list to the owners as one request.
+    /// </summary>
+    private async Task<AddOutcome> AddOrRequestAsync(int groupId, List<string> emails, bool move, MembershipSource source, GroupActor actor, string? ticket, string? note, CancellationToken ct)
+    {
+        var dashboardId = await DashboardOfGroupAsync(groupId, ct);
+        if (dashboardId is { } d && await IsOwnerAsync(d, ct))
+        {
+            var results = await access.AddMembersAsync(groupId, emails, move, source, actor, ct, serviceNowReference: ticket);
+            return new AddOutcome(results.Any(r => r.Outcome is "Added" or "Moved") ? "Added" : "Nothing", null, results);
+        }
+        return await addRequests.SubmitAsync(groupId, emails, move, source, actor, ticket, note, ct);
     }
 
     private async Task<GroupActor> ActorAsync(CancellationToken ct)

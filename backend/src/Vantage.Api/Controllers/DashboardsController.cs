@@ -27,7 +27,8 @@ public sealed class DashboardsController(
 
         var rows = await db.GroupMembers.AsNoTracking()
             .Where(m => m.UserId == me.Id && m.RemovedAtUtc == null && m.Group.Status == GroupStatus.Active
-                        && m.Group.Dashboard.Status == DashboardStatus.Active)
+                        && m.Group.Dashboard.Status == DashboardStatus.Active
+                        && !db.BiTypes.Any(t => t.Type == m.Group.Dashboard.Type && !t.IsEnabled && t.HideWhenInactive))
             .Select(m => new
             {
                 m.Group.Dashboard.Id, m.Group.Dashboard.Code, m.Group.Dashboard.Name, m.Group.Dashboard.Description,
@@ -38,7 +39,7 @@ public sealed class DashboardsController(
                 m.Group.Dashboard.ThumbnailKey,
                 m.Group.Dashboard.PublishedAtUtc,
                 GrantedAtUtc = m.AddedAtUtc,
-                Linked = m.Group.Dashboard.PowerBiReportId != null || m.Group.Dashboard.TableauViewUrl != null || m.Group.Dashboard.Type == DashboardType.GenAi,
+                Linked = m.Group.Dashboard.PowerBiReportId != null || m.Group.Dashboard.TableauViewUrl != null || m.Group.Dashboard.Type == BiType.GenAi,
                 PinOrder = db.Pins.Where(p => p.UserId == me.Id && p.DashboardId == m.DashboardId).Select(p => (int?)p.SortOrder).FirstOrDefault(),
                 LastViewedAtUtc = db.DashboardViews.Where(v => v.UserId == me.Id && v.DashboardId == m.DashboardId).Max(v => (DateTime?)v.ViewedAtUtc),
             })

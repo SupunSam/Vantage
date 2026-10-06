@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { TrendChart, useSession } from "@vantage/shared";
-import { Notice, useApi, when } from "../ui";
+import { Notice, useApi, when } from "@vantage/shared";
 
 type Home = {
   dashboards: { live: number; inactive: number; notLive: number; liveByType: { key: string; count: number }[] } | null;

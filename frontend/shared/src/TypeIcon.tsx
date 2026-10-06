@@ -1,4 +1,5 @@
-/** Dashboard types as they appear in lists: a small icon and a name (never colour alone). The colours match the charts on the Admin Home. */
+import { useBiTypes } from "./session";
+/** BI types as they appear in lists: a small icon and a name (never colour alone). The colours match the charts on the Admin Home. */
 export const TYPE_META: Record<string, { label: string; color: string }> = {
   PowerBi: { label: "Power BI", color: "#2a78d6" },
   Tableau: { label: "Tableau", color: "#eb6834" },
@@ -29,4 +30,11 @@ export function TypeIcon({ type, size = 18, showLabel = true }: { type: string; 
       {showLabel && <span>{meta.label}</span>}
     </span>
   );
+}
+
+/** Shown beside a dashboard whose BI type is switched off in Admin Configuration (C56). Existing dashboards keep working. */
+export function BiInactiveBadge({ type }: { type: string }) {
+  const { isEnabled } = useBiTypes();
+  if (isEnabled(type)) return null;
+  return <span className="bi-inactive" title="This BI type is switched off. No new dashboards or versions can be published, but this one keeps working.">BI Inactive</span>;
 }

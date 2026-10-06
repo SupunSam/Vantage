@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { api, can, Icon, useSession } from "@vantage/shared";
-import { errorText, Notice, useApi } from "../ui";
+import { api, can, Icon, useSession, useFlash } from "@vantage/shared";
+import { errorText, Notice, useApi } from "@vantage/shared";
 
-export type CategoryNode = { id: number; name: string; parentId: number | null; level: number; sortOrder: number; path: string; dashboardCount: number; childCount: number };
+export type { CategoryNode } from "@vantage/shared";
+import type { CategoryNode } from "@vantage/shared";
 
 const levelName = ["", "Primary", "Secondary", "Tertiary"];
 
@@ -10,7 +11,7 @@ const levelName = ["", "Primary", "Secondary", "Tertiary"];
 export function CategoriesPage() {
   const { me } = useSession();
   const { data, error, reload } = useApi<CategoryNode[]>("/api/admin/categories");
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
   const [adding, setAdding] = useState<number | "top" | null>(null);
   const [renaming, setRenaming] = useState<number | null>(null);
   const editable = can(me, "categories", "Edit");
@@ -49,7 +50,6 @@ export function CategoriesPage() {
         )}
       </div>
 
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       {adding === "top" && (
         <section className="panel">
@@ -90,6 +90,7 @@ export function CategoriesPage() {
                       <span className="tree-count">{c.dashboardCount === 0 ? <span className="muted">No dashboards</span> : `${c.dashboardCount} dashboard${c.dashboardCount === 1 ? "" : "s"}`}</span>
                       {editable && (
                         <span className="tree-actions">
+                          {c.level >= 3 && <span className="icon-btn-sm-slot" aria-hidden="true" />}
                           {c.level < 3 && (
                             <button type="button" className="icon-btn icon-btn-sm" title={`Add a ${levelName[c.level + 1]!.toLowerCase()} category under ${c.name}`} aria-label={`Add under ${c.name}`} onClick={() => { setAdding(c.id); setRenaming(null); }}>
                               <Icon name="plus" size={18} />

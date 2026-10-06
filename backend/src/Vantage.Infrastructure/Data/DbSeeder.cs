@@ -97,12 +97,12 @@ public sealed class DbSeeder(AppDbContext db, TimeProvider clock, ILogger<DbSeed
     {
         var types = new[]
         {
-            new BiServiceType { Type = DashboardType.PowerBi, DisplayName = "Power BI", RequiresFile = true, RequiresTenant = true, SupportsRls = true, SupportsRefresh = true, AllowedExtensions = ".pbix", MaxFileSizeMb = 1024 },
-            new BiServiceType { Type = DashboardType.Tableau, DisplayName = "Tableau", RequiresUrl = true, RequiresTenant = true },
-            new BiServiceType { Type = DashboardType.GenAi, DisplayName = "GenAI Dashboard", RequiresFile = true, AllowedExtensions = ".html", MaxFileSizeMb = 5 },
+            new BiTypeConfig { Type = BiType.PowerBi, DisplayName = "Power BI", RequiresFile = true, RequiresTenant = true, SupportsRls = true, SupportsRefresh = true, AllowedExtensions = ".pbix", MaxFileSizeMb = 1024 },
+            new BiTypeConfig { Type = BiType.Tableau, DisplayName = "Tableau", RequiresUrl = true, RequiresTenant = true },
+            new BiTypeConfig { Type = BiType.GenAi, DisplayName = "GenAI Dashboard", RequiresFile = true, AllowedExtensions = ".html", MaxFileSizeMb = 5 },
         };
         foreach (var t in types)
-            if (!await db.BiServiceTypes.AnyAsync(x => x.Type == t.Type, ct)) db.BiServiceTypes.Add(t);
+            if (!await db.BiTypes.AnyAsync(x => x.Type == t.Type, ct)) db.BiTypes.Add(t);
         await db.SaveChangesAsync(ct);
     }
 

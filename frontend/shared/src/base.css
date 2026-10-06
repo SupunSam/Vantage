@@ -192,7 +192,7 @@ a.side-link.active::before { content: ""; position: absolute; left: -10px; top: 
 
 /* ---------- Panels, forms, grids ---------- */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 18px 20px; margin-bottom: 16px; }
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; margin: 14px 0; align-items: end; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; margin: 14px 0; align-items: start; }
 .grid { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.92rem; }
 .grid th { text-align: left; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); padding: 8px 10px; }
 .grid td { border-bottom: 1px solid var(--line); padding: 8px 10px; vertical-align: middle; }
@@ -304,7 +304,7 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 .genai-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
 
 /* ---------- Tabs (both portals) ---------- */
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; overflow-y: hidden; }
 .tab { border: 0; background: none; padding: 10px 14px; font: inherit; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; gap: 8px; align-items: center; }
 .tab:hover { color: var(--ink); }
 .tab-on { color: var(--brand); border-bottom-color: var(--brand); }
@@ -312,3 +312,32 @@ button.link:disabled { color: var(--muted); cursor: default; text-decoration: no
 /* ---------- Dashboard type icon ---------- */
 .type-icon { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .type-icon-svg { flex: none; }
+
+/* Slim scrollbars without arrow buttons; the sidebar's only shows while the pointer is over the menu. */
+* { scrollbar-width: thin; scrollbar-color: #b9c2cc transparent; }
+.side-nav { scrollbar-color: transparent transparent; }
+.side-nav:hover { scrollbar-color: rgb(255 255 255 / 0.35) transparent; }
+
+/* Toasts */
+.toasts { position: fixed; right: 20px; bottom: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 10px; padding: 12px 10px 12px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: var(--radius-md); box-shadow: 0 8px 24px rgb(16 24 32 / 0.18); font-size: 0.92rem; line-height: 1.4; animation: toast-in 0.18s ease-out; }
+.toast-ok { border-left-color: var(--ok); }
+.toast-error { border-left-color: var(--danger); }
+.toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.toast-x { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; }
+.toast-x:hover { background: var(--paper); color: var(--ink); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+.bi-inactive { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 16%, white); color: #8a4a12; font-size: 0.72rem; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+
+/* One look for every drop-down: our own arrow, kept clear of the right edge. */
+select:not([multiple]) { appearance: none; -webkit-appearance: none; padding-right: 34px !important; background-repeat: no-repeat; background-position: right 12px center; background-size: 14px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235a6877' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
+select:not([multiple]):disabled { opacity: 0.7; }
+
+/* Footer */
+.main { min-height: 100vh; }
+.main > .content { flex: 1 0 auto; }
+.app-footer { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 24px; padding: 14px 36px; border-top: 1px solid var(--line); background: var(--surface); color: var(--muted); font-size: 0.82rem; }
+body.viewer-wide .app-footer { padding-left: 20px; padding-right: 20px; }
+@media (max-width: 900px) { .app-footer { padding: 12px 16px; } }

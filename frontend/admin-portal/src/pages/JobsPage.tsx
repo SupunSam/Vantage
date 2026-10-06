@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { api, can, Icon, useGridPageSize, useSession } from "@vantage/shared";
+import { api, can, Icon, useGridPageSize, useSession, useFlash } from "@vantage/shared";
 import { Link } from "react-router-dom";
-import { errorText, Notice, Pill, useApi, when } from "../ui";
+import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 type Run = { id: number; job: string; title: string; startedAtUtc: string; finishedAtUtc: string | null; status: string; trigger: string; triggeredBy: string | null; summary: string | null };
 type Job = { name: string; title: string; description: string; schedule: string | null; isPaused: boolean; isRunning: boolean; nextRunAtUtc: string | null; lastRun: Run | null };
@@ -41,7 +41,7 @@ export function JobsPage() {
   const size = useGridPageSize();
   const runs = useApi<RunPage>(`/api/admin/jobs/runs?${new URLSearchParams({ ...(filter ? { job: filter } : {}), page: String(page), pageSize: String(size) })}`);
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
 
   const anyRunning = jobs.data?.some((j) => j.isRunning) ?? false;
   const { reload: reloadJobs } = jobs;
@@ -87,7 +87,6 @@ export function JobsPage() {
         </div>
         <button className="btn" type="button" onClick={refresh}><Icon name="refresh" size={18} /> Refresh</button>
       </div>
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       {!jobs.data ? <p className="muted">Loading…</p> : (
         <div className="stack">

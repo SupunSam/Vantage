@@ -48,14 +48,14 @@ public sealed class AnalyticsService(AppDbContext db, TimeProvider clock)
     /// <summary>
     /// "PowerBi", "Tableau" or "GenAi" (any case) as a type, or null for "all types" (blank). Anything else is refused, so a typo can't quietly show everything.
     /// </summary>
-    public static DashboardType? ParseType(string? type)
+    public static BiType? ParseType(string? type)
     {
         if (string.IsNullOrWhiteSpace(type) || type.Trim().Equals("all", StringComparison.OrdinalIgnoreCase)) return null;
         var t = type.Trim().Replace(" ", "");
         // An exact name match: Enum.TryParse would also accept numbers and comma lists ("PowerBi,Tableau").
-        var name = Enum.GetNames<DashboardType>().FirstOrDefault(n => n.Equals(t, StringComparison.OrdinalIgnoreCase));
-        if (name is not null) return Enum.Parse<DashboardType>(name);
-        throw new RuleException("Dashboard type must be Power BI, Tableau or GenAI, or blank for all types.");
+        var name = Enum.GetNames<BiType>().FirstOrDefault(n => n.Equals(t, StringComparison.OrdinalIgnoreCase));
+        if (name is not null) return Enum.Parse<BiType>(name);
+        throw new RuleException("BI type must be Power BI, Tableau or GenAI, or blank for all types.");
     }
 
     /// <summary>

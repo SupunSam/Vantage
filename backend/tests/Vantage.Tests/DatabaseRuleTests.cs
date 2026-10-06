@@ -98,7 +98,7 @@ public class DatabaseRuleTests(SqlServerFixture fx) : IClassFixture<SqlServerFix
     private static Dashboard NewDashboard(int ownerId, int? backupId, bool rls = false) => new()
     {
         Code = "T" + Random.Shared.Next(100000, 999999), Name = "Test " + Guid.NewGuid().ToString("N")[..8],
-        Type = DashboardType.PowerBi, Status = DashboardStatus.Active, PrimaryOwnerId = ownerId, BackupOwnerId = backupId, RlsEnabled = rls,
+        Type = BiType.PowerBi, Status = DashboardStatus.Active, PrimaryOwnerId = ownerId, BackupOwnerId = backupId, RlsEnabled = rls,
     };
 
     [SqlFact]

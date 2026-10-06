@@ -1,3 +1,4 @@
+.manage {
 /* ---------- Layout helpers ---------- */
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -46,7 +47,7 @@ button.link:hover { text-decoration: underline; }
 .lvl-view { color: var(--brand); }
 .lvl-edit { color: var(--brand); background: color-mix(in srgb, var(--brand) 9%, white); font-weight: 600; }
 
-.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.segmented { display: inline-flex; align-self: flex-start; width: fit-content; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
 .segmented label { padding: 5px 12px; cursor: pointer; font-size: 0.88rem; border-right: 1px solid var(--line); }
 .segmented label:last-child { border-right: 0; }
 .segmented label.on { background: var(--brand); color: #fff; }
@@ -63,6 +64,10 @@ button.link:hover { text-decoration: underline; }
 .modal { border: 0; border-radius: var(--radius-md); padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); box-shadow: 0 18px 50px rgb(16 24 32 / 0.28); color: var(--ink); }
 .modal-wide { width: min(900px, calc(100vw - 32px)); }
 .modal::backdrop { background: rgb(16 24 32 / 0.45); }
+.modal-head h2 { font-size: 1.1rem; }
+.modal-x { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--danger); cursor: pointer; }
+.modal-x:hover { background: color-mix(in srgb, var(--danger) 12%, white); }
+.modal-x:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .modal-body { padding: 18px 20px 20px; }
 .checks { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; }
@@ -110,6 +115,7 @@ fieldset.plain > .btn { align-self: flex-start; }
 .inline-form .field { min-width: 260px; flex: 0 1 360px; }
 .inset { background: var(--paper); border-radius: var(--radius-md); padding: 14px 16px; }
 .icon-btn-sm { width: 34px; height: 34px; }
+.icon-btn-sm-slot { display: inline-block; width: 34px; height: 34px; }
 .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; background: transparent; }
 .icon-btn-danger:not(:disabled):hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, white); }
 .pill-brand { background: color-mix(in srgb, var(--brand) 10%, white); color: var(--brand); border-color: color-mix(in srgb, var(--brand) 28%, white); }
@@ -151,7 +157,7 @@ fieldset.plain > .btn { align-self: flex-start; }
 .tree-l2 .tree-name svg, .tree-l3 .tree-name svg { color: var(--muted); }
 .tree-l2 .tree-name strong, .tree-l3 .tree-name strong { font-weight: 500; }
 .tree-level { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; }
-.tree-count { font-size: 0.86rem; min-width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.tree-count { font-size: 0.86rem; flex: none; width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
 .tree-actions { display: inline-flex; gap: 2px; }
 .tree-add { background: var(--paper); }
 
@@ -174,7 +180,7 @@ fieldset.plain > .btn { align-self: flex-start; }
 .detail-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .detail-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 @media (max-width: 700px) { .detail-hero { flex-direction: column; align-items: flex-start; } .detail-thumb { width: 100%; } }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; overflow-y: hidden; }
 .tab { border: 0; background: none; padding: 10px 14px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; display: inline-flex; gap: 8px; align-items: center; }
 .tab:hover { color: var(--ink); }
 .tab-on { color: var(--brand); border-bottom-color: var(--brand); }
@@ -346,7 +352,6 @@ fieldset.plain > .btn { align-self: flex-start; }
 
 /* ---------- Home ---------- */
 /* Categorical slots 1 to 3 of the data-viz palette (validated together): the colour belongs to the dashboard type, whatever else is shown. */
-:root { --hv-s1: #2a78d6; --hv-s2: #eb6834; --hv-s3: #1baf7a; }
 .hv-s1 { background: var(--hv-s1); }
 .hv-s2 { background: var(--hv-s2); }
 .hv-s3 { background: var(--hv-s3); }
@@ -374,3 +379,10 @@ fieldset.plain > .btn { align-self: flex-start; }
 .hv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .hv-activity li { display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .hv-activity li:last-child { border-bottom: 0; padding-bottom: 0; }
+
+/* Saved drafts on the publish forms */
+.draft-picker { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 14px; }
+.draft-picker .field { min-width: 280px; max-width: 520px; flex: 1; }
+
+}
+:root { --hv-s1: #2a78d6; --hv-s2: #eb6834; --hv-s3: #1baf7a; }

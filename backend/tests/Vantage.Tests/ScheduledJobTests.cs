@@ -75,7 +75,7 @@ public class ScheduledJobTests(SqlServerFixture fx) : IClassFixture<SqlServerFix
         var audit = new AuditWriter(db, new Ctx(), clock);
         var d = await new DashboardFactory(db, new OwnershipService(db, clock), audit, clock).CreateAsync(new Dashboard
         {
-            Code = "JB", Name = Unique("Job dash "), Type = DashboardType.PowerBi, Status = status, PrimaryOwnerId = owner.Id,
+            Code = "JB", Name = Unique("Job dash "), Type = BiType.PowerBi, Status = status, PrimaryOwnerId = owner.Id,
         }, null, owner.Id);
         d.CreatedAtUtc = now.AddDays(-400);
         d.PublishedAtUtc = published;
