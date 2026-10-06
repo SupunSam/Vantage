@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { api, can, Icon, Pager, usePaged, useBiTypes, useGridPageSize, useSession, useFlash, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
-import { errorText, MenuButton, Modal, Notice, Pill, useApi, when } from "@vantage/shared";
+import { Drawer, errorText, MenuButton, Modal, Notice, Pill, RowMenu, SortHeader, useApi, useSort, when } from "@vantage/shared";
 
 type Check = { name: string; result: "Pass" | "Warn" | "Fail"; detail: string };
 type Workspace = { id: number; name: string; workspaceId: string; isActive: boolean; servicePrincipalAccess: string | null; onDedicatedCapacity: boolean | null };
@@ -38,7 +38,11 @@ export function TenantsPage() {
     return (data ?? []).filter((t) => (!platform || t.platform === platform)
       && (!needle || [t.name, t.azureTenantId, t.clientId, t.serverUrl, ...t.workspaces.map((w) => w.name)].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, platform]);
-  const { rows: pageRows, pager } = usePaged(rows, useGridPageSize(), `${q}|${platform}`);
+  const { sorted, sort, toggle } = useSort(rows, {
+    name: (t) => t.name, platform: (t) => t.platform, workspaces: (t) => (t.platform === "PowerBi" ? t.workspaces.length : -1), dashboards: (t) => t.dashboards,
+    verified: (t) => (t.lastVerifyPassed === true ? 2 : t.lastVerifyPassed === false ? 0 : 1), last: (t) => t.lastVerifiedAtUtc,
+  });
+  const { rows: pageRows, pager } = usePaged(sorted, useGridPageSize(), `${q}|${platform}|${sort?.key}|${sort?.desc}`);
 
   async function verify(t: Tenant) {
     setVerifying(t.id);
@@ -96,7 +100,7 @@ export function TenantsPage() {
           <div className="table-wrap">
             <table className="grid grid-rows">
               <thead>
-                <tr><th>Tenant</th><th>Platform</th><th>Connection</th><th className="num">Workspaces</th><th className="num">Dashboards</th><th>Verification</th><th>Last Verified</th>{canEdit && <th><span className="visually-hidden">Actions</span></th>}</tr>
+                <tr><SortHeader label="Tenant" k="name" sort={sort} onSort={toggle} /><SortHeader label="Platform" k="platform" sort={sort} onSort={toggle} /><th>Connection</th><SortHeader label="Workspaces" k="workspaces" sort={sort} onSort={toggle} className="num" /><SortHeader label="Dashboards" k="dashboards" sort={sort} onSort={toggle} className="num" /><SortHeader label="Verification" k="verified" sort={sort} onSort={toggle} /><SortHeader label="Last Verified" k="last" sort={sort} onSort={toggle} />{canEdit && <th><span className="visually-hidden">Actions</span></th>}</tr>
               </thead>
               <tbody>
                 {pageRows.map((t) => (
@@ -114,9 +118,12 @@ export function TenantsPage() {
                     <td><VerifyPill t={t} /></td>
                     <td className="small muted">{when(t.lastVerifiedAtUtc)}</td>
                     {canEdit && (
-                      <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="btn" type="button" onClick={() => setEditing(t)}>Edit</button>{" "}
-                        <button className="btn btn-primary" type="button" disabled={verifying === t.id} onClick={() => void verify(t)}>{verifying === t.id ? "Verifying…" : "Verify"}</button>
+                      <td className="cell-actions">
+                        <RowMenu label={`Actions for ${t.name}`} items={[
+                          { label: "Open Details", onSelect: () => setOpenId(t.id) },
+                          { label: verifying === t.id ? "Verifying…" : "Verify Connection", onSelect: () => void verify(t), disabled: verifying === t.id },
+                          { label: "Edit", onSelect: () => setEditing(t) },
+                        ]} />
                       </td>
                     )}
                   </tr>
@@ -130,7 +137,7 @@ export function TenantsPage() {
       )}
 
       {opened && (
-        <Modal title={opened.name} onClose={() => setOpenId(null)} wide>
+        <Drawer title={opened.name} subtitle={platformLabel(opened.platform)} onClose={() => setOpenId(null)}>
           <div className="stack">
             <p className="muted small">
               {opened.platform === "PowerBi" ? `Power BI. Azure tenant ${opened.azureTenantId}, client ${opened.clientId}.` : `Tableau Server ${opened.serverUrl}${opened.siteContentUrl ? `, site ${opened.siteContentUrl}` : ""}.`}
@@ -144,24 +151,26 @@ export function TenantsPage() {
             </div>
 
             {opened.platform === "PowerBi" && (
-              <table className="grid">
-                <thead><tr><th>Workspace</th><th>Workspace ID</th><th>Service principal access</th><th>Capacity</th></tr></thead>
-                <tbody>
-                  {opened.workspaces.map((w) => (
-                    <tr key={w.id} className={w.isActive ? "" : "muted"}>
-                      <td>{w.name}{!w.isActive && " (inactive)"}</td>
-                      <td className="small mono-ish">{w.workspaceId}</td>
-                      <td>{w.servicePrincipalAccess ?? <span className="muted">Verify to check</span>}</td>
-                      <td>{w.onDedicatedCapacity == null ? <span className="muted">Verify to check</span> : w.onDedicatedCapacity ? "Dedicated (F64)" : <span style={{ color: "var(--danger)" }}>Shared</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-wrap">
+                <table className="grid">
+                  <thead><tr><th>Workspace</th><th>Workspace ID</th><th>Service principal access</th><th>Capacity</th></tr></thead>
+                  <tbody>
+                    {opened.workspaces.map((w) => (
+                      <tr key={w.id} className={w.isActive ? "" : "muted"}>
+                        <td>{w.name}{!w.isActive && " (inactive)"}</td>
+                        <td className="small mono-ish">{w.workspaceId}</td>
+                        <td>{w.servicePrincipalAccess ?? <span className="muted">Verify to check</span>}</td>
+                        <td>{w.onDedicatedCapacity == null ? <span className="muted">Verify to check</span> : w.onDedicatedCapacity ? "Dedicated (F64)" : <span style={{ color: "var(--danger)" }}>Shared</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {opened.checks.length > 0 && <VerifyChecks checks={opened.checks} />}
           </div>
-        </Modal>
+        </Drawer>
       )}
 
       {editing && (

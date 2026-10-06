@@ -57,7 +57,7 @@
 .pin-btn:hover { color: var(--brand); background: var(--paper); }
 .pin-btn.card-pin-on { color: #fff; background: var(--brand); }
 .list-desc { max-width: 60ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.table-wrap { overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
 .table-wrap .grid { margin-top: 0; }
 
 /* ---------- Viewer ---------- */

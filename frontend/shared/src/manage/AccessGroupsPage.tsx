@@ -4,7 +4,7 @@ import { Icon } from "../Icon";
 import { Pager, usePaged } from "../Pager";
 import { api } from "../api";
 import { can, useGridPageSize, useSession } from "../session";
-import { errorText, Modal, Notice, StatusPill, useApi } from "./ui";
+import { errorText, Modal, Notice, SortHeader, StatusPill, useApi, useSort } from "./ui";
 import { useManage } from "./routes";
 import { PageSkeleton, ErrorState } from "../Feedback";
 
@@ -36,7 +36,8 @@ export function AccessGroupsPage() {
       && (!needle || [g.name, g.dashboard, g.dashboardCode, g.rlsValue].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, status, dashboardId]);
 
-  const paged = usePaged(rows, useGridPageSize(), `${q}|${status}|${dashboardId}`);
+  const { sorted, sort, toggle } = useSort(rows, { name: (g) => g.name, dashboard: (g) => g.dashboard, rls: (g) => g.rlsValue, members: (g) => g.members, status: (g) => g.status });
+  const paged = usePaged(sorted, useGridPageSize(), `${q}|${status}|${dashboardId}|${sort?.key}|${sort?.desc}`);
 
   if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
   if (!data) return <PageSkeleton kind="table" />;
@@ -82,7 +83,7 @@ export function AccessGroupsPage() {
 
       <div className="table-wrap">
         <table className="grid grid-rows">
-          <thead><tr><th>Access group</th><th>Dashboard</th><th>RLS value</th><th className="num">Members</th><th>Status</th></tr></thead>
+          <thead><tr><SortHeader label="Access group" k="name" sort={sort} onSort={toggle} /><SortHeader label="Dashboard" k="dashboard" sort={sort} onSort={toggle} /><SortHeader label="RLS value" k="rls" sort={sort} onSort={toggle} /><SortHeader label="Members" k="members" sort={sort} onSort={toggle} className="num" /><SortHeader label="Status" k="status" sort={sort} onSort={toggle} /></tr></thead>
           <tbody>
             {paged.rows.map((g) => (
               <tr key={g.id} onClick={() => navigate(routes.group(g.id))}>

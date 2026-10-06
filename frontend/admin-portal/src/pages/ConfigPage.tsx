@@ -174,6 +174,13 @@ function SettingsTab({ data, scope, onDone, onError }: TabProps & { scope: "gene
   useEffect(() => setValues(Object.fromEntries(list.map((s) => [s.key, s.value]))), [list]);
 
   const changed = list.filter((s) => values[s.key] !== s.value);
+  // Leaving the page with edits that were never saved asks first.
+  useEffect(() => {
+    if (changed.length === 0) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [changed.length]);
   const groups = [...new Set(list.map((s) => s.group))];
 
   async function save(e: FormEvent) {
@@ -205,7 +212,8 @@ function SettingsTab({ data, scope, onDone, onError }: TabProps & { scope: "gene
         </section>
       ))}
       {data.canEdit && (
-        <div className="actions">
+        <div className="actions form-actions-sticky settings-bar">
+          {changed.length > 0 && <span className="settings-unsaved"><span className="settings-dot" aria-hidden="true" />{changed.length} unsaved {changed.length === 1 ? "change" : "changes"}</span>}
           <button className="btn btn-primary" type="submit" disabled={busy || changed.length === 0}>{busy ? "Saving…" : changed.length ? `Save ${changed.length} ${changed.length === 1 ? "Change" : "Changes"}` : "Save Changes"}</button>
           {changed.length > 0 && <button className="btn btn-quiet" type="button" onClick={() => setValues(Object.fromEntries(list.map((s) => [s.key, s.value])))}>Discard</button>}
         </div>

@@ -8,7 +8,7 @@ import { Thumbnail } from "../Thumbnail";
 import { useFlash } from "../Toast";
 import { BiInactiveBadge } from "../TypeIcon";
 import { api, ApiError, apiObjectUrl } from "../api";
-import { errorText, Modal, Notice, StatusPill, useApi, when } from "./ui";
+import { errorText, Modal, Notice, StatusPill, useApi, when, FilePicker } from "./ui";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "./fields";
 import type { CategoryNode } from "./fields";
 import { useManage } from "./routes";
@@ -198,10 +198,10 @@ function ModifyDialog({ dashboard, onClose, onDone }: { dashboard: Detail["dashb
             </ul>
           </>
         )}
-        <label className="field">
+        <div className="field">
           <span>{genAi ? "New .html file" : "New .pbix file"}</span>
-          <input type="file" accept={genAi ? ".html,.htm" : ".pbix"} required onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        </label>
+          <FilePicker file={file} accept={genAi ? ".html,.htm" : ".pbix"} required label={genAi ? "Choose the .html file" : "Choose the .pbix file"} onChange={setFile} />
+        </div>
         {error && <Notice tone="error">{error}</Notice>}
         <div className="actions">
           <button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? (genAi ? "Checking…" : "Uploading…") : "Upload and Replace"}</button>

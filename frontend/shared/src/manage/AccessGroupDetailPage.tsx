@@ -5,10 +5,11 @@ import { Pager, usePaged } from "../Pager";
 import { useFlash } from "../Toast";
 import { api, apiObjectUrl } from "../api";
 import { useGridPageSize } from "../session";
-import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "./ui";
+import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when, FilePicker } from "./ui";
 import { NewGroupModal, type GroupRow, type MemberResult } from "./AccessGroupsPage";
 import { RulesPanel } from "./RulesPanel";
 import { useManage } from "./routes";
+import { Avatar } from "./ui";
 import { PageSkeleton, ErrorState } from "../Feedback";
 import { useConfirm } from "../Feedback";
 
@@ -193,7 +194,7 @@ export function AccessGroupDetailPage() {
                   <tr key={m.userId}>
                     <td>
                       <span className="person">
-                        <span className="avatar avatar-sm" aria-hidden="true">{initials(m.displayName ?? m.email)}</span>
+                        <Avatar name={m.displayName} email={m.email} />
                         <span><strong>{m.displayName ?? m.email}</strong>{isOwner(m.userId) && <span className="pill pill-brand pill-xs">Owner</span>}<span className="muted small block">{m.displayName ? m.email : "Name not filled in yet"}</span></span>
                       </span>
                     </td>
@@ -441,10 +442,10 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
 
       {mode === "excel" && (
         <form className="stack" onSubmit={submitExcel}>
-          <label className="field">
+          <div className="field">
             <span>Excel workbook (.xlsx) with emails under an "Email" heading</span>
-            <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          </label>
+            <FilePicker file={file} accept=".xlsx" label="Choose the Excel workbook" onChange={setFile} />
+          </div>
           <p className="small"><button type="button" className="link" onClick={() => void template()}>Download a Template</button></p>
           <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? "Sending…" : "Send File for Approval"}</button></div>
         </form>

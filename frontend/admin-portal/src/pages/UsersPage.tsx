@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, getDevUser, useGridPageSize, useSession, useFlash } from "@vantage/shared";
+import { api, can, getDevUser, useGridPageSize, useSession, useFlash, FilePicker } from "@vantage/shared";
 import { errorText, Modal, Notice, Pill, StatusPill, useApi, when } from "@vantage/shared";
 
 type Row = {
@@ -274,9 +274,9 @@ function BulkAdd({ roles, onClose }: { roles: RoleOption[]; onClose: () => void 
             </label>
           ) : (
             <>
-              <label className="field"><span>Excel file (.xlsx) with an "Email" column and an optional "Role" column</span>
-                <input type="file" required accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-              </label>
+              <div className="field"><span>Excel file (.xlsx) with an "Email" column and an optional "Role" column</span>
+                <FilePicker file={file} accept=".xlsx" required label="Choose the Excel file" onChange={setFile} />
+              </div>
               <p className="small"><button type="button" className="link" onClick={() => void downloadTemplate()}>Download the Template</button></p>
             </>
           )}

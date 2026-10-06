@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, apiObjectUrl, can, Icon, useSession, useFlash, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
+import { api, apiObjectUrl, can, Icon, useSession, useFlash, PageSkeleton, ErrorState, EmptyState, FilePicker } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
@@ -135,15 +135,14 @@ export function PublishGenAiPage() {
           <fieldset className="form-section">
             <legend>Dashboard File</legend>
             <div className="cols cols-3">
-              <label className="field span-2">
-                <span>.html file (up to {mb(g.maxBytes)}; a warning appears over {mb(g.warnBytes)})</span>
-                <input type="file" accept=".html,.htm" required onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
+              <div className="field span-3">
+                <span>.html file <span className="optional">(up to {mb(g.maxBytes)}; a warning appears over {mb(g.warnBytes)})</span></span>
+                <FilePicker file={file} accept=".html,.htm" required label="Choose the .html file" onChange={(f) => {
                   setFile(f);
                   setCheck(null);
                   if (f) { if (!name) setName(f.name.replace(/\.html?$/i, "")); void runCheck(f); }
                 }} />
-              </label>
+              </div>
               <div className="field">
                 <span>Don't have a file yet?</span>
                 <button className="btn" type="button" onClick={() => void downloadTemplate()}><Icon name="arrowDown" size={18} /> Download Starter Template</button>
@@ -175,8 +174,9 @@ export function PublishGenAiPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <span>Dashboard code</span>
                 <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
+                <small className="field-hint">Made from the name.</small>
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -225,7 +225,7 @@ export function PublishGenAiPage() {
             <ThumbnailPicker file={thumbnail} onChange={setThumbnail} current={<span className="thumb-empty">No image chosen</span>} />
           </fieldset>
 
-          <div className="actions">
+          <div className="actions form-actions-sticky">
             <button className="btn btn-primary" type="submit" disabled={busy || !file || !categoryId || (check != null && !check.passed)}>{busy ? "Publishing…" : "Publish"}</button>
             <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}

@@ -1,4 +1,4 @@
-> Snapshot of the live requirements doc (decisions C1–C47, plus C48 to C63 recorded here first) taken on 6 Oct 2026.
+> Snapshot of the live requirements doc (decisions C1–C47, plus C48 to C64 recorded here first) taken on 6 Oct 2026.
 > The live, editable version is the Claude Doc: https://claude.ai/code/artifact/23091f2e-8231-484a-9f67-405ece572694
 > When the two differ, the live doc wins; refresh this file when decisions change.
 
@@ -209,6 +209,7 @@ All 14 contradictions from round 1 are resolved; the requirements above already 
 | C61 | Upload folders (7 Oct). Admin Configuration has Power BI and GenAI upload folders (a sub-folder under the storage root, later the S3 bucket prefix). Files are stored as `<folder>/<dashboardId>/v<n>/<name>_<yyyyMMdd-HHmmss>.<ext>`; existing files stay where they are. |
 | C62 | Footer and polish (7 Oct). Both portals have a footer (copyright and the optional Branding footer text). Drop-downs share one look with a right-hand gap for the arrow. Category counts line up. The Tenant Edit window has Save and Verify, which lists every stage's result; the grid's Verify only shows a toast. The BI Inactive badge no longer shows in Dashboards Master. |
 | C63 | UI foundations (7 Oct). The font (Schibsted Grotesk) is bundled with the app instead of loaded from Google Fonts. Design tokens for the type scale (`--text-xs/sm/md/base`), spacing, radii and shadows in `base.css`; new styles use them. Pages show shape-matched loading skeletons (`PageSkeleton`) instead of the word Loading, a shared `EmptyState` and `ErrorState` (with Try Again), and our own `useConfirm` dialog replaces the browser's confirm boxes. Windows (modals) ease in with a soft blurred backdrop and ease out when closed, unless the person asks for reduced motion. On Home, a pinned dashboard no longer shows again in the list below, and the toolbar groups its controls so they wrap together. |
+| C64 | Admin UI, round 2 (7 Oct). Page headers keep the text on the left and the actions top right. Tables have a clearer header, row hover, a quiet link style, scroll shadows when they run wide, and click-to-sort columns (`useSort`, `SortHeader`) on Dashboards, Tenants and Access Groups; Dashboards is now paged. Tenant rows use a ⋯ menu (`RowMenu`) and their details open in a slide-in drawer (`Drawer`). Files are chosen with a drop zone (`FilePicker`) that shows the name and size. The publish forms and the Configuration settings have a sticky action bar; Configuration shows how many changes are unsaved and warns before leaving with any. Group members show coloured avatars (`Avatar`). Admin Home tiles have icons and always fit in one row where there is room. |
 
 ## Open questions
 

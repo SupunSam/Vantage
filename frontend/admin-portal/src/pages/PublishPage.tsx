@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, useSession, useFlash, useBiTypes, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
+import { api, can, useSession, useFlash, useBiTypes, PageSkeleton, ErrorState, EmptyState, FilePicker } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
@@ -174,10 +174,10 @@ function PublishPowerBiPage() {
           <fieldset className="form-section">
             <legend>Report File</legend>
             <div className="cols cols-3">
-              <label className="field">
-                <span>.pbix file (up to {options.limits.pbixMaxMb} MB)</span>
-                <input type="file" accept=".pbix" required onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !name) setName(f.name.replace(/\.pbix$/i, "")); }} />
-              </label>
+              <div className="field span-3">
+                <span>.pbix file <span className="optional">(up to {options.limits.pbixMaxMb} MB)</span></span>
+                <FilePicker file={file} accept=".pbix" required label="Choose the .pbix file" onChange={(f) => { setFile(f); if (f && !name) setName(f.name.replace(/\.pbix$/i, "")); }} />
+              </div>
               <label className="field">
                 <span>Tenant</span>
                 <select value={tenantId} onChange={(e) => { const t = Number(e.target.value); setTenantId(t); setWorkspaceId(verifiedTenants.find((x) => x.id === t)?.workspaces[0]?.id ?? 0); }}>
@@ -201,8 +201,9 @@ function PublishPowerBiPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <span>Dashboard code</span>
                 <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
+                <small className="field-hint">Made from the name.</small>
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -268,7 +269,7 @@ function PublishPowerBiPage() {
             </label>
           </fieldset>
 
-          <div className="actions">
+          <div className="actions form-actions-sticky">
             <button className="btn btn-primary" type="submit" disabled={busy || !file || !categoryId}>{busy ? "Publishing…" : "Publish"}</button>
             <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}

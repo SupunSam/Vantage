@@ -15,7 +15,7 @@ Sizing: about 1,000 users and 100 to 150 dashboards, 80 to 85% of them Power BI.
 Requirements:
 - The live requirements and decisions log is a Claude Doc:
   https://claude.ai/code/artifact/23091f2e-8231-484a-9f67-405ece572694
-- `docs/requirements.md` is a snapshot of it (decisions C1–C63).
+- `docs/requirements.md` is a snapshot of it (decisions C1–C64).
 - The original SRS is "SRS_RD_Dashboard - Dev Version.pdf", kept in the claude.ai project "DashboardRevamp", not in git.
 
 ## Components
@@ -225,6 +225,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - **Long lists are paged.** Use `Pager` and `usePaged` from `@vantage/shared` for lists held in the browser, and a `page`/`pageSize` API for lists that can grow without limit (audit log, group history, users). Never render an unbounded list.
 - **Pop-up messages** (C55). Show the result of an action (saved, added, failed) with `useFlash()` or `useToast()` from `@vantage/shared`, never an inline banner. The time on screen is the `ui.toastSeconds` setting, the same for every toast. Keep `Notice` for messages that describe a state, and for form errors inside a modal. Modals close with the red ✕ (`Modal` in `admin-portal/src/ui.tsx`).
 - **Loading, empty, errors and confirms** (C63). Show `PageSkeleton` (kind `page`, `cards`, `table`, `tiles` or `detail`; `head={false}` when the title is already on screen) while a page loads, never the word "Loading". Use `EmptyState` for "nothing here yet" and `ErrorState` (with `onRetry`) when a page fails to load. Ask before deleting or removing with `useConfirm()` (`danger: true` for the red button), never `window.confirm`. Use the design tokens in `base.css` (`--text-*`, `--space-*`, `--radius-*`, `--shadow-*`) for new styles instead of one-off sizes.
+- **Tables and pickers** (C64). Lists held in the browser use `useSort` with `SortHeader` and `usePaged`; row actions go in a `RowMenu`; looking at one row without leaving the page uses a `Drawer`; choosing a file uses `FilePicker`, never a bare file input; people show with `Avatar`. Long forms put their buttons in `actions form-actions-sticky`.
 - **UI text.**
   - **Title Case** for menus, page titles, tabs, dialog titles and buttons ("Add Group", "Save Changes", "Request Access").
   - Messages and help text are plain sentences.
@@ -243,7 +244,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C64) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C65) and refresh `docs/requirements.md`.
 
 ## Status (4 Oct 2026)
 

@@ -168,8 +168,9 @@ export function PublishTableauPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <span>Dashboard code</span>
                 <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
+                <small className="field-hint">Made from the name.</small>
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -218,7 +219,7 @@ export function PublishTableauPage() {
             <ThumbnailPicker file={thumbnail} onChange={setThumbnail} current={<span className="thumb-empty">No image chosen</span>} />
           </fieldset>
 
-          <div className="actions">
+          <div className="actions form-actions-sticky">
             <button className="btn btn-primary" type="submit" disabled={busy || !categoryId || !check}>{busy ? "Publishing…" : "Publish"}</button>
             <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}

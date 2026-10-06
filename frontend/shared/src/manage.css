@@ -4,7 +4,7 @@
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .grow { flex: 1; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
-.table-wrap { overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
 .table-wrap .grid { margin-top: 0; }
 .table-wrap .grid th { position: sticky; top: 0; background: var(--surface); }
 h3.sub { font-size: var(--text-md); font-weight: 600; margin: 4px 0 8px; }

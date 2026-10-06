@@ -3,8 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "../Icon";
 import { Thumbnail } from "../Thumbnail";
 import { TypeIcon } from "../TypeIcon";
-import { can, useSession } from "../session";
-import { Notice, StatusPill, useApi, when } from "./ui";
+import { can, useGridPageSize, useSession } from "../session";
+import { Pager, usePaged } from "../Pager";
+import { Notice, SortHeader, StatusPill, useApi, useSort, when } from "./ui";
 import { useManage } from "./routes";
 import { PageSkeleton, ErrorState, EmptyState } from "../Feedback";
 
@@ -35,6 +36,11 @@ export function DashboardsPage() {
       && (!primary || (primary === "-" ? !d.categoryPath : d.categoryPath?.split(" / ")[0] === primary))
       && (!needle || [d.name, d.code, d.description, d.owner, d.backupOwner, d.categoryPath, ...d.tags].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, status, primary]);
+  const { sorted, sort, toggle } = useSort(rows, {
+    name: (d) => d.name, category: (d) => d.categoryPath?.split(" / ")[0], type: (d) => d.type, rls: (d) => (d.rlsEnabled ? 1 : 0), owner: (d) => d.owner,
+    groups: (d) => d.groups, members: (d) => d.members, status: (d) => d.status, published: (d) => d.publishedAtUtc,
+  });
+  const paged = usePaged(sorted, useGridPageSize(), `${q}|${status}|${primary}|${sort?.key}|${sort?.desc}`);
 
   if (error) return <ErrorState>{error}</ErrorState>;
   if (!data) return <PageSkeleton kind="table" />;
@@ -89,10 +95,10 @@ export function DashboardsPage() {
           <div className="table-wrap">
             <table className="grid grid-rows">
               <thead>
-                <tr><th className="col-thumb"><span className="visually-hidden">Thumbnail</span></th><th>Dashboard</th><th>Primary Category</th><th>Type</th><th>RLS</th><th>Owners</th><th className="num">Groups</th><th className="num">Members</th><th>Status</th><th>Published</th></tr>
+                <tr><th className="col-thumb"><span className="visually-hidden">Thumbnail</span></th><SortHeader label="Dashboard" k="name" sort={sort} onSort={toggle} /><SortHeader label="Primary Category" k="category" sort={sort} onSort={toggle} /><SortHeader label="Type" k="type" sort={sort} onSort={toggle} /><SortHeader label="RLS" k="rls" sort={sort} onSort={toggle} /><SortHeader label="Owners" k="owner" sort={sort} onSort={toggle} /><SortHeader label="Groups" k="groups" sort={sort} onSort={toggle} className="num" /><SortHeader label="Members" k="members" sort={sort} onSort={toggle} className="num" /><SortHeader label="Status" k="status" sort={sort} onSort={toggle} /><SortHeader label="Published" k="published" sort={sort} onSort={toggle} /></tr>
               </thead>
               <tbody>
-                {rows.map((d) => (
+                {paged.rows.map((d) => (
                   <tr key={d.id} onClick={() => navigate(routes.dashboard(d.id))}>
                     <td className="col-thumb"><div className="mini-thumb"><Thumbnail dashboardId={d.id} version={d.thumbnail} type={d.type} /></div></td>
                     <td>
@@ -116,6 +122,7 @@ export function DashboardsPage() {
             </table>
             {rows.length === 0 && <p className="pop-empty">No dashboards match these filters.</p>}
           </div>
+          <Pager {...paged.pager} />
         </>
       )}
     </>
