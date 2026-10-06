@@ -1,14 +1,15 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "../Icon";
-import { Pager, usePaged } from "../Pager";
+import { Pager, usePaged, GridFrame } from "../Pager";
 import { useFlash } from "../Toast";
 import { api } from "../api";
-import { errorText, Modal, Notice, Pill, useApi, when } from "./ui";
+import { errorText, Modal, Notice, Pill, useApi, when, RowMenu } from "./ui";
 import type { GroupRow } from "./AccessGroupsPage";
 import { useManage } from "./routes";
 import { PageSkeleton, ErrorState, EmptyState } from "../Feedback";
 import { useConfirm } from "../Feedback";
+import { InfoTip, Tip } from "../Tip";
 
 type Condition = { field: string; value: string };
 type Rule = {
@@ -76,7 +77,8 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
     <>
       <div className="panel-row rules-head">
         {fixed
-          ? <p className="muted small">Rules for <strong>{fixed.group}</strong>: they pick people from the HRMS data and propose adding them to this group, or removing them. The owners of {fixed.dashboard} confirm every change, and rules also run after each HRMS sync.</p>
+          ? <p className="muted small">Rules for <strong>{fixed.group}</strong> propose adding people to it, or removing them.
+              <InfoTip label="How rules work">The rules pick people from the HRMS data. The owners of {fixed.dashboard} confirm every change, and rules also run after each HRMS sync.</InfoTip></p>
           : <span />}
         {data.canEdit && (
           <div className="actions">
@@ -91,45 +93,61 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
         <EmptyState icon="list" title="No Rules Yet">{data.canEdit ? "Create a rule to keep this access group in step with the HRMS data, with the owners always confirming." : "No Super Admin has created a rule yet."}</EmptyState>
       ) : (
         <>
-          <div className="table-wrap">
-            <table className="grid">
-              <thead><tr><th>Rule</th><th>What it does</th><th>When</th><th>Last run</th><th /></tr></thead>
-              <tbody>
-                {paged.rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <strong>{r.name}</strong>
-                      <div>{r.isActive ? <Pill tone="ok">On</Pill> : <Pill tone="neutral">Off</Pill>}</div>
-                    </td>
-                    <td className="small">
-                      <Pill tone={r.action === "Add" ? "ok" : "warn"}>{r.action === "Add" ? "Add people" : "Remove people"}</Pill>
-                      {!fixed && <div><Link to={routes.group(r.groupId, "rules")}>{r.group}</Link></div>}
-                      <div className="muted">{!fixed && <>{r.dashboard}</>}{r.moveFromOtherGroups ? `${fixed ? "" : " · "}may move people from other groups` : ""}</div>
-                    </td>
-                    <td className="small">{r.conditions.map((c) => <div key={c.field}>{fieldLabel(c.field)} equals <strong>{c.value}</strong></div>)}</td>
-                    <td className="small">
-                      {r.lastRunAtUtc ? <>{when(r.lastRunAtUtc)}<div className="muted">{r.lastRunSummary}</div></> : <span className="muted">Not run yet</span>}
-                      {r.waiting > 0 && <div><Link to="/requests">{r.waiting} waiting for the owners</Link></div>}
-                    </td>
-                    <td className="cell-actions">
-                      <span className="member-actions">
-                        <button type="button" className="btn" onClick={() => setPreviewing(r)}>Preview</button>
-                        {data.canEdit && (
-                          <>
-                            <button type="button" className="btn" disabled={busy !== null || !r.isActive} title={r.isActive ? "Send what the rule finds to the owners now" : "Switch the rule on first"} onClick={() => void run(r)}>{busy === r.id ? "Running…" : "Run Now"}</button>
-                            <button type="button" className="btn" onClick={() => void toggle(r)}>{r.isActive ? "Switch Off" : "Switch On"}</button>
-                            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Edit ${r.name}`} onClick={() => setEditing(r)}><Icon name="edit" size={18} /></button>
-                            <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" aria-label={`Delete ${r.name}`} onClick={() => void remove(r)}><Icon name="trash" size={18} /></button>
-                          </>
+          <GridFrame pager={paged.pager}>
+            <div className="table-wrap">
+              <table className="grid">
+                <thead><tr><th>Rule</th><th>{fixed ? "What it does" : "Group"}</th><th>When</th><th>Last run</th><th /></tr></thead>
+                <tbody>
+                  {paged.rows.map((r) => (
+                    <tr key={r.id} className={r.isActive ? "" : "rule-off"}>
+                      <td>
+                        <strong>{r.name}</strong>
+                        <div>{r.isActive ? <Pill tone="ok">On</Pill> : <Pill tone="neutral">Off</Pill>}</div>
+                      </td>
+                      <td className="small">
+                        <Pill tone={r.action === "Add" ? "ok" : "warn"}>{r.action === "Add" ? "Add people" : "Remove people"}</Pill>
+                        {!fixed && (
+                          <div className="rule-group">
+                            <Tip text={<><strong>{r.dashboard}</strong>{r.moveFromOtherGroups ? <><br />May move people from other groups.</> : null}</>}>
+                              <Link to={routes.group(r.groupId, "rules")}>{r.group}</Link>
+                            </Tip>
+                          </div>
                         )}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pager {...paged.pager} />
+                        {fixed && r.moveFromOtherGroups && <div className="muted">may move people from other groups</div>}
+                      </td>
+                      <td className="small">
+                        <div className="rule-conditions">
+                          {r.conditions.map((c) => <span key={c.field} className="rule-chip">{fieldLabel(c.field)} <b>=</b> {c.value}</span>)}
+                        </div>
+                      </td>
+                      <td className="small">
+                        {r.lastRunAtUtc ? (
+                          <Tip text={r.lastRunSummary ?? "Ran."}>
+                            <span className="rule-last">
+                              <span>{when(r.lastRunAtUtc)}</span>
+                              {r.lastRunSummary && <span className="muted rule-summary">{r.lastRunSummary}</span>}
+                            </span>
+                          </Tip>
+                        ) : <span className="muted">Not run yet</span>}
+                        {r.waiting > 0 && <div><Link to="/requests"><Pill tone="warn">{r.waiting} waiting</Pill></Link></div>}
+                      </td>
+                      <td className="cell-actions">
+                        <RowMenu label={`Actions for ${r.name}`} items={[
+                          { label: "Preview Who It Finds", onSelect: () => setPreviewing(r) },
+                          ...(data.canEdit ? [
+                            { label: busy === r.id ? "Running…" : "Run Now", onSelect: () => void run(r), disabled: busy !== null || !r.isActive },
+                            { label: "Edit", onSelect: () => setEditing(r) },
+                            { label: r.isActive ? "Switch Off" : "Switch On", onSelect: () => void toggle(r) },
+                            { label: "Delete", onSelect: () => void remove(r), danger: true },
+                          ] : []),
+                        ]} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </GridFrame>
         </>
       )}
 

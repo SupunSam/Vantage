@@ -1,4 +1,4 @@
-import { RulesPanel } from "@vantage/shared";
+import { RulesPanel, InfoTip } from "@vantage/shared";
 
 /**
  * Access Group Rules: "when an HRMS field equals a value, propose adding the person to this group" (or removing them).
@@ -12,9 +12,12 @@ export function AccessRulesPage() {
         <div>
           <h1>Access Group Rules</h1>
           <p>
-            A rule picks people from the HRMS data, for example <em>Department equals Finance</em>, and proposes adding them to an access group, or removing them from it.
-            Rules never change anyone's access by themselves: what a rule finds goes to the dashboard's owners as one request, and people are added or removed only when the owners approve.
-            Rules run when you run them, and after every HRMS sync. The rules of one group are also on that group's page, under Rules.
+            Rules pick people from the HRMS data and propose adding them to an access group, or removing them.
+            <InfoTip label="How rules work">
+              <p>A rule picks people from the HRMS data, for example <em>Department equals Finance</em>, and proposes adding them to an access group, or removing them from it.</p>
+              <p>Rules never change anyone's access by themselves: what a rule finds goes to the dashboard's owners as one request, and people are added or removed only when the owners approve.</p>
+              <p>Rules run when you run them, and after every HRMS sync. The rules of one group are also on that group's page, under Rules.</p>
+            </InfoTip>
           </p>
         </div>
       </div>

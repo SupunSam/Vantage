@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, Icon, useSession, useFlash, PageSkeleton, useConfirm, ErrorState } from "@vantage/shared";
+import { api, Icon, useSession, useFlash, PageSkeleton, useConfirm, ErrorState, applyBrand } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 type Setting = {
@@ -80,9 +80,7 @@ function BrandingTab({ data, onDone, onError }: TabProps) {
     try {
       await api("/api/admin/config/settings", { method: "PUT", body: JSON.stringify({ values: { "branding.portalName": name, "branding.primaryColor": primary, "branding.accentColor": accent, "branding.footerText": footer } }) });
       // Apply straight away on this page; other pages and other people see it the next time they load.
-      const root = document.documentElement.style;
-      root.setProperty("--brand", primary);
-      root.setProperty("--accent", accent);
+      applyBrand(primary, accent);
       document.title = name;
       onDone("Branding saved. Other people see it when they next open or reload a page.");
     } catch (err) { onError(errorText(err)); } finally { setBusy(false); }

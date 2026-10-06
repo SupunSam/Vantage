@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, apiObjectUrl, Icon, useGridPageSize, PageSkeleton, ErrorState } from "@vantage/shared";
+import { api, apiObjectUrl, Icon, useGridPageSize, PageSkeleton, ErrorState, GridFrame, useServerPaging } from "@vantage/shared";
 import { errorText, Modal, Notice, useApi, when } from "@vantage/shared";
 
 type Row = {
@@ -8,9 +8,9 @@ type Row = {
 };
 type Page = { total: number; page: number; pageSize: number; searchableFromUtc: string; rows: Row[] };
 type Options = { entityTypes: string[]; actions: string[] };
-type Filters = { from: string; to: string; actor: string; entityType: string; action: string; serviceNow: string; search: string };
+type Filters = { from: string; to: string; actor: string; entityType: string; action: string; search: string };
 
-const empty: Filters = { from: "", to: "", actor: "", entityType: "", action: "", serviceNow: "", search: "" };
+const empty: Filters = { from: "", to: "", actor: "", entityType: "", action: "", search: "" };
 
 function queryString(f: Filters) {
   const p = new URLSearchParams();
@@ -31,22 +31,21 @@ function useDebounced<T>(value: T, ms = 350) {
 /** Audit Log: every change made in the portal, searchable for the last 12 months, with an Excel export. */
 export function AuditLogPage() {
   const [filters, setFilters] = useState<Filters>(empty);
-  const [page, setPage] = useState(1);
+  const gridSize = useGridPageSize();
+  const { page, setPage, size, pagerFor } = useServerPaging(gridSize);
   const [open, setOpen] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const applied = useDebounced(filters);
-  const gridSize = useGridPageSize();
   const options = useApi<Options>("/api/admin/audit-log/options");
 
   const qs = queryString(applied);
   qs.set("page", String(page));
-  qs.set("pageSize", String(gridSize));
+  qs.set("pageSize", String(size));
   const { data, error, loading } = useApi<Page>(`/api/admin/audit-log?${qs}`);
 
   const set = (k: keyof Filters, v: string) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1); };
   const filtered = Object.values(filters).some((v) => v.trim());
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   async function exportExcel() {
     setExporting(true);
@@ -100,19 +99,18 @@ export function AuditLogPage() {
             {options.data?.entityTypes.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </label>
-        <label className="field"><span>ServiceNow reference</span><input value={filters.serviceNow} onChange={(e) => set("serviceNow", e.target.value)} placeholder="e.g. INC0012345" /></label>
         <label className="field field-search">
           <span>Search</span>
-          <span className="input-icon"><Icon name="search" size={18} /><input value={filters.search} onChange={(e) => set("search", e.target.value)} placeholder="Entity id or text in the details" /></span>
+          <span className="input-icon"><Icon name="search" size={18} /><input value={filters.search} onChange={(e) => set("search", e.target.value)} placeholder="Entity id, ticket number or text in the details" /></span>
         </label>
         {filtered && <button className="btn btn-quiet" type="button" onClick={() => { setFilters(empty); setPage(1); }}>Clear Filters</button>}
-        <span className="muted small filters-count">{data ? `${data.total.toLocaleString()} ${data.total === 1 ? "entry" : "entries"}` : ""}</span>
       </div>
 
       {!data ? <PageSkeleton kind="table" head={false} /> : data.rows.length === 0 ? (
         <p className="muted">{filtered ? "No entries match these filters." : "Nothing has been logged yet."}</p>
       ) : (
-        <div className="table-wrap" aria-busy={loading}>
+        <GridFrame pager={pagerFor(data.total)}>
+<div className="table-wrap" aria-busy={loading}>
           <table className="grid grid-rows audit-grid">
             <thead><tr><th>When</th><th>Who</th><th>Description</th></tr></thead>
             <tbody>
@@ -126,14 +124,7 @@ export function AuditLogPage() {
             </tbody>
           </table>
         </div>
-      )}
-
-      {data && data.total > data.pageSize && (
-        <div className="pager">
-          <span className="muted small">Page {page} of {pages}</span>
-          <button className="btn" type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
-          <button className="btn" type="button" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
-        </div>
+</GridFrame>
       )}
 
       {open != null && <EntryModal id={open} onClose={() => setOpen(null)} />}

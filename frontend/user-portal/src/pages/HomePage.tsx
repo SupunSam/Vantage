@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, useSession, useFlash, BiInactiveBadge, PageSkeleton, ErrorState } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, useSession, useFlash, BiInactiveBadge, PageSkeleton, ErrorState, useApi, optimisticUpdate } from "@vantage/shared";
 import { FolderMenu } from "./FolderMenu";
 import { FoldersPage } from "./FoldersPage";
 import { Crumbs, FolderGrid, plural } from "./FolderGrid";
@@ -68,6 +68,8 @@ function sortRows(rows: MyDashboard[], sort: Sort): MyDashboard[] {
 const time = (iso: string | null) => (iso ? new Date(iso.endsWith("Z") ? iso : iso + "Z").getTime() : 0);
 
 /** Home: two tabs. My Dashboards (everything this person can open) and Personal Folders (their own groupings of those). */
+const MINE = "/api/dashboards/mine";
+
 export function HomePage() {
   const { me } = useSession();
   const [search, setSearch] = useSearchParams();
@@ -95,15 +97,10 @@ export function HomePage() {
 function MyDashboards() {
   const [search, setSearch] = useSearchParams();
   const cat = search.get("cat");                       // the category folder we are inside, or none for the top level
-  const [rows, setRows] = useState<MyDashboard[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: rows, error, reload } = useApi<MyDashboard[]>(MINE);
   const setNotice = useFlash();
   const [q, setQ] = useState("");
   const [prefs, setPrefs] = useState(readPrefs);
-
-  useEffect(() => {
-    api<MyDashboard[]>("/api/dashboards/mine").then(setRows).catch((e) => setError(e.message));
-  }, []);
 
   function setPref(p: Partial<typeof prefs>) {
     const next = { ...prefs, ...p };
@@ -119,8 +116,10 @@ function MyDashboards() {
   async function togglePin(d: MyDashboard) {
     setNotice(null);
     try {
-      await api(`/api/dashboards/${d.id}/pin`, { method: d.pinned ? "DELETE" : "POST" });
-      setRows((rs) => rs?.map((r) => (r.id === d.id ? { ...r, pinned: !d.pinned, pinOrder: d.pinned ? null : Date.now() } : r)) ?? null);
+      // The pin moves at once; if the server refuses, it moves back and the reason is shown.
+      await optimisticUpdate<MyDashboard[]>(MINE,
+        (rs) => rs.map((r) => (r.id === d.id ? { ...r, pinned: !d.pinned, pinOrder: d.pinned ? null : Date.now() } : r)),
+        () => api(`/api/dashboards/${d.id}/pin`, { method: d.pinned ? "DELETE" : "POST" }));
     } catch (e) {
       setNotice(e instanceof ApiError ? e.message : String(e));
     }
@@ -133,7 +132,7 @@ function MyDashboards() {
     return rows.filter((d) => [d.name, d.description, d.owner, d.categoryPath, d.code, ...d.tags].some((v) => v?.toLowerCase().includes(needle)));
   }, [rows, q]);
 
-  if (error) return <ErrorState onRetry={() => window.location.reload()}>{error}</ErrorState>;
+  if (error && !rows) return <ErrorState onRetry={reload}>{error}</ErrorState>;
   if (!rows) return <PageSkeleton kind="cards" />;
 
   const pinned = filtered.filter((r) => r.pinned).sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0));

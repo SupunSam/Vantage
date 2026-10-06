@@ -56,7 +56,8 @@ export function App() {
   ];
 
   return (
-    <AppShell portalLabel="Admin Portal" sections={sections} otherPortal={{ label: "Open User Portal", href: userPortalUrl }}>
+    <AppShell portalLabel="Admin Portal" sections={sections} otherPortal={{ label: "Open User Portal", href: userPortalUrl }}
+      dashboardSearch={show("dashboard-config") ? { path: "/api/admin/dashboards", open: (d) => `/dashboards/${d.id}` } : undefined}>
       <ManageScope>
       <Routes>
         <Route path="/" element={<HomePage />} />

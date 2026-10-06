@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, can, useSession, useFlash, useBiTypes, PageSkeleton, ErrorState, EmptyState, FilePicker } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
@@ -26,7 +26,11 @@ export function PublishPage() {
     { key: "tableau", label: "Tableau", on: isEnabled("Tableau") },
     { key: "genai", label: "GenAI", on: isEnabled("GenAi") && me?.isSuperAdmin === true },
   ] as const).filter((t) => t.on);
-  const [chosen, setType] = useState<"powerbi" | "tableau" | "genai">("powerbi");
+  // Dashboards Master sends a saved draft as ?type=…&draft=…
+  const [params] = useSearchParams();
+  const draftParam = Number(params.get("draft")) || undefined;
+  const typeParam = params.get("type");
+  const [chosen, setType] = useState<"powerbi" | "tableau" | "genai">(typeParam === "tableau" || typeParam === "genai" ? typeParam : "powerbi");
   const type = available.some((t) => t.key === chosen) ? chosen : available[0]?.key;
   const showGenAi = type === "genai";
   const tab = (key: typeof chosen, label: string) => (
@@ -41,7 +45,7 @@ export function PublishPage() {
           <div className="tabs" role="tablist" aria-label="BI type">
             {available.map((t) => tab(t.key, t.label))}
           </div>
-          {type === "tableau" ? <PublishTableauPage /> : showGenAi ? <PublishGenAiPage /> : <PublishPowerBiPage />}
+          {type === "tableau" ? <PublishTableauPage resumeId={draftParam} /> : showGenAi ? <PublishGenAiPage resumeId={draftParam} /> : <PublishPowerBiPage resumeId={draftParam} />}
         </>
       )}
     </>
@@ -52,7 +56,7 @@ export function PublishPage() {
  * Publish a Power BI dashboard: upload the .pbix, the service principal imports it into the chosen workspace,
  * and the dashboard goes live with its default group (the owners). Only verified tenants can be chosen.
  */
-function PublishPowerBiPage() {
+function PublishPowerBiPage({ resumeId }: { resumeId?: number }) {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 
@@ -79,7 +83,7 @@ function PublishPowerBiPage() {
     setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
     setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
     setRls(Boolean(v.rls)); setRlsValue(String(v.rlsValue ?? "")); if (v.tenantId) setTenantId(Number(v.tenantId)); if (v.workspaceId) setWorkspaceId(Number(v.workspaceId));
-  });
+  }, resumeId);
   useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMessage = useFlash();
   const poll = useRef<number | undefined>(undefined);

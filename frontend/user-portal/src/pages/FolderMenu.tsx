@@ -27,7 +27,10 @@ export function FolderMenu({ dashboardId, name }: { dashboardId: number; name: s
   async function toggle(f: Folder) {
     setError(null);
     const has = f.dashboardIds.includes(dashboardId);
-    try { await api(`/api/folders/${f.id}/dashboards/${dashboardId}`, { method: has ? "DELETE" : "POST" }); await load(); } catch (e) { fail(e); }
+    const before = folders;
+    // Tick or untick straight away; put it back if the server says no.
+    setFolders((fs) => fs?.map((x) => (x.id === f.id ? { ...x, dashboardIds: has ? x.dashboardIds.filter((i) => i !== dashboardId) : [...x.dashboardIds, dashboardId] } : x)) ?? null);
+    try { await api(`/api/folders/${f.id}/dashboards/${dashboardId}`, { method: has ? "DELETE" : "POST" }); void load(); } catch (e) { setFolders(before); fail(e); }
   }
 
   async function create(e: FormEvent) {

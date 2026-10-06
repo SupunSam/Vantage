@@ -29,7 +29,7 @@ function useDebounced<T>(value: T, ms = 400) {
  * Publish a Tableau dashboard: a view on a Tableau Server tenant (each person opens it as their own Tableau user), or a view on
  * Tableau Public (open to anyone with the address, so only for public data). It is live at once, with the owners in the default group.
  */
-export function PublishTableauPage() {
+export function PublishTableauPage({ resumeId }: { resumeId?: number }) {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 
@@ -54,7 +54,7 @@ export function PublishTableauPage() {
     setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
     setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
     setViewUrl(String(v.viewUrl ?? "")); setTenantId(String(v.tenantId ?? ""));
-  });
+  }, resumeId);
   useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMessage = useFlash();
 

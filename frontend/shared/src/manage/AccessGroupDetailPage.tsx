@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Icon } from "../Icon";
-import { Pager, usePaged } from "../Pager";
+import { GridFrame, Pager, usePaged } from "../Pager";
 import { useFlash } from "../Toast";
 import { api, apiObjectUrl } from "../api";
 import { useGridPageSize } from "../session";
@@ -187,6 +187,8 @@ export function AccessGroupDetailPage() {
           {g.members.length === 0 ? (
             <p className="pop-empty">No members yet.{live ? " Add people by name, a pasted list of emails, or an Excel file." : ""}</p>
           ) : (
+            <GridFrame pager={memberPage.pager}>
+            <div className="table-wrap">
             <table className="grid member-grid">
               <thead><tr><th>Person</th><th>Type</th><th>How they were added</th><th>Added</th>{live && <th />}</tr></thead>
               <tbody>
@@ -217,8 +219,9 @@ export function AccessGroupDetailPage() {
                 ))}
               </tbody>
             </table>
+            </div>
+            </GridFrame>
           )}
-          <Pager {...memberPage.pager} />
         </section>
         </>
       )}

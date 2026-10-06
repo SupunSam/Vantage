@@ -35,7 +35,7 @@ export function App() {
   const showAdmin = adminModules.some((m) => can(me, m));
 
   return (
-    <AppShell portalLabel="Dashboards" sections={sections} otherPortal={showAdmin ? { label: "Open Admin Portal", href: adminPortalUrl } : undefined}>
+    <AppShell portalLabel="Dashboards" sections={sections} dashboardSearch={{ path: "/api/dashboards/mine", open: (d) => `/dashboards/${d.id}` }} otherPortal={showAdmin ? { label: "Open Admin Portal", href: adminPortalUrl } : undefined}>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/dashboards/:id" element={<ViewerPage />} />

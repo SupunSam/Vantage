@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Icon, TrendChart, useSession, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
+import { CountUp, Icon, TrendChart, useSession, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
 import { useApi, when } from "@vantage/shared";
 
 type Home = {
@@ -35,7 +35,7 @@ export function HomePage() {
   const hasAnything = data.dashboards || data.users || data.usage || data.requests || data.recent;
 
   return (
-    <>
+    <div className="reveal">
       <div className="page-head">
         <div>
           <h1>Home</h1>
@@ -68,7 +68,7 @@ export function HomePage() {
         <Attention items={data.attention} />
         {data.recent && <Recent rows={data.recent} />}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -77,7 +77,7 @@ function HomeTile({ to, label, value, hint, icon }: { to: string; label: string;
     <Link to={to} className="an-tile hv-tile">
       <span className="tile-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
       <span className="an-tile-label">{label}</span>
-      <strong className="an-tile-value">{value}</strong>
+      <strong className="an-tile-value"><CountUp text={value} /></strong>
       <span className="an-tile-hint">{hint}</span>
     </Link>
   );

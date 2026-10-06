@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, getDevUser, useGridPageSize, useSession, useFlash, FilePicker } from "@vantage/shared";
+import { api, can, getDevUser, useGridPageSize, useSession, useFlash, FilePicker, GridFrame, useServerPaging } from "@vantage/shared";
 import { errorText, Modal, Notice, Pill, StatusPill, useApi, when } from "@vantage/shared";
 
 type Row = {
@@ -18,12 +18,12 @@ export function UsersPage() {
   const [type, setType] = useState("");
   const [status, setStatus] = useState("");
   const [roleId, setRoleId] = useState("");
-  const [page, setPage] = useState(1);
+  const { page, setPage, size, pagerFor } = useServerPaging(gridSize);
   const [dialog, setDialog] = useState<"add" | "bulk" | { id: number } | null>(null);
   const setMessage = useFlash();
   const [syncing, setSyncing] = useState(false);
 
-  const query = new URLSearchParams({ search, type, status, roleId, page: String(page), pageSize: String(gridSize) });
+  const query = new URLSearchParams({ search, type, status, roleId, page: String(page), pageSize: String(size) });
   const { data, error, reload } = useApi<Page>(`/api/admin/users?${query}`);
   const roles = useApi<{ roles: RoleOption[] }>("/api/admin/roles").data?.roles ?? [];
 
@@ -47,7 +47,6 @@ export function UsersPage() {
     }
   }
 
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
     <>
@@ -81,7 +80,8 @@ export function UsersPage() {
       {error && <Notice tone="error">{error}</Notice>}
       {data && (
         <>
-          <div className="table-wrap">
+          <GridFrame pager={pagerFor(data.total)}>
+<div className="table-wrap">
             <table className="grid">
               <thead><tr><th>Name</th><th>Type</th><th>Department</th><th>Roles</th><th className="num">Dashboards</th><th>Status</th><th>Added</th></tr></thead>
               <tbody>
@@ -103,12 +103,7 @@ export function UsersPage() {
               </tbody>
             </table>
           </div>
-          <div className="pager">
-            <span className="muted small">{data.total} user{data.total === 1 ? "" : "s"}</span>
-            <button className="btn" type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
-            <span className="small">Page {page} of {pages}</span>
-            <button className="btn" type="button" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
-          </div>
+</GridFrame>
         </>
       )}
 

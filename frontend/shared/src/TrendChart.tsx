@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Pager, usePaged } from "./Pager";
+import { GridFrame, usePaged } from "./Pager";
 
 export type TrendPoint = { day: string; views: number; users: number };
 
@@ -79,7 +79,7 @@ export function TrendChart({ points, title }: { points: TrendPoint[]; title: str
       {!table ? (
         <div className="trend-plot" ref={wrap} tabIndex={0} onKeyDown={onKey} onBlur={() => setActive(null)} onPointerLeave={() => setActive(null)}
           aria-label={`${title}: ${total.toLocaleString()} views. Use the left and right arrow keys to read each ${unit}.`}>
-          <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-hidden="true">
+          <svg key={`${bars.length}:${total}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-hidden="true">
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} className="trend-grid" />
@@ -96,7 +96,7 @@ export function TrendChart({ points, title }: { points: TrendPoint[]; title: str
               const d = b.views > 0 ? `M${x},${top + h} V${top + r} Q${x},${top} ${x + r},${top} H${x + barW - r} Q${x + barW},${top} ${x + barW},${top + r} V${top + h} Z` : "";
               return (
                 <g key={i}>
-                  {d && <path d={d} className={`trend-bar ${active === i ? "trend-bar-on" : ""}`} />}
+                  {d && <path d={d} className={`trend-bar ${active === i ? "trend-bar-on" : ""}`} style={{ "--i": i } as React.CSSProperties} />}
                   {i % labelEvery === 0 && <text x={cx} y={H - 8} textAnchor="middle" className="trend-axis">{b.short}</text>}
                   <rect x={PAD.left + slot * i} y={PAD.top} width={slot} height={innerH} className="trend-hit" onPointerEnter={() => setActive(i)} onPointerMove={() => setActive(i)} />
                 </g>
@@ -113,13 +113,14 @@ export function TrendChart({ points, title }: { points: TrendPoint[]; title: str
         </div>
       ) : (
         <>
-          <div className="requests-table-wrap">
-            <table className="requests-table">
-              <thead><tr><th>{unit === "week" ? "Week" : "Day"}</th><th className="num">Views</th><th className="num">{unit === "week" ? "Most people in a day" : "People"}</th></tr></thead>
-              <tbody>{tablePage.rows.map((b) => <tr key={b.label}><td>{b.label}</td><td className="num">{b.views.toLocaleString()}</td><td className="num">{b.users.toLocaleString()}</td></tr>)}</tbody>
-            </table>
-          </div>
-          <Pager {...tablePage.pager} sizes={[15, 30, 60]} />
+          <GridFrame pager={tablePage.pager} sizes={[15, 30, 60]}>
+            <div className="requests-table-wrap">
+              <table className="requests-table">
+                <thead><tr><th>{unit === "week" ? "Week" : "Day"}</th><th className="num">Views</th><th className="num">{unit === "week" ? "Most people in a day" : "People"}</th></tr></thead>
+                <tbody>{tablePage.rows.map((b) => <tr key={b.label}><td>{b.label}</td><td className="num">{b.views.toLocaleString()}</td><td className="num">{b.users.toLocaleString()}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </GridFrame>
         </>
       )}
     </figure>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type DevUser } from "./api";
 import { Icon } from "./Icon";
 import { useSession } from "./session";
+import { LoginArt } from "./LoginArt";
 
 type Kind = "Internal" | "External";
 
@@ -48,15 +49,37 @@ export function SignInPage({ portalLabel }: { portalLabel: string }) {
   }
 
   const portalName = branding.portalName ?? "Vantage";
+  const admin = /admin/i.test(portalLabel);
   const chosen = KINDS.find((k) => k.kind === kind);
 
   return (
     <div className="login">
       <aside className="login-brand">
-        <img src={branding.logoUrl ?? "/brand/logo.svg"} alt="" className="login-logo" />
-        <h1>{portalName}</h1>
-        <p className="login-tag">{portalLabel}</p>
-        <p className="login-blurb">Your company's dashboards in one place, with access you can trust.</p>
+        <div className="login-brand-inner">
+          <div className="login-mark">
+            <img src={branding.logoUrl ?? "/brand/logo.svg"} alt="" className="login-logo" />
+            <span className="login-mark-text">
+              <strong>{portalName}</strong>
+              <span className="login-chip">{portalLabel}</span>
+            </span>
+          </div>
+
+          <div className="login-hero">
+            <h1>{admin ? "Run every dashboard from one place." : "Every dashboard you need, one place."}</h1>
+            <p className="login-blurb">{admin
+              ? "Publish Power BI, Tableau and GenAI dashboards, decide who sees each one, and see how they are used."
+              : "Open the dashboards you have access to, keep your favourites close, and ask owners for the rest."}</p>
+          </div>
+
+          <LoginArt />
+
+          <ul className="login-points">
+            <li><span aria-hidden="true"><Icon name="dashboards" size={18} /></span>Power BI, Tableau and GenAI dashboards, side by side</li>
+            <li><span aria-hidden="true"><Icon name="shield" size={18} /></span>Access that follows your groups, nothing more</li>
+            <li><span aria-hidden="true"><Icon name="lock" size={18} /></span>Company sign-in with a second step to prove it is you</li>
+          </ul>
+        </div>
+        <p className="login-foot">© {new Date().getFullYear()} {portalName}</p>
       </aside>
 
       <main className="login-main">

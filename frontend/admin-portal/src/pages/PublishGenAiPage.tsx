@@ -21,7 +21,7 @@ const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes >= 1024 * 1
  * Publish a GenAI dashboard: one HTML file made from the approved starter template. The file is checked first
  * (template marker, size, libraries only from approved CDNs). A file that passes is live at once for the owners' default group.
  */
-export function PublishGenAiPage() {
+export function PublishGenAiPage({ resumeId }: { resumeId?: number }) {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 
@@ -44,7 +44,7 @@ export function PublishGenAiPage() {
     setName(String(v.name ?? "")); setDescription(String(v.description ?? "")); setCategoryId((v.categoryId as number | null) ?? null);
     setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
     setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
-  });
+  }, resumeId);
   useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMessage = useFlash();
 

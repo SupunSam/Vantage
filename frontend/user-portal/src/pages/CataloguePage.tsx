@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, whenText, useFlash, BiInactiveBadge, PageSkeleton, ErrorState } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, whenText, useFlash, BiInactiveBadge, PageSkeleton, ErrorState, useApi } from "@vantage/shared";
 
 type Item = {
   id: number; name: string; description: string | null; type: string; categoryPath: string | null; thumbnail: string | null;
@@ -14,19 +14,15 @@ const errorText = (e: unknown) => (e instanceof ApiError ? e.message : String(e)
 
 /** Dashboard Catalogue: every dashboard the user may see, with Request Access for the ones they can't open yet. */
 export function CataloguePage() {
-  const [items, setItems] = useState<Item[] | null>(null);
-  const [mine, setMine] = useState<MyRequest[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const { data: items, error, reload: reloadItems } = useApi<Item[]>("/api/catalogue");
+  const { data: mineData, reload: reloadMine } = useApi<MyRequest[]>("/api/access-requests/mine");
+  const mine = mineData ?? [];
   const setNotice = useFlash();
   const [q, setQ] = useState("");
   const [primary, setPrimary] = useState("");
   const [onlyNew, setOnlyNew] = useState(false);
 
-  const load = useCallback(() => {
-    api<Item[]>("/api/catalogue").then(setItems).catch((e) => setError(errorText(e)));
-    api<MyRequest[]>("/api/access-requests/mine").then(setMine).catch(() => {});
-  }, []);
-  useEffect(load, [load]);
+  const load = useCallback(() => { reloadItems(); reloadMine(); }, [reloadItems, reloadMine]);
 
   const primaries = useMemo(() => [...new Set((items ?? []).map((i) => i.categoryPath?.split(" / ")[0]).filter(Boolean) as string[])].sort(), [items]);
   const shown = useMemo(() => {
@@ -37,7 +33,7 @@ export function CataloguePage() {
       && (!needle || [i.name, i.description, i.owner, i.categoryPath, ...i.tags].some((v) => v?.toLowerCase().includes(needle))));
   }, [items, q, primary, onlyNew]);
 
-  if (error) return <ErrorState onRetry={() => { setError(null); load(); }}>{error}</ErrorState>;
+  if (error && !items) return <ErrorState onRetry={load}>{error}</ErrorState>;
   if (!items) return <PageSkeleton kind="cards" />;
 
   const recent = mine.filter((r) => r.status === "Pending" || (r.decidedAtUtc && Date.now() - new Date(r.decidedAtUtc + "Z").getTime() < 30 * 86_400_000));

@@ -1,35 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../Icon";
-import { api, ApiError } from "../api";
+import { ApiError } from "../api";
+import { usePanelPosition } from "../Tip";
 
-/** Loads data from the API; `reload` fetches again. */
-export function useApi<T>(path: string | null) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    if (!path) return;
-    let cancelled = false;
-    setLoading(true);
-    api<T>(path)
-      .then((d) => {
-        if (!cancelled) {
-          setData(d);
-          setError(null);
-        }
-      })
-      .catch((e) => !cancelled && setError(e instanceof ApiError ? e.message : String(e)))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [path, tick]);
-
-  const reload = useCallback(() => setTick((n) => n + 1), []);
-  return { data, error, loading, reload };
-}
+export { useApi } from "../query";
 
 export function errorText(e: unknown) {
   return e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
@@ -96,6 +70,9 @@ export function MenuButton({ label, items, primary, align = "right" }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const pos = usePanelPosition(open, button, panel, align);
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -109,12 +86,12 @@ export function MenuButton({ label, items, primary, align = "right" }: {
   }, [open]);
   return (
     <div className="menu" ref={ref}>
-      <button type="button" className={`btn ${primary ? "btn-primary" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <button ref={button} type="button" className={`btn ${primary ? "btn-primary" : ""}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
         {label}
         <Icon name="chevronDown" size={16} />
       </button>
       {open && (
-        <div className={`menu-panel menu-${align}`} role="menu">
+        <div ref={panel} className={`menu-panel menu-${align}`} role="menu" style={pos}>
           {items.map((it, i) => (
             <button key={i} type="button" role="menuitem" className="menu-item" disabled={it.disabled} onClick={() => { setOpen(false); it.onSelect(); }}>
               <span>{it.label}</span>
@@ -173,6 +150,9 @@ export function SortHeader({ label, k, sort, onSort, className }: { label: React
 export function RowMenu({ label, items }: { label: string; items: { label: ReactNode; onSelect: () => void; disabled?: boolean; danger?: boolean }[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const pos = usePanelPosition(open, button, panel, "right");
   useEffect(() => {
     if (!open) return;
     const down = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -183,11 +163,11 @@ export function RowMenu({ label, items }: { label: string; items: { label: React
   }, [open]);
   return (
     <div className="menu row-menu" ref={ref} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="icon-btn icon-btn-sm" aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen(!open)}>
+      <button ref={button} type="button" className="icon-btn icon-btn-sm" aria-haspopup="menu" aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen(!open)}>
         <Icon name="more" size={20} />
       </button>
       {open && (
-        <div className="menu-panel menu-right" role="menu">
+        <div ref={panel} className="menu-panel menu-right" role="menu" style={pos}>
           {items.map((it, i) => (
             <button key={i} type="button" role="menuitem" className={`menu-item ${it.danger ? "menu-item-danger" : ""}`} disabled={it.disabled} onClick={() => { setOpen(false); it.onSelect(); }}>
               <span>{it.label}</span>

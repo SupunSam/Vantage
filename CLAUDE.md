@@ -15,7 +15,7 @@ Sizing: about 1,000 users and 100 to 150 dashboards, 80 to 85% of them Power BI.
 Requirements:
 - The live requirements and decisions log is a Claude Doc:
   https://claude.ai/code/artifact/23091f2e-8231-484a-9f67-405ece572694
-- `docs/requirements.md` is a snapshot of it (decisions C1–C64).
+- `docs/requirements.md` is a snapshot of it (decisions C1–C70).
 - The original SRS is "SRS_RD_Dashboard - Dev Version.pdf", kept in the claude.ai project "DashboardRevamp", not in git.
 
 ## Components
@@ -225,7 +225,10 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - **Long lists are paged.** Use `Pager` and `usePaged` from `@vantage/shared` for lists held in the browser, and a `page`/`pageSize` API for lists that can grow without limit (audit log, group history, users). Never render an unbounded list.
 - **Pop-up messages** (C55). Show the result of an action (saved, added, failed) with `useFlash()` or `useToast()` from `@vantage/shared`, never an inline banner. The time on screen is the `ui.toastSeconds` setting, the same for every toast. Keep `Notice` for messages that describe a state, and for form errors inside a modal. Modals close with the red ✕ (`Modal` in `admin-portal/src/ui.tsx`).
 - **Loading, empty, errors and confirms** (C63). Show `PageSkeleton` (kind `page`, `cards`, `table`, `tiles` or `detail`; `head={false}` when the title is already on screen) while a page loads, never the word "Loading". Use `EmptyState` for "nothing here yet" and `ErrorState` (with `onRetry`) when a page fails to load. Ask before deleting or removing with `useConfirm()` (`danger: true` for the red button), never `window.confirm`. Use the design tokens in `base.css` (`--text-*`, `--space-*`, `--radius-*`, `--shadow-*`) for new styles instead of one-off sizes.
-- **Tables and pickers** (C64). Lists held in the browser use `useSort` with `SortHeader` and `usePaged`; row actions go in a `RowMenu`; looking at one row without leaving the page uses a `Drawer`; choosing a file uses `FilePicker`, never a bare file input; people show with `Avatar`. Long forms put their buttons in `actions form-actions-sticky`.
+- **Tables and pickers** (C64). Lists held in the browser use `useSort` with `SortHeader` and `usePaged`; row actions go in a `RowMenu`; looking at one row without leaving the page uses a `Drawer`; choosing a file uses `FilePicker`, never a bare file input; people show with `Avatar`. Long forms put their buttons in `actions form-actions-sticky`. A paged table goes inside `<GridFrame pager={...}>` (rows per page above, page numbers below); use `useServerPaging` when the API pages, and `Pager` only for lists of cards.
+- **Data, themes and shortcuts** (C65). Read API data with `useApi` (cached; `reload()` refetches), and for an action the person expects to see at once use `optimisticUpdate(path, change, request)`. Colours must come from the tokens (`--surface`, `--ink`, `--muted`, `--line`, `--brand-text` for brand-coloured text), and tints mix into `var(--surface)`, never `white`, so the dark theme works. New pages and dashboards show up in Ctrl+K through `AppShell`'s `sections` and `dashboardSearch`.
+- **Motion** (C67). Put `className="reveal"` on a page's root element to have its children settle in one after another, use `CountUp` for stat numbers, and keep every animation behind `prefers-reduced-motion` (the shared rules already do for `reveal`, chart bars and cards).
+- **Tooltips and brand colours** (C69). Put long explanations in `InfoTip` (an (i) next to the heading or label) and abbreviations in `Tip`, not in paragraphs. Pop-up panels use `usePanelPosition` so tables can't clip them. Set brand colours only through `applyBrand`, use `var(--on-brand)` for text on `var(--brand)` and `var(--brand-text)` for brand-coloured text, never `#fff` or `var(--brand)` directly.
 - **UI text.**
   - **Title Case** for menus, page titles, tabs, dialog titles and buttons ("Add Group", "Save Changes", "Request Access").
   - Messages and help text are plain sentences.
@@ -244,7 +247,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C65) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C71) and refresh `docs/requirements.md`.
 
 ## Status (4 Oct 2026)
 

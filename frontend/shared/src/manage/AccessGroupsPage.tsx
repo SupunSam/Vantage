@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "../Icon";
-import { Pager, usePaged } from "../Pager";
+import { GridFrame, usePaged } from "../Pager";
 import { api } from "../api";
 import { can, useGridPageSize, useSession } from "../session";
 import { errorText, Modal, Notice, SortHeader, StatusPill, useApi, useSort } from "./ui";
@@ -78,33 +78,33 @@ export function AccessGroupsPage() {
             <option value="">All</option><option>Active</option><option>Inactive</option><option>Retired</option>
           </select>
         </label>
-        <span className="muted small filters-count">{rows.length} of {data.length}</span>
       </div>
 
-      <div className="table-wrap">
-        <table className="grid grid-rows">
-          <thead><tr><SortHeader label="Access group" k="name" sort={sort} onSort={toggle} /><SortHeader label="Dashboard" k="dashboard" sort={sort} onSort={toggle} /><SortHeader label="RLS value" k="rls" sort={sort} onSort={toggle} /><SortHeader label="Members" k="members" sort={sort} onSort={toggle} className="num" /><SortHeader label="Status" k="status" sort={sort} onSort={toggle} /></tr></thead>
-          <tbody>
-            {paged.rows.map((g) => (
-              <tr key={g.id} onClick={() => navigate(routes.group(g.id))}>
-                <td>
-                  <Link to={routes.group(g.id)} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
-                  {g.isDefault && <div className="muted small">Default group</div>}
-                </td>
-                <td className="small">{g.dashboard}<div className="muted">{g.rlsEnabled ? "RLS on" : "No RLS"}{g.dashboardStatus !== "Active" ? `, ${g.dashboardStatus.toLowerCase()}` : ""}</div></td>
-                <td>
-                  {g.rlsValue ? <code className={g.rlsEnabled ? "" : "rls-ignored"}>{g.rlsValue}</code>
-                    : g.rlsEnabled ? <span className="warn-text small">Needs a value</span> : <span className="muted">–</span>}
-                </td>
-                <td className="num">{g.members}</td>
-                <td><StatusPill status={g.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <p className="pop-empty">No access groups match these filters.</p>}
-      </div>
-      <Pager {...paged.pager} />
+      <GridFrame pager={paged.pager}>
+        <div className="table-wrap">
+          <table className="grid grid-rows">
+            <thead><tr><SortHeader label="Access group" k="name" sort={sort} onSort={toggle} /><SortHeader label="Dashboard" k="dashboard" sort={sort} onSort={toggle} /><SortHeader label="RLS value" k="rls" sort={sort} onSort={toggle} /><SortHeader label="Members" k="members" sort={sort} onSort={toggle} className="num" /><SortHeader label="Status" k="status" sort={sort} onSort={toggle} /></tr></thead>
+            <tbody>
+              {paged.rows.map((g) => (
+                <tr key={g.id} onClick={() => navigate(routes.group(g.id))}>
+                  <td>
+                    <Link to={routes.group(g.id)} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
+                    {g.isDefault && <div className="muted small">Default group</div>}
+                  </td>
+                  <td className="small">{g.dashboard}<div className="muted">{g.rlsEnabled ? "RLS on" : "No RLS"}{g.dashboardStatus !== "Active" ? `, ${g.dashboardStatus.toLowerCase()}` : ""}</div></td>
+                  <td>
+                    {g.rlsValue ? <code className={g.rlsEnabled ? "" : "rls-ignored"}>{g.rlsValue}</code>
+                      : g.rlsEnabled ? <span className="warn-text small">Needs a value</span> : <span className="muted">–</span>}
+                  </td>
+                  <td className="num">{g.members}</td>
+                  <td><StatusPill status={g.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length === 0 && <p className="pop-empty">No access groups match these filters.</p>}
+        </div>
+      </GridFrame>
 
       {creating && <NewGroupModal groups={data} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); reload(); navigate(routes.group(id)); }} />}
     </>

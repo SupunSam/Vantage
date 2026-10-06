@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, Pager, RangePicker, TypePicker, typeParam, usePaged, type Overview, PageSkeleton } from "@vantage/shared";
+import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, RangePicker, TypePicker, typeParam, usePaged, type Overview, PageSkeleton, GridFrame } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 const BASE = "/api/admin/analytics";
@@ -124,23 +124,24 @@ function WhoCanOpenReport() {
           </p>
           {data.people.length === 0 ? <p className="pop-empty">Nobody is in a group of this dashboard.</p> : (
             <>
-              <div className="requests-table-wrap">
-                <table className="requests-table">
-                  <thead><tr><th>Person</th><th>Access group</th>{data.rlsEnabled && <th>RLS value</th>}<th>In the group since</th><th>Can open now</th></tr></thead>
-                  <tbody>
-                    {paged.rows.map((p) => (
-                      <tr key={p.userId}>
-                        <td>{p.name ?? p.email}<div className="req-muted">{p.email} · {p.userType.toLowerCase()}{p.userStatus === "Inactive" ? " · inactive" : ""}</div></td>
-                        <td>{p.group}{p.groupStatus !== "Active" && <div className="req-muted">{p.groupStatus.toLowerCase()}</div>}</td>
-                        {data.rlsEnabled && <td>{p.rlsValue ? <code>{p.rlsValue}</code> : "–"}</td>}
-                        <td className="small">{when(p.addedAtUtc)}</td>
-                        <td><CanPill yes={p.canOpenNow} why="The person, the group or the dashboard is inactive" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Pager {...paged.pager} />
+              <GridFrame pager={paged.pager}>
+                <div className="requests-table-wrap">
+                  <table className="requests-table">
+                    <thead><tr><th>Person</th><th>Access group</th>{data.rlsEnabled && <th>RLS value</th>}<th>In the group since</th><th>Can open now</th></tr></thead>
+                    <tbody>
+                      {paged.rows.map((p) => (
+                        <tr key={p.userId}>
+                          <td>{p.name ?? p.email}<div className="req-muted">{p.email} · {p.userType.toLowerCase()}{p.userStatus === "Inactive" ? " · inactive" : ""}</div></td>
+                          <td>{p.group}{p.groupStatus !== "Active" && <div className="req-muted">{p.groupStatus.toLowerCase()}</div>}</td>
+                          {data.rlsEnabled && <td>{p.rlsValue ? <code>{p.rlsValue}</code> : "–"}</td>}
+                          <td className="small">{when(p.addedAtUtc)}</td>
+                          <td><CanPill yes={p.canOpenNow} why="The person, the group or the dashboard is inactive" /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GridFrame>
             </>
           )}
         </>
@@ -203,23 +204,24 @@ function WhatCanOpenReport() {
           </p>
           {data.dashboards.length === 0 ? <p className="pop-empty">They aren't in any access group.</p> : (
             <>
-              <div className="requests-table-wrap">
-                <table className="requests-table">
-                  <thead><tr><th>Dashboard</th><th>Access group</th><th>RLS value</th><th>In the group since</th><th>Can open now</th></tr></thead>
-                  <tbody>
-                    {paged.rows.map((d) => (
-                      <tr key={`${d.dashboardId}-${d.groupId}`}>
-                        <td>{d.dashboard}<div className="req-muted">{typeLabel[d.type] ?? d.type}{d.status !== "Active" ? ` · ${d.status.toLowerCase()}` : ""}</div></td>
-                        <td>{d.group}{d.groupStatus !== "Active" && <div className="req-muted">{d.groupStatus.toLowerCase()}</div>}</td>
-                        <td>{d.rlsValue ? <code>{d.rlsValue}</code> : <span className="muted">{d.rlsEnabled ? "none" : "not used"}</span>}</td>
-                        <td className="small">{when(d.addedAtUtc)}</td>
-                        <td><CanPill yes={d.canOpenNow} why="The person, the group or the dashboard is inactive" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Pager {...paged.pager} />
+              <GridFrame pager={paged.pager}>
+                <div className="requests-table-wrap">
+                  <table className="requests-table">
+                    <thead><tr><th>Dashboard</th><th>Access group</th><th>RLS value</th><th>In the group since</th><th>Can open now</th></tr></thead>
+                    <tbody>
+                      {paged.rows.map((d) => (
+                        <tr key={`${d.dashboardId}-${d.groupId}`}>
+                          <td>{d.dashboard}<div className="req-muted">{typeLabel[d.type] ?? d.type}{d.status !== "Active" ? ` · ${d.status.toLowerCase()}` : ""}</div></td>
+                          <td>{d.group}{d.groupStatus !== "Active" && <div className="req-muted">{d.groupStatus.toLowerCase()}</div>}</td>
+                          <td>{d.rlsValue ? <code>{d.rlsValue}</code> : <span className="muted">{d.rlsEnabled ? "none" : "not used"}</span>}</td>
+                          <td className="small">{when(d.addedAtUtc)}</td>
+                          <td><CanPill yes={d.canOpenNow} why="The person, the group or the dashboard is inactive" /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </GridFrame>
             </>
           )}
         </>

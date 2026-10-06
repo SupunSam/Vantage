@@ -26,3 +26,8 @@ export * from "./manage/DashboardDetailPage";
 export * from "./manage/AccessGroupsPage";
 export * from "./manage/AccessGroupDetailPage";
 export * from "./manage/RulesPanel";
+export { QueryProvider, queryClient, clearCachedData, invalidateApi, optimisticUpdate } from "./query";
+export * from "./theme";
+export * from "./Motion";
+export * from "./Tip";
+export { applyBrand } from "./brand";
