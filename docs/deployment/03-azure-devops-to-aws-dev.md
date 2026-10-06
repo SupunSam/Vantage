@@ -67,7 +67,7 @@ All 3 ECR repositories are enough for API, Admin Portal and User Portal. The Gen
                                   |                    --> ECS service "genai" (nginx, other domain)
                                   |
    admin and user nginx forward /api/  ----------------->  ECS service "api" (ASP.NET Core, port 8080)
-                                                                 |-- RDS SQL Server (Vantage)
+                                                                 |-- SQL Server on the host (Vantage; RDS in UAT/Prod)
                                                                  |-- S3 bucket (files)
                                                                  |-- Secrets Manager, SES, Cognito
    Azure DevOps pipeline --> ECR (3 repos) --> ECS (new task definition revision)
@@ -109,7 +109,13 @@ Docker and the AWS CLI) or purchase a parallel job.
 
 ## 4. Part A: Move the code to Azure DevOps
 
-The code lives on GitHub (`SupunSam/Vantage`). Azure DevOps will hold a copy, or become the main home.
+The code lives on GitHub (`SupunSam/Vantage`). **Decision C53 (6 Oct 2026): Azure DevOps replaces GitHub** as the home of the code.
+
+What this means for the repository (to be done at the move, not before):
+- `.github/workflows/ci.yml` (build, SQL tests, frontend checks, per-area skipping) is rebuilt as an Azure Pipelines CI pipeline.
+- The GitHub branch ruleset on `main` is replaced by Azure DevOps branch policies (step 5): pull request required, the two CI jobs as build validation.
+- The `.claude` SessionStart hook and the cloud coding sessions are tied to GitHub today; working with Claude on the Azure repo needs its own set-up, so keep GitHub as the working remote until that is agreed.
+- Until the move is done, GitHub stays the working home and `main` there stays protected.
 
 1. In Azure DevOps, create a project (for example `Vantage`), then **Repos, Files**, and create an **empty** repo
    named `Vantage` (do not initialise it with a README).
@@ -169,7 +175,7 @@ requirements ask for it. The list below is what the code has to be written for.
      `ecs:RunTask`, and `iam:PassRole` for the two ECS roles. Restrict it to these resources. Prefer a role with
      short-lived credentials; if an IAM user with access keys is the only option, store the keys only inside the Azure
      DevOps service connection.
-9. **RDS SQL Server:** subnet group, encryption at rest, automated backups (point-in-time restore is a requirement),
+9. **RDS SQL Server (UAT and Prod only; Dev runs SQL Server on the host, C51):** subnet group, encryption at rest, automated backups (point-in-time restore is a requirement),
    parameter set, and the `Vantage` database with the `vantage_app` login (adapt `deploy/db/init.sql`: on RDS the
    `db_owner` grant for migrations is acceptable only in Dev; later give migrations a separate owner login and the
    running API a narrower one). The dummy HRMS rows in `init.sql` are for local use; in Dev the HRMS table is filled
@@ -360,14 +366,16 @@ accounts' clusters, each with its own environment and approvals, secrets and dom
 
 ## 8. Decisions we need from the project owner
 
-1. Is Dev allowed the temporary `Development` sign-in picker behind an IP allow-list, or do we wait for ADFS/Cognito?
-2. SQL Server on RDS (add to the costing) or on the EC2 host?
-3. Add S3, a GenAI origin service and a second domain to the approved Dev costing?
-4. Which domains for the Admin Portal, User Portal and GenAI origin, and who manages DNS and certificates?
-5. Is Azure DevOps the new home of the code (GitHub retired) or a mirror?
-6. ADFS metadata, domains and whether a Cognito user pool already exists (needed for the sign-in work).
+Answered on 6 Oct 2026 (decisions C50 to C53 in the requirements log):
 
-When these are agreed they will be recorded as decisions C48 onwards in the requirements log.
+1. **Dev sign-in.** Wait for real ADFS/Cognito sign-in. Nothing is deployed to AWS before it exists, and the temporary `Development` picker is not used (C50).
+2. **SQL Server.** On the EC2 host in Dev (C51), RDS Standard Multi-AZ for UAT and Prod.
+3. **Extra costing.** Approved, recomputed in section 9 (C52): S3, the database and `/data` volumes, public IPv4 addresses and the GenAI origin service. Grand total $287.58 a month.
+4. **Domains, DNS and certificates.** RRD IT manages DNS and TLS certificates for the Admin Portal, User Portal and GenAI origin (C52). We send them the host names; the GenAI host must be a different registrable domain.
+5. **Code home.** Azure DevOps replaces GitHub (C53). See the note under Part A about what must be rebuilt.
+6. **Still open:** ADFS metadata, domains and whether a Cognito user pool already exists (needed for the sign-in work).
+
+Open items are recorded as the next decision numbers.
 
 ## 9. Proposed AWS Dev costing for the current build
 
@@ -393,31 +401,26 @@ Please confirm the final figures in the AWS Pricing Calculator before submitting
 | 8 | VPC Data | Dev | Mumbai | VPC Data Traffic | NA | NA | NA | 30GB | NA | $10.64 | $127.72 | | Approved |
 | 9 | Cloudfront | Dev | Mumbai | CDN Layer | NA | NA | NA | 30GB | NA | $11.03 | $132.40 | | Approved |
 | 10 | Cloudwatch | Dev | Mumbai | Monitoring Service | NA | NA | NA | 3 | NA | $16.00 | $192.05 | | Approved |
-| 11 | RDS for SQL Server | Dev | Mumbai | Database `Vantage` (license included, Express edition, single-AZ) | db.t3.medium | 2 | 4 | 1 | $0.092 | $67.16 | $805.92 | | **Proposed.** Express edition has a 10 GB database limit and no Multi-AZ; fine for Dev, not for UAT/Prod (see 9.1) |
-| 12 | RDS Storage | Dev | Mumbai | RDS gp3 storage for SQL Server | NA | NA | NA | 50GB | $0.131 per GB-month | $6.55 | $78.60 | | **Proposed.** Automated backups up to the database size are included |
-| 13 | S3 | Dev | Mumbai | Uploaded files, thumbnails, last 3 file versions | NA | NA | NA | 50GB | $0.025 per GB-month | $1.25 | $15.00 | | **Proposed.** Needs the S3 file store to be built. Request charges are a few cents |
-| 14 | EBS | Dev | Mumbai | gp3 volume mounted on the ECS instance for `/data` (keys and files) | NA | NA | NA | 50GB | $0.0912 per GB-month | $4.56 | $54.72 | | **Proposed, temporary.** Needed until the S3 store and durable key store exist, then removed |
-| 15 | VPC | Dev | Mumbai | Public IPv4 addresses (1 for the instance, 2 for the ALB) | NA | NA | NA | 3 | $0.005 per hour | $10.95 | $131.40 | | **Proposed.** Used instead of a NAT gateway. May overlap with charges already inside rows 7 and 8; confirm in the calculator |
-| 16 | Route 53 | Dev | Mumbai | Hosted zones for the portals' domain and the GenAI domain | NA | NA | NA | 2 | $0.50 per zone-month | $1.00 | $12.00 | | **Proposed.** Zero if RRD's own DNS is used. Query charges are cents |
-| 17 | ACM | Dev | Mumbai | Public TLS certificates | NA | NA | NA | 3 | NA | $0.00 | $0.00 | | **Proposed.** Public certificates are free |
-| 18 | ECS | Dev | Mumbai | GenAI origin (small nginx service on its own domain) | runs on the row 2 instance | 0 | 0 | 1 | NA | $0.00 | $0.00 | | **Proposed.** No extra instance; uses a small share of the t3.xlarge |
+| 11 | S3 | Dev | Mumbai | Uploaded files, thumbnails, last 3 file versions, and database backups | NA | NA | NA | 100GB | $0.025 per GB-month | $2.50 | $30.00 | | **Proposed.** Needs the S3 file store to be built. Request charges are a few cents |
+| 12 | EBS | Dev | Mumbai | gp3 volume mounted on the ECS instance for `/data` (keys and files) | NA | NA | NA | 50GB | $0.0912 per GB-month | $4.56 | $54.72 | | **Proposed, temporary.** Needed until the S3 store and durable key store exist, then removed |
+| 13 | EBS | Dev | Mumbai | gp3 volume for the SQL Server data and log files on the instance | NA | NA | NA | 100GB | $0.0912 per GB-month | $9.12 | $109.44 | | **Proposed.** Decision C51: SQL Server Developer edition runs on the EC2 host (free for non-production use). Backups go to S3 (row 11) |
+| 14 | VPC | Dev | Mumbai | Public IPv4 addresses (1 for the instance, 2 for the ALB) | NA | NA | NA | 3 | $0.005 per hour | $10.95 | $131.40 | | **Proposed.** Used instead of a NAT gateway. May overlap with charges already inside rows 7 and 8; confirm in the calculator |
+| 15 | ECS | Dev | Mumbai | GenAI origin (small nginx service on its own domain) | runs on the row 2 instance | 0 | 0 | 1 | NA | $0.00 | $0.00 | | **Proposed.** No extra instance; uses a small share of the t3.xlarge. DNS and TLS certificates are provided by RRD IT (C52), so no Route 53 or ACM rows |
 | | | | | | | | | | **Total (approved rows 1 to 10)** | **$260.45** | **$3,125.35** | **$0.00** | Approved sheet total |
-| | | | | | | | | | **Total (proposed rows 11 to 18)** | **$91.47** | **$1,097.64** | **$0.00** | New |
-| | | | | | | | | | **Grand total** | **$351.92** | **$4,222.99** | **$0.00** | Approved plus proposed |
+| | | | | | | | | | **Total (proposed rows 11 to 15)** | **$27.13** | **$325.56** | **$0.00** | New |
+| | | | | | | | | | **Grand total** | **$287.58** | **$3,450.91** | **$0.00** | Approved plus proposed |
 
-Arithmetic for the proposed rows: row 11 is 0.092 x 730; row 12 is 50 x 0.131; row 13 is 50 x 0.025; row 14 is
-50 x 0.0912; row 15 is 3 x 0.005 x 730; row 16 is 2 x 0.50.
+Arithmetic for the proposed rows: row 11 is 100 x 0.025; row 12 is 50 x 0.0912; row 13 is 100 x 0.0912; row 14 is
+3 x 0.005 x 730. Earlier drafts priced RDS for SQL Server Express (about $73.71 a month) and Route 53; both were dropped (C51, C52).
 
 ### 9.1 Choices behind the new rows
 
-- **Database edition.** Dev uses RDS for SQL Server **Express** because it is the only edition that keeps the cost
-  inside a Dev budget. The same database on **Standard** edition (the minimum we would use for UAT/Prod, since the
-  requirements ask for Multi-AZ and point-in-time restore) on a `db.m5.large` (2 vCPU, 8 GB) costs $1.078 an hour
-  single-AZ, which is about $786.94 a month ($9,443.28 a year), and Multi-AZ is roughly double that (not priced
-  here; confirm in the calculator). On a `db.t3.large` Express is $0.171 an hour (about $124.83 a month) if Dev
-  needs more memory. Express limits: 10 GB per database, about 1 GB of memory used by the database engine, no SQL
-  Server Agent. The Vantage database holds metadata, audit and usage rows; files go to S3. Check the Dev data size
-  against the 10 GB limit.
+- **Database on the instance (C51).** Dev runs SQL Server **Developer** edition on the ECS host, licensed free for
+  non-production use, with its own gp3 volume and a scheduled backup to S3. It shares the `t3.xlarge`'s 16 GB with the
+  three app containers, so check memory headroom (SQL Server needs about 2 GB at least; set its memory limit). UAT and
+  Prod need a paid edition: RDS for SQL Server **Standard**, Multi-AZ (a `db.m5.large` single-AZ is $1.078 an hour, about
+  $786.94 a month; Multi-AZ is roughly double, not priced here; confirm in the calculator). Because Dev then differs from
+  Prod, migrations are first proven against RDS in UAT. The `Vantage` database name and `vantage_app` login stay the same.
 - **No NAT gateway.** The ECS instance sits in a public subnet (security group allows only the ALB in), so the API
   can reach Power BI, Azure AD and Tableau. Private subnets with a NAT gateway would add about $40.88 a month
   ($0.056 an hour) plus $0.056 per GB processed, and more public IPv4 charges.
@@ -425,11 +428,11 @@ Arithmetic for the proposed rows: row 11 is 0.092 x 730; row 12 is 50 x 0.131; r
   ClamAV malware scan in Dev, it needs about 2 GB of memory; check headroom on the `t3.xlarge` first.
 - **Not costed:** KMS customer-managed keys ($1 a month each; AWS-managed keys are free and meet encryption at
   rest), Direct Connect or VPN, Secrets Manager beyond the two approved secrets ($0.40 per secret a month), AWS WAF,
-  AWS Backup beyond RDS automated backups, support plan, taxes.
+  AWS Backup beyond the S3 database backups, support plan, taxes.
 
 ### 9.2 What changes for UAT and Prod (not costed here)
 
-- RDS moves to **Standard edition, Multi-AZ**, with larger storage; this becomes the largest line.
+- The database moves off the instance to RDS **Standard edition, Multi-AZ**, with larger storage; this becomes the largest line.
 - The API runs on at least two instances in two Availability Zones (the job runner already claims runs atomically),
   with the ALB spreading across them.
 - SES leaves the sandbox; CloudWatch alarms notify IT Ops; a penetration test is booked before go-live.
