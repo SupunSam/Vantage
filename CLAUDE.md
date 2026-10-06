@@ -15,7 +15,7 @@ Sizing: about 1,000 users and 100 to 150 dashboards, 80 to 85% of them Power BI.
 Requirements:
 - The live requirements and decisions log is a Claude Doc:
   https://claude.ai/code/artifact/23091f2e-8231-484a-9f67-405ece572694
-- `docs/requirements.md` is a snapshot of it (decisions C1–C48).
+- `docs/requirements.md` is a snapshot of it (decisions C1–C53).
 - The original SRS is "SRS_RD_Dashboard - Dev Version.pdf", kept in the claude.ai project "DashboardRevamp", not in git.
 
 ## Components
@@ -235,7 +235,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C50) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C54) and refresh `docs/requirements.md`.
 
 ## Status (4 Oct 2026)
 
