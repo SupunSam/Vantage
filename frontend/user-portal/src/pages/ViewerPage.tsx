@@ -176,11 +176,10 @@ export function ViewerPage() {
         </div>
       )}
 
-      {!failure && !info && <p className="muted">Loading…</p>}
-
       {/* The frame keeps a 16:9 shape and is only ever scaled, never stretched; the stage is what goes full screen. */}
-      <div ref={stageRef} className={`viewer-stage ${!failure && info ? "" : "viewer-stage-empty"}`}>
+      <div ref={stageRef} className={`viewer-stage ${failure ? "viewer-stage-empty" : ""}`}>
         <div className="embed-frame">
+          {!failure && !info && <div className="sk" style={{ width: "100%", height: "100%" }} role="status" aria-label="Loading the dashboard" />}
           {!failure && info?.type === "genai" && info.embedUrl && (
             <div className="embed-host"><GenAiFrame url={info.embedUrl} title={info.name} /></div>
           )}

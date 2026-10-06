@@ -54,7 +54,7 @@ public sealed class AuditLogService(AppDbContext db, TimeProvider clock)
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
             var s = q.Search.Trim();
-            rows = rows.Where(a => (a.EntityId != null && a.EntityId.Contains(s)) || (a.Details != null && a.Details.Contains(s)));
+            rows = rows.Where(a => (a.EntityId != null && a.EntityId.Contains(s)) || (a.Details != null && a.Details.Contains(s)) || (a.ServiceNowReference != null && a.ServiceNowReference.Contains(s)));
         }
 
         return rows;

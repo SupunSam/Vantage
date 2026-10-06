@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { TrendChart, useSession } from "@vantage/shared";
-import { Notice, useApi, when } from "@vantage/shared";
+import { CountUp, Icon, TrendChart, useSession, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
+import { useApi, when } from "@vantage/shared";
 
 type Home = {
   dashboards: { live: number; inactive: number; notLive: number; liveByType: { key: string; count: number }[] } | null;
@@ -27,15 +27,15 @@ const n = (v: number) => v.toLocaleString();
 export function HomePage() {
   const { me } = useSession();
   const { data, error } = useApi<Home>("/api/admin/home");
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="tiles" />;
 
   const firstName = me?.displayName.split(" ")[0];
   const waiting = data.requests ? data.requests.accessRequests + data.requests.groupAdditions : 0;
   const hasAnything = data.dashboards || data.users || data.usage || data.requests || data.recent;
 
   return (
-    <>
+    <div className="reveal">
       <div className="page-head">
         <div>
           <h1>Home</h1>
@@ -43,13 +43,13 @@ export function HomePage() {
         </div>
       </div>
 
-      {!hasAnything && <div className="empty"><h2>Welcome</h2><p>Use the menu to open the parts of the Admin Portal your role allows.</p></div>}
+      {!hasAnything && <EmptyState icon="home" title="Welcome">Use the menu to open the parts of the Admin Portal your role allows.</EmptyState>}
 
       <div className="an-tiles">
-        {data.dashboards && <HomeTile to="/dashboards" label="Live Dashboards" value={n(data.dashboards.live)} hint={data.dashboards.inactive ? `${n(data.dashboards.inactive)} inactive` : "all live"} />}
-        {data.users && <HomeTile to="/users" label="Active Users" value={n(data.users.activeInternal + data.users.activeExternal)} hint={`${n(data.users.activeInternal)} internal, ${n(data.users.activeExternal)} external`} />}
-        {data.usage && <HomeTile to="/analytics" label="Views, Last 30 Days" value={n(data.usage.views)} hint={`${n(data.usage.uniqueUsers)} ${data.usage.uniqueUsers === 1 ? "person" : "people"}`} />}
-        {data.requests && <HomeTile to="/requests" label="Waiting for a Decision" value={n(waiting)} hint={waiting === 0 ? "nothing waiting" : `${n(data.requests.accessRequests)} access, ${n(data.requests.groupAdditions)} group additions`} />}
+        {data.dashboards && <HomeTile icon="dashboards" to="/dashboards" label="Live Dashboards" value={n(data.dashboards.live)} hint={data.dashboards.inactive ? `${n(data.dashboards.inactive)} inactive` : "all live"} />}
+        {data.users && <HomeTile icon="users" to="/users" label="Active Users" value={n(data.users.activeInternal + data.users.activeExternal)} hint={`${n(data.users.activeInternal)} internal, ${n(data.users.activeExternal)} external`} />}
+        {data.usage && <HomeTile icon="chart" to="/analytics" label="Views, Last 30 Days" value={n(data.usage.views)} hint={`${n(data.usage.uniqueUsers)} ${data.usage.uniqueUsers === 1 ? "person" : "people"}`} />}
+        {data.requests && <HomeTile icon="inbox" to="/requests" label="Waiting for a Decision" value={n(waiting)} hint={waiting === 0 ? "nothing waiting" : `${n(data.requests.accessRequests)} access, ${n(data.requests.groupAdditions)} group additions`} />}
       </div>
 
       {data.usage && (
@@ -68,15 +68,16 @@ export function HomePage() {
         <Attention items={data.attention} />
         {data.recent && <Recent rows={data.recent} />}
       </div>
-    </>
+    </div>
   );
 }
 
-function HomeTile({ to, label, value, hint }: { to: string; label: string; value: string; hint: string }) {
+function HomeTile({ to, label, value, hint, icon }: { to: string; label: string; value: string; hint: string; icon: string }) {
   return (
     <Link to={to} className="an-tile hv-tile">
+      <span className="tile-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>
       <span className="an-tile-label">{label}</span>
-      <strong className="an-tile-value">{value}</strong>
+      <strong className="an-tile-value"><CountUp text={value} /></strong>
       <span className="an-tile-hint">{hint}</span>
     </Link>
   );

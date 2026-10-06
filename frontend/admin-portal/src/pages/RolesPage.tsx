@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { api, can, Icon, useSession, useFlash } from "@vantage/shared";
+import { api, can, Icon, useSession, useFlash, PageSkeleton, ErrorState } from "@vantage/shared";
 import { errorText, Modal, Notice, useApi } from "@vantage/shared";
 
 type Level = "None" | "View" | "Edit";
@@ -14,8 +14,8 @@ export function RolesPage() {
   const setMessage = useFlash();
   const canEdit = can(me, "roles", "Edit");
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" />;
 
   const levelOf = (r: Role, key: string): Level => r.permissions.find((p) => p.module === key)?.level ?? "None";
 

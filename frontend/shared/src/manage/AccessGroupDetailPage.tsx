@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Icon } from "../Icon";
-import { Pager, usePaged } from "../Pager";
+import { GridFrame, Pager, usePaged } from "../Pager";
 import { useFlash } from "../Toast";
 import { api, apiObjectUrl } from "../api";
 import { useGridPageSize } from "../session";
-import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "./ui";
+import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when, FilePicker } from "./ui";
 import { NewGroupModal, type GroupRow, type MemberResult } from "./AccessGroupsPage";
 import { RulesPanel } from "./RulesPanel";
 import { useManage } from "./routes";
+import { Avatar } from "./ui";
+import { PageSkeleton, ErrorState } from "../Feedback";
+import { useConfirm } from "../Feedback";
 
 type Member = { userId: number; email: string; displayName: string | null; userType: string; userStatus: string; source: string; addedAtUtc: string; addedBy: string | null };
 type Sibling = { id: number; name: string; rlsValue: string | null; status: string; isDefault: boolean };
@@ -43,6 +46,7 @@ const sourceLabel: Record<string, string> = {
 /** One access group: its settings, then tabs for its members (add, move, remove), its rules and its history. */
 export function AccessGroupDetailPage() {
   const routes = useManage();
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const { data, error, reload } = useApi<Detail>(`/api/admin/access-groups/${id}`);
@@ -63,8 +67,8 @@ export function AccessGroupDetailPage() {
   }, [data, q]);
   const memberPage = usePaged(members, useGridPageSize(), q);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="detail" />;
   const g = data.group;
   const d = g.dashboard;
   const editable = data.canEdit && g.status !== "Retired" && d.status !== "Retired";
@@ -75,7 +79,7 @@ export function AccessGroupDetailPage() {
   const moveTargets = g.siblings.filter((s) => s.status === "Active");
 
   async function remove(m: Member) {
-    if (!window.confirm(`Remove ${m.displayName ?? m.email} from ${g.name}? They lose access to ${d.name}.`)) return;
+    if (!(await confirm({ title: "Remove Member", message: `Remove ${m.displayName ?? m.email} from ${g.name}? They lose access to ${d.name}.`, confirmLabel: "Remove", danger: true }))) return;
     try {
       await api(`/api/admin/access-groups/${g.id}/members/${m.userId}`, { method: "DELETE" });
       ok(`Removed ${m.displayName ?? m.email}.`);
@@ -183,6 +187,8 @@ export function AccessGroupDetailPage() {
           {g.members.length === 0 ? (
             <p className="pop-empty">No members yet.{live ? " Add people by name, a pasted list of emails, or an Excel file." : ""}</p>
           ) : (
+            <GridFrame pager={memberPage.pager}>
+            <div className="table-wrap">
             <table className="grid member-grid">
               <thead><tr><th>Person</th><th>Type</th><th>How they were added</th><th>Added</th>{live && <th />}</tr></thead>
               <tbody>
@@ -190,7 +196,7 @@ export function AccessGroupDetailPage() {
                   <tr key={m.userId}>
                     <td>
                       <span className="person">
-                        <span className="avatar avatar-sm" aria-hidden="true">{initials(m.displayName ?? m.email)}</span>
+                        <Avatar name={m.displayName} email={m.email} />
                         <span><strong>{m.displayName ?? m.email}</strong>{isOwner(m.userId) && <span className="pill pill-brand pill-xs">Owner</span>}<span className="muted small block">{m.displayName ? m.email : "Name not filled in yet"}</span></span>
                       </span>
                     </td>
@@ -213,8 +219,9 @@ export function AccessGroupDetailPage() {
                 ))}
               </tbody>
             </table>
+            </div>
+            </GridFrame>
           )}
-          <Pager {...memberPage.pager} />
         </section>
         </>
       )}
@@ -245,6 +252,7 @@ export function AccessGroupDetailPage() {
 // ---------------------------------------------------------------- Details
 
 function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boolean; onSaved: (text: string) => void }) {
+  const confirm = useConfirm();
   const routes = useManage();
   const g = data.group;
   const d = g.dashboard;
@@ -265,7 +273,7 @@ function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boo
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!active && g.status === "Active" && !window.confirm(`Set ${g.name} to Inactive? Its ${g.members.length} member(s) lose access to ${d.name} until it's active again.`)) return;
+    if (!active && g.status === "Active" && !(await confirm({ title: "Set Group Inactive", message: `Set ${g.name} to Inactive? Its ${g.members.length} member(s) lose access to ${d.name} until it's active again.`, confirmLabel: "Set Inactive", danger: true }))) return;
     setBusy(true);
     setError(null);
     try {
@@ -437,10 +445,10 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
 
       {mode === "excel" && (
         <form className="stack" onSubmit={submitExcel}>
-          <label className="field">
+          <div className="field">
             <span>Excel workbook (.xlsx) with emails under an "Email" heading</span>
-            <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          </label>
+            <FilePicker file={file} accept=".xlsx" label="Choose the Excel workbook" onChange={setFile} />
+          </div>
           <p className="small"><button type="button" className="link" onClick={() => void template()}>Download a Template</button></p>
           <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !file}>{busy ? "Sending…" : "Send File for Approval"}</button></div>
         </form>
@@ -540,7 +548,7 @@ function HistoryPanel({ groupId, created }: { groupId: number; created: string }
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(20);
   const { data, error } = useApi<HistoryPage>(`/api/admin/access-groups/${groupId}/history?page=${page}&pageSize=${size}`);
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <ErrorState>{error}</ErrorState>;
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   return (
     <section className="panel">

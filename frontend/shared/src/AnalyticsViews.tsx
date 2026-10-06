@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, apiObjectUrl } from "./api";
 import { Icon } from "./Icon";
 import { useBiTypes } from "./session";
-import { Pager, usePaged } from "./Pager";
+import { GridFrame, usePaged } from "./Pager";
 import { TrendChart, type TrendPoint } from "./TrendChart";
+import { ErrorState, PageSkeleton } from "./Feedback";
+import { CountUp } from "./Motion";
 
 export type TopDashboard = { id: number; name: string; type: string; views: number; users: number; lastViewedAtUtc: string | null };
 export type TopUser = { id: number; name: string; email: string; views: number; dashboards: number; lastViewedAtUtc: string | null };
@@ -62,7 +64,7 @@ export function RangePicker({ days, onChange }: { days: number; onChange: (d: nu
 }
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return <div className="an-tile"><span className="an-tile-label">{label}</span><strong className="an-tile-value">{value}</strong>{hint && <span className="an-tile-hint">{hint}</span>}</div>;
+  return <div className="an-tile"><span className="an-tile-label">{label}</span><strong className="an-tile-value"><CountUp text={value} /></strong>{hint && <span className="an-tile-hint">{hint}</span>}</div>;
 }
 
 // ---------------------------------------------------------------- Overview
@@ -72,7 +74,7 @@ export function OverviewPanel({ o, scopeLabel, onOpenDashboard }: { o: Overview;
   const days = RANGES.find((r) => r.days === o.days)?.label ?? `${o.days} days`;
   const open = (id: number, name: string) => (onOpenDashboard ? <button type="button" className="link" onClick={() => onOpenDashboard(id)}>{name}</button> : <>{name}</>);
   return (
-    <>
+    <div className="reveal" key={`${o.days}:${o.views}:${o.uniqueUsers}`}>
       <div className="an-tiles">
         <Tile label="Views" value={o.views.toLocaleString()} hint={`last ${days}`} />
         <Tile label="People who opened a dashboard" value={o.uniqueUsers.toLocaleString()} />
@@ -119,14 +121,17 @@ export function OverviewPanel({ o, scopeLabel, onOpenDashboard }: { o: Overview;
         <section className="panel">
           <h2>Nobody Opened These in the Last {days} <span className="muted count">{o.unused}</span></h2>
           <p className="muted small">Active dashboards with no views in this period, longest unused first. Consider asking the owner whether they are still needed.{o.unused > o.unusedList.length ? ` Showing ${o.unusedList.length} of ${o.unused}.` : ""}</p>
+          <GridFrame pager={unusedPage.pager} sizes={[10, 20]}>
+          <div className="requests-table-wrap">
           <table className="requests-table">
             <thead><tr><th>Dashboard</th><th>Owner</th><th>Last opened</th><th className="num">Members</th></tr></thead>
             <tbody>{unusedPage.rows.map((d) => <tr key={d.id}><td>{open(d.id, d.name)}</td><td>{d.owner ?? "–"}</td><td>{when(d.lastViewedAtUtc)}</td><td className="num">{d.members}</td></tr>)}</tbody>
           </table>
-          <Pager {...unusedPage.pager} sizes={[10, 20]} />
+          </div>
+          </GridFrame>
         </section>
       )}
-    </>
+    </div>
   );
 }
 
@@ -153,8 +158,8 @@ export function DashboardsPanel({ base, days, type = "", exportPath, onOpen }: {
   }, [rows, q, sort]);
   const paged = usePaged(sorted, 25, `${q}|${days}|${type}`);
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!rows) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={() => window.location.reload()}>{error}</ErrorState>;
+  if (!rows) return <PageSkeleton kind="table" head={false} />;
 
   const Th = ({ k, label, num }: { k: SortKey; label: string; num?: boolean }) => (
     <th className={num ? "num" : ""} aria-sort={sort.key === k ? (sort.desc ? "descending" : "ascending") : "none"}>
@@ -173,6 +178,7 @@ export function DashboardsPanel({ base, days, type = "", exportPath, onOpen }: {
           {exportPath && <button className="btn" type="button" onClick={() => void downloadFile(`${exportPath}?days=${days}${typeParam(type)}`, `dashboard-usage-${new Date().toISOString().slice(0, 10)}.xlsx`).catch((e) => setError(errorText(e)))}><Icon name="download" size={18} /> Export to Excel</button>}
         </div>
       </div>
+      <GridFrame pager={paged.pager}>
       <div className="requests-table-wrap">
         <table className="requests-table">
           <thead><tr><Th k="name" label="Dashboard" /><th>Owner</th><Th k="views" label="Views" num /><Th k="users" label="People" num /><Th k="lastViewedAtUtc" label="Last opened" /><Th k="members" label="Members" num /></tr></thead>
@@ -194,7 +200,7 @@ export function DashboardsPanel({ base, days, type = "", exportPath, onOpen }: {
         </table>
       </div>
       {sorted.length === 0 && <p className="pop-empty">No dashboards match.</p>}
-      <Pager {...paged.pager} />
+      </GridFrame>
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash } from "@vantage/shared";
-import { Notice, useApi } from "@vantage/shared";
+import { GroupAddReviewList, RequestReviewList, type AccessRequestRow, type GroupAddRow, useFlash, PageSkeleton, ErrorState, InfoTip } from "@vantage/shared";
+import { useApi } from "@vantage/shared";
 
 type Data = { pending: number; canDecide: boolean; rows: AccessRequestRow[] };
 const filters = [
@@ -18,7 +18,7 @@ export function AccessRequestsPage() {
   const adds = useApi<{ pending: number; rows: GroupAddRow[] }>(`/api/admin/group-add-requests${status ? `?status=${status}` : ""}`);
   const setMessage = useFlash();
 
-  if (error) return <Notice tone="error">{error}</Notice>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
 
   return (
     <>
@@ -26,8 +26,11 @@ export function AccessRequestsPage() {
         <div>
           <h1>Access Requests</h1>
           <p>
-            Requests from the catalogue and the "no access" page. Each one goes to the dashboard's owners, who approve it in the User Portal and choose the access group.
-            {data?.canDecide ? " As a Super Admin you can decide here on their behalf." : ""}
+            Requests from people for access to a dashboard.
+            <InfoTip label="How requests are decided">
+              <p>Requests come from the catalogue and the "no access" page. Each one goes to the dashboard's owners, who approve it in the User Portal and choose the access group.</p>
+              {data?.canDecide && <p>As a Super Admin you can decide here on their behalf, with a reason.</p>}
+            </InfoTip>
           </p>
         </div>
       </div>
@@ -40,16 +43,17 @@ export function AccessRequestsPage() {
       </div>
       {adds.data && adds.data.rows.length > 0 && (
         <>
-          <h2 className="requests-sub">Access Group Additions</h2>
-          <p className="muted small">
-            Admins' requests to add people to an access group. The dashboard's owners approve them in the User Portal, all at once or person by person.
-            {data?.canDecide ? " As a Super Admin you can use Override Approval in an exception, but you must give a reason: it goes into the audit log and the group's history, and the owners are told." : ""}
-          </p>
+          <h2 className="requests-sub">Access Group Additions
+            <InfoTip label="About access group additions">
+              <p>Admins' requests to add people to an access group. The dashboard's owners approve them in the User Portal, all at once or person by person.</p>
+              {data?.canDecide && <p>As a Super Admin you can use Override Approval in an exception, but you must give a reason: it goes into the audit log and the group's history, and the owners are told.</p>}
+            </InfoTip>
+          </h2>
           <GroupAddReviewList rows={adds.data.rows} groupLink={(id) => `/access-groups/${id}`} onChanged={(m) => { setMessage(m); adds.reload(); reload(); }} />
           <h2 className="requests-sub">Requests From People</h2>
         </>
       )}
-      {!data ? <p className="muted">Loading…</p> : (
+      {!data ? <PageSkeleton kind="table" head={false} /> : (
         <RequestReviewList rows={data.rows} canDecide={data.canDecide} onChanged={(m) => { setMessage(m); reload(); }}
           dashboardLink={(id) => `/dashboards/${id}`}
           emptyText={status === "Pending" ? "No requests are waiting." : "No requests here."} />

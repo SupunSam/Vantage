@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { AppShell, can, SignInPage, useSession, type NavSection, ManageScope, DashboardsPage, DashboardDetailPage, AccessGroupsPage, AccessGroupDetailPage } from "@vantage/shared";
+import { AppShell, can, SignInPage, useSession, type NavSection, ManageScope, DashboardsPage, DashboardDetailPage, AccessGroupsPage, AccessGroupDetailPage, PageSkeleton } from "@vantage/shared";
 import { HomePage } from "./pages/HomePage";
 import { RolesPage } from "./pages/RolesPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -19,7 +19,7 @@ const userPortalUrl = `${window.location.protocol}//${window.location.hostname}:
 export function App() {
   const { me, loading } = useSession();
 
-  if (loading) return <p className="content muted">Loading…</p>;
+  if (loading) return <div className="content"><PageSkeleton kind="page" /></div>;
   if (!me) return <SignInPage portalLabel="Admin Portal" />;
 
   const show = (module: string) => can(me, module);
@@ -56,7 +56,8 @@ export function App() {
   ];
 
   return (
-    <AppShell portalLabel="Admin Portal" sections={sections} otherPortal={{ label: "Open User Portal", href: userPortalUrl }}>
+    <AppShell portalLabel="Admin Portal" sections={sections} otherPortal={{ label: "Open User Portal", href: userPortalUrl }}
+      dashboardSearch={show("dashboard-config") ? { path: "/api/admin/dashboards", open: (d) => `/dashboards/${d.id}` } : undefined}>
       <ManageScope>
       <Routes>
         <Route path="/" element={<HomePage />} />

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { api, ApiError } from "./api";
 import { Icon } from "./Icon";
 import { whenText } from "./Requests";
-import { Pager, usePaged } from "./Pager";
+import { Pager, usePaged, GridFrame } from "./Pager";
+import { InfoTip } from "./Tip";
 
 export type GroupAddItem = {
   userId: number; email: string; displayName: string | null; userType: string; title: string | null; department: string | null;
@@ -65,31 +66,32 @@ export function GroupAddReviewList({ rows, onChanged, groupLink, emptyText }: {
       {decided.length > 0 && (
         <section className="requests-decided">
           <h2>Recent Group Changes</h2>
-          <div className="requests-table-wrap">
-            <table className="requests-table">
-              <thead><tr><th>Asked by</th><th>Dashboard and group</th><th>People</th><th>Decision</th><th>By</th><th>When</th></tr></thead>
-              <tbody>
-                {decidedPage.rows.map((r) => {
-                  const approved = r.items.filter((i) => i.decision === "Approved").length;
-                  return (
-                    <tr key={r.id}>
-                      <td>{askedBy(r)}{r.action === "Remove" && <div className="req-muted">Removal</div>}</td>
-                      <td>{r.dashboard}<div className="req-muted">{groupLink ? <a href={groupLink(r.groupId)}>{r.group}</a> : r.group}</div></td>
-                      <td>{r.status === "Cancelled" ? people(r.items.length) : `${approved} of ${r.items.length}${r.action === "Remove" ? " removed" : ""}`}</td>
-                      <td>
-                        <span className={`req-status req-${r.status === "PartlyApproved" ? "approved" : r.status.toLowerCase()}`}>{statusLabel[r.status]}</span>
-                        {r.decisionNote && <div className="req-muted">“{r.decisionNote}”</div>}
-                        {r.overrideReason && <div className="req-warn">Super Admin decided in place of the owners: {r.overrideReason}</div>}
-                      </td>
-                      <td>{r.decidedBy ?? "–"}</td>
-                      <td className="req-muted">{whenText(r.decidedAtUtc)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <Pager {...decidedPage.pager} />
+          <GridFrame pager={decidedPage.pager}>
+            <div className="requests-table-wrap">
+              <table className="requests-table">
+                <thead><tr><th>Asked by</th><th>Dashboard and group</th><th>People</th><th>Decision</th><th>By</th><th>When</th></tr></thead>
+                <tbody>
+                  {decidedPage.rows.map((r) => {
+                    const approved = r.items.filter((i) => i.decision === "Approved").length;
+                    return (
+                      <tr key={r.id}>
+                        <td>{askedBy(r)}{r.action === "Remove" && <div className="req-muted">Removal</div>}</td>
+                        <td>{r.dashboard}<div className="req-muted">{groupLink ? <a href={groupLink(r.groupId)}>{r.group}</a> : r.group}</div></td>
+                        <td>{r.status === "Cancelled" ? people(r.items.length) : `${approved} of ${r.items.length}${r.action === "Remove" ? " removed" : ""}`}</td>
+                        <td>
+                          <span className={`req-status req-${r.status === "PartlyApproved" ? "approved" : r.status.toLowerCase()}`}>{statusLabel[r.status]}</span>
+                          {r.decisionNote && <div className="req-muted">“{r.decisionNote}”</div>}
+                          {r.overrideReason && <div className="req-warn">Super Admin decided in place of the owners: {r.overrideReason}</div>}
+                        </td>
+                        <td>{r.decidedBy ?? "–"}</td>
+                        <td className="req-muted">{whenText(r.decidedAtUtc)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </GridFrame>
         </section>
       )}
     </div>
@@ -152,7 +154,7 @@ function GroupAddCard({ row, onChanged, groupLink }: { row: GroupAddRow; onChang
           {row.serviceNowReference && <> · ticket <code>{row.serviceNowReference}</code></>}
         </p>
         {row.note && <blockquote className="request-reason">{row.note}</blockquote>}
-        {!removing && row.moveFromOtherGroups && row.items.some((i) => i.currentGroup) && <p className="req-muted">Approving moves people who are already in another group of this dashboard.</p>}
+        {!removing && row.moveFromOtherGroups && row.items.some((i) => i.currentGroup) && <p className="req-muted">Some people would move<InfoTip label="About moving">Approving moves people who are already in another group of this dashboard.</InfoTip></p>}
         {row.ownershipPendingReview && <p className="req-warn">The owners are under review, so only a Super Admin can decide this now.</p>}
 
         <button type="button" className="group-add-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -192,8 +194,7 @@ function GroupAddCard({ row, onChanged, groupLink }: { row: GroupAddRow; onChang
           <>
             {needReason && (
               <div className="override-note">
-                <strong>Override of the owners' approval</strong>
-                <span className="req-muted">Only for exceptions. Your reason is saved in the audit log and the group's history, and the owners are told.</span>
+                <strong>Override of the owners' approval<InfoTip label="About overrides">Only for exceptions. Your reason is saved in the audit log and the group's history, and the owners are told.</InfoTip></strong>
               </div>
             )}
             {needReason && (
@@ -219,8 +220,8 @@ function GroupAddCard({ row, onChanged, groupLink }: { row: GroupAddRow; onChang
         ) : (
           <>
             <p className="req-muted">
-              Waiting for {row.owners.length > 0 ? <strong>{row.owners.join(" or ")}</strong> : "an owner"} to decide
-              {row.owners.length === 0 ? " (this dashboard has no owner right now)" : ""}. They approve it in the User Portal.
+              Waiting for {row.owners.length > 0 ? <strong>{row.owners.join(" or ")}</strong> : "an owner"}
+              <InfoTip label="Who decides">{row.owners.length === 0 ? "This dashboard has no owner right now. " : ""}Owners approve requests in the User Portal.</InfoTip>
             </p>
             {row.canDecide && row.needsOverride && (
               <button type="button" className="btn" onClick={() => { setOverriding(true); setOpen(true); }}>Override Approval…</button>

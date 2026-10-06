@@ -49,6 +49,7 @@ public class AuditLogTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture
         Assert.Equal(1, (await svc.SearchAsync(Q(tag, actor: priya.Email), default)).Total);
         Assert.Equal(1, (await svc.SearchAsync(Q(tag, sn: "CHG004"), default)).Total);
         Assert.Equal(1, (await svc.SearchAsync(Q(tag, search: "rolesAfter"), default)).Total);
+        Assert.Equal(1, (await svc.SearchAsync(Q(tag, search: "CHG004"), default)).Total);          // the ordinary search finds a ticket number too
 
         var first = (await svc.SearchAsync(Q(tag, actor: nimal.Email), default)).Rows.Single();
         Assert.Equal(nimal.DisplayName, first.Actor);

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, apiObjectUrl, can, Icon, useSession, useFlash } from "@vantage/shared";
+import { api, apiObjectUrl, can, Icon, useSession, useFlash, PageSkeleton, ErrorState, EmptyState, FilePicker } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
@@ -21,7 +21,7 @@ const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes >= 1024 * 1
  * Publish a GenAI dashboard: one HTML file made from the approved starter template. The file is checked first
  * (template marker, size, libraries only from approved CDNs). A file that passes is live at once for the owners' default group.
  */
-export function PublishGenAiPage() {
+export function PublishGenAiPage({ resumeId }: { resumeId?: number }) {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 
@@ -44,7 +44,7 @@ export function PublishGenAiPage() {
     setName(String(v.name ?? "")); setDescription(String(v.description ?? "")); setCategoryId((v.categoryId as number | null) ?? null);
     setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
     setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
-  });
+  }, resumeId);
   useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMessage = useFlash();
 
@@ -52,16 +52,12 @@ export function PublishGenAiPage() {
     if (me && !primaryOwnerId) setPrimaryOwnerId(String(me.id));
   }, [me, primaryOwnerId]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!options || !me) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!options || !me) return <PageSkeleton kind="page" />;
 
   if (options.categories.length === 0) {
     return (
-      <div className="empty">
-        <h2>Add a Category First</h2>
-        <p>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</p>
-        {can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}
-      </div>
+      <EmptyState icon="categories" title="Add a Category First" action={<>{can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}</>}>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</EmptyState>
     );
   }
 
@@ -139,15 +135,14 @@ export function PublishGenAiPage() {
           <fieldset className="form-section">
             <legend>Dashboard File</legend>
             <div className="cols cols-3">
-              <label className="field span-2">
-                <span>.html file (up to {mb(g.maxBytes)}; a warning appears over {mb(g.warnBytes)})</span>
-                <input type="file" accept=".html,.htm" required onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
+              <div className="field span-3">
+                <span>.html file <span className="optional">(up to {mb(g.maxBytes)}; a warning appears over {mb(g.warnBytes)})</span></span>
+                <FilePicker file={file} accept=".html,.htm" required label="Choose the .html file" onChange={(f) => {
                   setFile(f);
                   setCheck(null);
                   if (f) { if (!name) setName(f.name.replace(/\.html?$/i, "")); void runCheck(f); }
                 }} />
-              </label>
+              </div>
               <div className="field">
                 <span>Don't have a file yet?</span>
                 <button className="btn" type="button" onClick={() => void downloadTemplate()}><Icon name="arrowDown" size={18} /> Download Starter Template</button>
@@ -179,8 +174,9 @@ export function PublishGenAiPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <span>Dashboard code</span>
                 <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
+                <small className="field-hint">Made from the name.</small>
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -229,7 +225,7 @@ export function PublishGenAiPage() {
             <ThumbnailPicker file={thumbnail} onChange={setThumbnail} current={<span className="thumb-empty">No image chosen</span>} />
           </fieldset>
 
-          <div className="actions">
+          <div className="actions form-actions-sticky">
             <button className="btn btn-primary" type="submit" disabled={busy || !file || !categoryId || (check != null && !check.passed)}>{busy ? "Publishing…" : "Publish"}</button>
             <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}

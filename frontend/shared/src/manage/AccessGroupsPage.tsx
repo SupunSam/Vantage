@@ -1,11 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "../Icon";
-import { Pager, usePaged } from "../Pager";
+import { GridFrame, usePaged } from "../Pager";
 import { api } from "../api";
 import { can, useGridPageSize, useSession } from "../session";
-import { errorText, Modal, Notice, StatusPill, useApi } from "./ui";
+import { errorText, Modal, Notice, SortHeader, StatusPill, useApi, useSort } from "./ui";
 import { useManage } from "./routes";
+import { PageSkeleton, ErrorState } from "../Feedback";
 
 export type GroupRow = {
   id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; createdAtUtc: string;
@@ -35,10 +36,11 @@ export function AccessGroupsPage() {
       && (!needle || [g.name, g.dashboard, g.dashboardCode, g.rlsValue].some((v) => v?.toLowerCase().includes(needle))));
   }, [data, q, status, dashboardId]);
 
-  const paged = usePaged(rows, useGridPageSize(), `${q}|${status}|${dashboardId}`);
+  const { sorted, sort, toggle } = useSort(rows, { name: (g) => g.name, dashboard: (g) => g.dashboard, rls: (g) => g.rlsValue, members: (g) => g.members, status: (g) => g.status });
+  const paged = usePaged(sorted, useGridPageSize(), `${q}|${status}|${dashboardId}|${sort?.key}|${sort?.desc}`);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" />;
 
   const totalMembers = data.filter((g) => g.status === "Active").reduce((n, g) => n + g.members, 0);
 
@@ -76,33 +78,33 @@ export function AccessGroupsPage() {
             <option value="">All</option><option>Active</option><option>Inactive</option><option>Retired</option>
           </select>
         </label>
-        <span className="muted small filters-count">{rows.length} of {data.length}</span>
       </div>
 
-      <div className="table-wrap">
-        <table className="grid grid-rows">
-          <thead><tr><th>Access group</th><th>Dashboard</th><th>RLS value</th><th className="num">Members</th><th>Status</th></tr></thead>
-          <tbody>
-            {paged.rows.map((g) => (
-              <tr key={g.id} onClick={() => navigate(routes.group(g.id))}>
-                <td>
-                  <Link to={routes.group(g.id)} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
-                  {g.isDefault && <div className="muted small">Default group</div>}
-                </td>
-                <td className="small">{g.dashboard}<div className="muted">{g.rlsEnabled ? "RLS on" : "No RLS"}{g.dashboardStatus !== "Active" ? `, ${g.dashboardStatus.toLowerCase()}` : ""}</div></td>
-                <td>
-                  {g.rlsValue ? <code className={g.rlsEnabled ? "" : "rls-ignored"}>{g.rlsValue}</code>
-                    : g.rlsEnabled ? <span className="warn-text small">Needs a value</span> : <span className="muted">–</span>}
-                </td>
-                <td className="num">{g.members}</td>
-                <td><StatusPill status={g.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <p className="pop-empty">No access groups match these filters.</p>}
-      </div>
-      <Pager {...paged.pager} />
+      <GridFrame pager={paged.pager}>
+        <div className="table-wrap">
+          <table className="grid grid-rows">
+            <thead><tr><SortHeader label="Access group" k="name" sort={sort} onSort={toggle} /><SortHeader label="Dashboard" k="dashboard" sort={sort} onSort={toggle} /><SortHeader label="RLS value" k="rls" sort={sort} onSort={toggle} /><SortHeader label="Members" k="members" sort={sort} onSort={toggle} className="num" /><SortHeader label="Status" k="status" sort={sort} onSort={toggle} /></tr></thead>
+            <tbody>
+              {paged.rows.map((g) => (
+                <tr key={g.id} onClick={() => navigate(routes.group(g.id))}>
+                  <td>
+                    <Link to={routes.group(g.id)} className="group-name" onClick={(e) => e.stopPropagation()}>{g.name}</Link>
+                    {g.isDefault && <div className="muted small">Default group</div>}
+                  </td>
+                  <td className="small">{g.dashboard}<div className="muted">{g.rlsEnabled ? "RLS on" : "No RLS"}{g.dashboardStatus !== "Active" ? `, ${g.dashboardStatus.toLowerCase()}` : ""}</div></td>
+                  <td>
+                    {g.rlsValue ? <code className={g.rlsEnabled ? "" : "rls-ignored"}>{g.rlsValue}</code>
+                      : g.rlsEnabled ? <span className="warn-text small">Needs a value</span> : <span className="muted">–</span>}
+                  </td>
+                  <td className="num">{g.members}</td>
+                  <td><StatusPill status={g.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length === 0 && <p className="pop-empty">No access groups match these filters.</p>}
+        </div>
+      </GridFrame>
 
       {creating && <NewGroupModal groups={data} onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); reload(); navigate(routes.group(id)); }} />}
     </>

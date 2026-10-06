@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, Icon, useSession, useFlash } from "@vantage/shared";
+import { api, Icon, useSession, useFlash, PageSkeleton, useConfirm, ErrorState, applyBrand } from "@vantage/shared";
 import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 type Setting = {
@@ -27,8 +27,8 @@ export function ConfigPage() {
   const tab: Tab = (tabs.find((t) => t.key === wanted)?.key ?? "branding") as Tab;
   const setMessage = useFlash();
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="page" />;
   const say = (ok: boolean, text: string) => setMessage({ ok, text });
   const done = (text: string) => { say(true, text); reload(); };
 
@@ -80,9 +80,7 @@ function BrandingTab({ data, onDone, onError }: TabProps) {
     try {
       await api("/api/admin/config/settings", { method: "PUT", body: JSON.stringify({ values: { "branding.portalName": name, "branding.primaryColor": primary, "branding.accentColor": accent, "branding.footerText": footer } }) });
       // Apply straight away on this page; other pages and other people see it the next time they load.
-      const root = document.documentElement.style;
-      root.setProperty("--brand", primary);
-      root.setProperty("--accent", accent);
+      applyBrand(primary, accent);
       document.title = name;
       onDone("Branding saved. Other people see it when they next open or reload a page.");
     } catch (err) { onError(errorText(err)); } finally { setBusy(false); }
@@ -174,6 +172,13 @@ function SettingsTab({ data, scope, onDone, onError }: TabProps & { scope: "gene
   useEffect(() => setValues(Object.fromEntries(list.map((s) => [s.key, s.value]))), [list]);
 
   const changed = list.filter((s) => values[s.key] !== s.value);
+  // Leaving the page with edits that were never saved asks first.
+  useEffect(() => {
+    if (changed.length === 0) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [changed.length]);
   const groups = [...new Set(list.map((s) => s.group))];
 
   async function save(e: FormEvent) {
@@ -205,7 +210,8 @@ function SettingsTab({ data, scope, onDone, onError }: TabProps & { scope: "gene
         </section>
       ))}
       {data.canEdit && (
-        <div className="actions">
+        <div className="actions form-actions-sticky settings-bar">
+          {changed.length > 0 && <span className="settings-unsaved"><span className="settings-dot" aria-hidden="true" />{changed.length} unsaved {changed.length === 1 ? "change" : "changes"}</span>}
           <button className="btn btn-primary" type="submit" disabled={busy || changed.length === 0}>{busy ? "Saving…" : changed.length ? `Save ${changed.length} ${changed.length === 1 ? "Change" : "Changes"}` : "Save Changes"}</button>
           {changed.length > 0 && <button className="btn btn-quiet" type="button" onClick={() => setValues(Object.fromEntries(list.map((s) => [s.key, s.value])))}>Discard</button>}
         </div>
@@ -251,6 +257,7 @@ function GenAiTab({ data, onDone, onError }: TabProps) {
 // ---------------------------------------------------------------- Approved CDNs
 
 function CdnsTab({ data, onDone, onError }: TabProps) {
+  const confirm = useConfirm();
   const [host, setHost] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -264,7 +271,7 @@ function CdnsTab({ data, onDone, onError }: TabProps) {
     try { await api(`/api/admin/config/cdns/${c.id}`, { method: "PUT", body: JSON.stringify({ notes: c.notes, isActive: !c.isActive }) }); onDone(`${c.host} is now ${c.isActive ? "off" : "on"}.`); } catch (err) { onError(errorText(err)); }
   }
   async function remove(c: Cdn) {
-    if (!window.confirm(`Remove ${c.host} from the approved CDNs? GenAI dashboards that load files from it would no longer be allowed to.`)) return;
+    if (!(await confirm({ title: "Remove Approved CDN", message: `Remove ${c.host} from the approved CDNs? GenAI dashboards that load files from it would no longer be allowed to.`, confirmLabel: "Remove", danger: true }))) return;
     try { await api(`/api/admin/config/cdns/${c.id}`, { method: "DELETE" }); onDone(`Removed ${c.host}.`); } catch (err) { onError(errorText(err)); }
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, can, Icon, useGridPageSize, useSession, useFlash } from "@vantage/shared";
+import { api, can, Icon, useGridPageSize, useSession, useFlash, PageSkeleton, GridFrame, useServerPaging } from "@vantage/shared";
 import { Link } from "react-router-dom";
 import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
@@ -37,8 +37,8 @@ export function JobsPage() {
   const canEdit = can(me, "scheduled-jobs", "Edit");
   const jobs = useApi<Job[]>("/api/admin/jobs");
   const [filter, setFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const size = useGridPageSize();
+  const gridSize = useGridPageSize();
+  const { page, setPage, size, pagerFor } = useServerPaging(gridSize);
   const runs = useApi<RunPage>(`/api/admin/jobs/runs?${new URLSearchParams({ ...(filter ? { job: filter } : {}), page: String(page), pageSize: String(size) })}`);
   const [busy, setBusy] = useState<string | null>(null);
   const setMessage = useFlash();
@@ -73,7 +73,6 @@ export function JobsPage() {
   }
 
   if (jobs.error) return <Notice tone="error">{jobs.error}</Notice>;
-  const pages = runs.data ? Math.max(1, Math.ceil(runs.data.total / size)) : 1;
 
   return (
     <>
@@ -88,7 +87,7 @@ export function JobsPage() {
         <button className="btn" type="button" onClick={refresh}><Icon name="refresh" size={18} /> Refresh</button>
       </div>
 
-      {!jobs.data ? <p className="muted">Loading…</p> : (
+      {!jobs.data ? <PageSkeleton kind="table" head={false} /> : (
         <div className="stack">
           {jobs.data.map((j) => (
             <section key={j.name} className="panel job-card">
@@ -132,7 +131,8 @@ export function JobsPage() {
         <span className="muted small filters-count">{runs.data ? `${runs.data.total.toLocaleString()} ${runs.data.total === 1 ? "run" : "runs"}` : ""}</span>
       </div>
       {!runs.data ? <p className="muted">Loading…</p> : runs.data.items.length === 0 ? <p className="muted">Nothing has run yet.</p> : (
-        <div className="table-wrap" aria-busy={runs.loading}>
+        <GridFrame pager={pagerFor(runs.data.total)}>
+<div className="table-wrap" aria-busy={runs.loading}>
           <table className="grid grid-rows">
             <thead><tr><th>Started</th><th>Job</th><th>Started By</th><th>Result</th><th>What It Did</th></tr></thead>
             <tbody>
@@ -148,13 +148,7 @@ export function JobsPage() {
             </tbody>
           </table>
         </div>
-      )}
-      {runs.data && runs.data.total > size && (
-        <div className="pager">
-          <span className="muted small">Page {page} of {pages}</span>
-          <button className="btn" type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button>
-          <button className="btn" type="button" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button>
-        </div>
+</GridFrame>
       )}
     </>
   );

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { Icon } from "./Icon";
 import { useSession } from "./session";
+import { CommandPalette, type DashboardSearch, type PaletteLink } from "./CommandPalette";
+import { setThemePreference, useTheme } from "./theme";
 
 export type NavItem = { to: string; label: string; icon: string; end?: boolean; soon?: boolean };
 export type NavSection = { title?: string; items: NavItem[] };
@@ -21,13 +23,30 @@ function readCollapsed() {
  * The frame both portals share: a sidebar that collapses to icons (hamburger in the top bar), and a top bar with
  * notifications and the user menu. On narrow screens the sidebar slides over the page instead.
  */
-export function AppShell({ portalLabel, sections, otherPortal, children }: {
+export function AppShell({ portalLabel, sections, otherPortal, dashboardSearch, children }: {
   portalLabel: string;
   sections: NavSection[];
   otherPortal?: { label: string; href: string };
+  /** Where Ctrl+K finds dashboards to open; leave out for pages only. */
+  dashboardSearch?: DashboardSearch;
   children: ReactNode;
 }) {
-  const { branding } = useSession();
+  const { branding, signOut } = useSession();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteLinks = useMemo<PaletteLink[]>(() => sections.flatMap((s) => s.items.filter((i) => !i.soon).map((i) => ({ label: i.label, to: i.to, icon: i.icon, group: s.title ?? "Home" }))), [sections]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen((o) => !o); return; }
+      // "/" jumps to the page's own search box, like most web apps.
+      const t = e.target as HTMLElement | null;
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey && !t?.closest("input, textarea, select, [contenteditable]")) {
+        const box = document.querySelector<HTMLInputElement>('main input[type="search"], main .field-search input, main .home-search input');
+        if (box) { e.preventDefault(); box.focus(); box.select(); }
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
@@ -56,7 +75,7 @@ export function AppShell({ portalLabel, sections, otherPortal, children }: {
           <img src={branding.logoUrl ?? "/brand/logo.svg"} alt="" />
           <span className="side-label">
             <strong>{branding.portalName ?? "Vantage"}</strong>
-            <small>{portalLabel}</small>
+            <small className={`side-chip ${/admin/i.test(portalLabel) ? "side-chip-admin" : "side-chip-user"}`}>{portalLabel}</small>
           </span>
         </NavLink>
         <nav className="side-nav">
@@ -90,11 +109,15 @@ export function AppShell({ portalLabel, sections, otherPortal, children }: {
             <Icon name="menu" />
           </button>
           <div className="topbar-fill" />
+          <button type="button" className="palette-trigger" onClick={() => setPaletteOpen(true)} aria-label="Quick search" title="Quick search (Ctrl+K)">
+            <Icon name="search" size={18} /><span>Search</span><kbd>Ctrl K</kbd>
+          </button>
           <NotificationBell />
           <UserMenu otherPortal={otherPortal} />
           <LogOutButton />
         </header>
         <main className="content">{children}</main>
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={paletteLinks} dashboards={dashboardSearch} otherPortal={otherPortal} onSignOut={signOut} />
         <footer className="app-footer">
           <span>© {new Date().getFullYear()} {branding.portalName ?? "Vantage"}</span>
           {branding.footerText && <span>{branding.footerText}</span>}
@@ -215,6 +238,7 @@ function UserMenu({ otherPortal }: { otherPortal?: { label: string; href: string
           <div className="pop-roles">
             {(roles.length ? roles : ["Dashboard User"]).map((r) => <span key={r} className="role-chip">{r}</span>)}
           </div>
+          <ThemeChoice />
           {otherPortal && (
             <a className="pop-item" role="menuitem" href={otherPortal.href}>
               <Icon name="external" size={18} /> {otherPortal.label}
@@ -225,6 +249,20 @@ function UserMenu({ otherPortal }: { otherPortal?: { label: string; href: string
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Light, Dark or follow the computer; kept per browser. */
+function ThemeChoice() {
+  const { preference } = useTheme();
+  const opts: { key: "light" | "dark" | "system"; label: string }[] = [{ key: "light", label: "Light" }, { key: "dark", label: "Dark" }, { key: "system", label: "Auto" }];
+  return (
+    <div className="theme-choice" role="group" aria-label="Theme">
+      <span className="small muted">Theme</span>
+      <div className="seg-mini">
+        {opts.map((o) => <button key={o.key} type="button" aria-pressed={preference === o.key} onClick={() => setThemePreference(o.key)}>{o.label}</button>)}
+      </div>
     </div>
   );
 }

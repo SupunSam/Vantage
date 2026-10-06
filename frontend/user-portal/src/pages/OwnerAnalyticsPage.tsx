@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, DashboardDetailPanel, DashboardsPanel, OverviewPanel, RangePicker, TypePicker, typeParam, useSession, type Overview } from "@vantage/shared";
+import { api, ApiError, DashboardDetailPanel, DashboardsPanel, OverviewPanel, RangePicker, TypePicker, typeParam, useSession, type Overview, PageSkeleton, ErrorState } from "@vantage/shared";
 
 const BASE = "/api/owner/analytics";
 
@@ -17,8 +17,8 @@ export function OwnerAnalyticsPage() {
     api<{ owns: boolean; overview: Overview }>(`${BASE}/overview?days=${days}${typeParam(type)}`).then(setData).catch((e) => setError(e instanceof ApiError ? e.message : String(e)));
   }, [days, type]);
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={() => window.location.reload()}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="tiles" />;
   if (!data.owns) {
     return (
       <div className="state">

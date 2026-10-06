@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, Icon, useFlash } from "@vantage/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, Icon, useFlash, useConfirm } from "@vantage/shared";
 import { errorText, when } from "@vantage/shared";
 
 type DraftRow = { id: number; type: string; title: string; payload: string; updatedAtUtc: string };
@@ -23,7 +23,7 @@ export function useGeneratedCode(name: string) {
  * Saved drafts of the publish form (C60). A draft keeps the details only; files and thumbnails are chosen again at publish time.
  * `snapshot` returns the values to keep, `restore` puts them back.
  */
-export function useDraft(type: "PowerBi" | "Tableau" | "GenAi", title: string, snapshot: () => object, restore: (values: Record<string, unknown>) => void) {
+export function useDraft(type: "PowerBi" | "Tableau" | "GenAi", title: string, snapshot: () => object, restore: (values: Record<string, unknown>) => void, resumeId?: number) {
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
   const [id, setId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -33,6 +33,16 @@ export function useDraft(type: "PowerBi" | "Tableau" | "GenAi", title: string, s
     api<DraftRow[]>("/api/publishing/drafts").then((rows) => setDrafts(rows.filter((r) => r.type === type))).catch(() => {});
   }, [type]);
   useEffect(load, [load]);
+  // Opened from Dashboards Master: carry on with that draft once the list is here.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (resumeId === undefined || resumed.current) return;
+    const row = drafts.find((d) => d.id === resumeId);
+    if (!row) return;
+    resumed.current = true;
+    try { restore(JSON.parse(row.payload) as Record<string, unknown>); setId(row.id); } catch { /* the form just starts empty */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts, resumeId]);
 
   async function save() {
     setSaving(true);
@@ -68,6 +78,7 @@ export type DraftState = ReturnType<typeof useDraft>;
 
 /** Resume or delete a saved draft. Shown above the publish form; hidden when there are none. */
 export function DraftPicker({ draft }: { draft: DraftState }) {
+  const confirm = useConfirm();
   if (draft.drafts.length === 0) return null;
   return (
     <div className="draft-picker">
@@ -80,7 +91,7 @@ export function DraftPicker({ draft }: { draft: DraftState }) {
       </label>
       {draft.id !== null && (
         <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" title="Delete this draft" aria-label="Delete this draft"
-          onClick={() => window.confirm("Delete this draft?") && void draft.remove(draft.id!)}><Icon name="trash" size={18} /></button>
+          onClick={async () => { if (await confirm({ title: "Delete Draft", message: "Delete this draft? You can't get it back.", confirmLabel: "Delete", danger: true })) void draft.remove(draft.id!); }}><Icon name="trash" size={18} /></button>
       )}
     </div>
   );

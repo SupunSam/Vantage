@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { api, can, Icon, useSession, useFlash } from "@vantage/shared";
-import { errorText, Notice, useApi } from "@vantage/shared";
+import { api, can, Icon, useSession, useFlash, PageSkeleton, useConfirm, ErrorState, EmptyState } from "@vantage/shared";
+import { errorText, useApi } from "@vantage/shared";
 
 export type { CategoryNode } from "@vantage/shared";
 import type { CategoryNode } from "@vantage/shared";
@@ -9,6 +9,7 @@ const levelName = ["", "Primary", "Secondary", "Tertiary"];
 
 /** Category Master: the Primary / Secondary / Tertiary tree dashboards are filed under. */
 export function CategoriesPage() {
+  const confirm = useConfirm();
   const { me } = useSession();
   const { data, error, reload } = useApi<CategoryNode[]>("/api/admin/categories");
   const setMessage = useFlash();
@@ -16,8 +17,8 @@ export function CategoriesPage() {
   const [renaming, setRenaming] = useState<number | null>(null);
   const editable = can(me, "categories", "Edit");
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!data) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState onRetry={reload}>{error}</ErrorState>;
+  if (!data) return <PageSkeleton kind="table" />;
 
   async function run(action: () => Promise<unknown>, ok?: string) {
     setMessage(null);
@@ -60,11 +61,7 @@ export function CategoriesPage() {
 
       {data.length === 0 ? (
         adding !== "top" && (
-          <div className="empty">
-            <h2>No Categories Yet</h2>
-            <p>Start with the primary categories, such as departments or business lines. Publishing needs at least one.</p>
-            {editable && <button className="btn btn-primary" type="button" onClick={() => setAdding("top")}>Add Primary Category</button>}
-          </div>
+          <EmptyState icon="categories" title="No Categories Yet" action={<>{editable && <button className="btn btn-primary" type="button" onClick={() => setAdding("top")}>Add Primary Category</button>}</>}>Start with the primary categories, such as departments or business lines. Publishing needs at least one.</EmptyState>
         )
       ) : (
         <section className="panel tree-panel">
@@ -110,7 +107,7 @@ export function CategoriesPage() {
                           <button type="button" className="icon-btn icon-btn-sm icon-btn-danger" aria-label={`Delete ${c.name}`}
                             title={c.dashboardCount > 0 || c.childCount > 0 ? "Only empty categories can be deleted" : "Delete"}
                             disabled={c.dashboardCount > 0 || c.childCount > 0}
-                            onClick={() => window.confirm(`Delete the category "${c.name}"?`) && void run(() => api(`/api/admin/categories/${c.id}`, { method: "DELETE" }), `Deleted ${c.name}.`)}>
+                            onClick={async () => { if (await confirm({ title: "Delete Category", message: `Delete the category "${c.name}"?`, confirmLabel: "Delete", danger: true })) void run(() => api(`/api/admin/categories/${c.id}`, { method: "DELETE" }), `Deleted ${c.name}.`); }}>
                             <Icon name="trash" size={18} />
                           </button>
                         </span>

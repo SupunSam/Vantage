@@ -1,4 +1,7 @@
 import { ToastProvider } from "./Toast";
+import { applyBrand } from "./brand";
+import { QueryProvider, clearCachedData } from "./query";
+import { ConfirmProvider } from "./Feedback";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, getDevUser, setDevUser, type Branding, type Me } from "./api";
 
@@ -71,9 +74,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     api<Branding>("/api/branding")
       .then((b) => {
         setBranding(b);
-        const root = document.documentElement.style;
-        if (b.primaryColor) root.setProperty("--brand", b.primaryColor);
-        if (b.accentColor) root.setProperty("--accent", b.accentColor);
+        applyBrand(b.primaryColor, b.accentColor);
         if (b.portalName) document.title = b.portalName;
       })
       .catch(() => {});
@@ -103,6 +104,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string) => {
     setDevUser(email);
+    clearCachedData();   // nothing read for someone else may show for this person
     setIdleNotice(null);
     try { sessionStorage.removeItem(IDLE_NOTICE_KEY); } catch { /* nothing to clear */ }
     await load();
@@ -137,5 +139,5 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => { events.forEach((e) => window.removeEventListener(e, touch)); window.clearInterval(timer); };
   }, [me, settings.idleTimeoutMinutes, endSession]);
 
-  return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}><ToastProvider seconds={settings.toastSeconds}>{children}</ToastProvider></SessionContext.Provider>;
+  return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}><QueryProvider><ToastProvider seconds={settings.toastSeconds}><ConfirmProvider>{children}</ConfirmProvider></ToastProvider></QueryProvider></SessionContext.Provider>;
 }

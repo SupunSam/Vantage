@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, useSession, useFlash } from "@vantage/shared";
+import { api, can, useSession, useFlash, PageSkeleton, ErrorState, EmptyState } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
@@ -29,7 +29,7 @@ function useDebounced<T>(value: T, ms = 400) {
  * Publish a Tableau dashboard: a view on a Tableau Server tenant (each person opens it as their own Tableau user), or a view on
  * Tableau Public (open to anyone with the address, so only for public data). It is live at once, with the owners in the default group.
  */
-export function PublishTableauPage() {
+export function PublishTableauPage({ resumeId }: { resumeId?: number }) {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 
@@ -54,7 +54,7 @@ export function PublishTableauPage() {
     setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
     setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
     setViewUrl(String(v.viewUrl ?? "")); setTenantId(String(v.tenantId ?? ""));
-  });
+  }, resumeId);
   useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMessage = useFlash();
 
@@ -78,16 +78,12 @@ export function PublishTableauPage() {
   const isPublic = tenantId === "";
   useEffect(() => { if (isPublic) setClassification("Public"); }, [isPublic]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!options || !me) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!options || !me) return <PageSkeleton kind="page" />;
 
   if (options.categories.length === 0) {
     return (
-      <div className="empty">
-        <h2>Add a Category First</h2>
-        <p>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</p>
-        {can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}
-      </div>
+      <EmptyState icon="categories" title="Add a Category First" action={<>{can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}</>}>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</EmptyState>
     );
   }
 
@@ -172,8 +168,9 @@ export function PublishTableauPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <span>Dashboard code</span>
                 <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
+                <small className="field-hint">Made from the name.</small>
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -222,7 +219,7 @@ export function PublishTableauPage() {
             <ThumbnailPicker file={thumbnail} onChange={setThumbnail} current={<span className="thumb-empty">No image chosen</span>} />
           </fieldset>
 
-          <div className="actions">
+          <div className="actions form-actions-sticky">
             <button className="btn btn-primary" type="submit" disabled={busy || !categoryId || !check}>{busy ? "Publishing…" : "Publish"}</button>
             <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}

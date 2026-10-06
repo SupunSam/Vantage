@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export type PagerState = { page: number; pages: number; size: number; total: number; onPage: (page: number) => void; onSize: (size: number) => void };
 
@@ -40,4 +40,66 @@ export function Pager({ page, pages, size, total, onPage, onSize, sizes = [10, 2
       </span>
     </div>
   );
+}
+
+/** 1 … 4 5 [6] 7 8 … 12: the page numbers to show around the current page. */
+function pageWindow(page: number, pages: number): (number | "…")[] {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+  const out: (number | "…")[] = [1];
+  const from = Math.max(2, page - 1), to = Math.min(pages - 1, page + 1);
+  if (from > 2) out.push("…");
+  for (let i = from; i <= to; i++) out.push(i);
+  if (to < pages - 1) out.push("…");
+  out.push(pages);
+  return out;
+}
+
+/**
+ * A table's card with its paging built in: how many rows to show sits above the rows, and the page buttons sit below them,
+ * so the table and its paging read as one thing. Put the table (inside its usual scrolling wrapper) in as children.
+ * Nothing shows above or below when everything fits on one page.
+ */
+export function GridFrame({ pager, sizes = [10, 25, 50, 100], children }: { pager: PagerState; sizes?: number[]; children: ReactNode }) {
+  const { page, pages, size, total, onPage, onSize } = pager;
+  const choosable = total > Math.min(...sizes);
+  const from = Math.min(total, (page - 1) * size + 1);
+  const to = Math.min(total, page * size);
+  return (
+    <div className="grid-frame">
+      <div className="grid-frame-top">
+        <span className="muted small">{total === 0 ? "Nothing to show" : total <= size && page === 1 ? `${total.toLocaleString()} ${total === 1 ? "item" : "items"}` : `Showing ${from} to ${to} of ${total.toLocaleString()}`}</span>
+        {choosable && (
+          <label className="small muted grid-size">
+            Rows per page
+            <select value={size} onChange={(e) => onSize(Number(e.target.value))} aria-label="Rows per page">
+              {sizes.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      {children}
+      {pages > 1 && (
+        <nav className="grid-frame-bottom" aria-label="Pages">
+          <button type="button" className="page-btn" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</button>
+          <span className="page-nums">
+            {pageWindow(page, pages).map((n, i) => n === "…"
+              ? <span key={`gap${i}`} className="page-gap" aria-hidden="true">…</span>
+              : <button key={n} type="button" className={`page-num ${n === page ? "on" : ""}`} aria-current={n === page ? "page" : undefined} aria-label={`Page ${n}`} onClick={() => onPage(n)}>{n}</button>)}
+          </span>
+          <button type="button" className="page-btn" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</button>
+        </nav>
+      )}
+    </div>
+  );
+}
+
+/** Paging for lists the server pages: the page and size to ask for, and the PagerState to hand to GridFrame once the total is known. */
+export function useServerPaging(initialSize: number) {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(initialSize);
+  useEffect(() => setSize(initialSize), [initialSize]); // the configured default arrives after the first render
+  const pagerFor = (total: number): PagerState => ({
+    page, pages: Math.max(1, Math.ceil(total / size)), size, total, onPage: setPage, onSize: (n) => { setSize(n); setPage(1); },
+  });
+  return { page, setPage, size, pagerFor };
 }

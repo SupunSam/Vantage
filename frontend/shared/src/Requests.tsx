@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, ApiError } from "./api";
-import { Pager, usePaged } from "./Pager";
+import { Pager, usePaged, GridFrame } from "./Pager";
+import { InfoTip } from "./Tip";
 
 export type RequestGroup = { id: number; name: string; rlsValue: string | null; isDefault: boolean; members: number };
 export type AccessRequestRow = {
@@ -61,24 +62,25 @@ export function RequestReviewList({ rows, canDecide, onChanged, dashboardLink, e
       {decided.length > 0 && (
         <section className="requests-decided">
           <h2>Recent Decisions</h2>
-          <div className="requests-table-wrap">
-            <table className="requests-table">
-              <thead><tr><th>Requester</th><th>Dashboard</th><th>Decision</th><th>Group</th><th>By</th><th>When</th></tr></thead>
-              <tbody>
-                {decidedPage.rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.requester.displayName ?? r.requester.email}<div className="req-muted">{r.requester.email}</div></td>
-                    <td>{r.dashboard.name}</td>
-                    <td><span className={`req-status req-${r.status.toLowerCase()}`}>{r.status === "Cancelled" ? "Withdrawn" : r.status}</span>{r.decisionNote && <div className="req-muted">“{r.decisionNote}”</div>}{r.overrideReason && <div className="req-warn">Super Admin decided in place of the owners: {r.overrideReason}</div>}</td>
-                    <td>{r.assignedGroup ?? "–"}</td>
-                    <td>{r.decidedBy ?? "–"}</td>
-                    <td className="req-muted">{whenText(r.decidedAtUtc)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Pager {...decidedPage.pager} />
+          <GridFrame pager={decidedPage.pager}>
+            <div className="requests-table-wrap">
+              <table className="requests-table">
+                <thead><tr><th>Requester</th><th>Dashboard</th><th>Decision</th><th>Group</th><th>By</th><th>When</th></tr></thead>
+                <tbody>
+                  {decidedPage.rows.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.requester.displayName ?? r.requester.email}<div className="req-muted">{r.requester.email}</div></td>
+                      <td>{r.dashboard.name}</td>
+                      <td><span className={`req-status req-${r.status.toLowerCase()}`}>{r.status === "Cancelled" ? "Withdrawn" : r.status}</span>{r.decisionNote && <div className="req-muted">“{r.decisionNote}”</div>}{r.overrideReason && <div className="req-warn">Super Admin decided in place of the owners: {r.overrideReason}</div>}</td>
+                      <td>{r.assignedGroup ?? "–"}</td>
+                      <td>{r.decidedBy ?? "–"}</td>
+                      <td className="req-muted">{whenText(r.decidedAtUtc)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </GridFrame>
         </section>
       )}
     </div>
@@ -139,7 +141,7 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
           <span className="req-muted">, asked {whenText(row.requestedAtUtc)}</span>
         </p>
         {row.comment ? <blockquote className="request-reason">{row.comment}</blockquote> : <p className="req-muted">No reason given.</p>}
-        {row.currentGroup && <p className="req-muted">Currently in {row.currentGroup}; approving moves them.</p>}
+        {row.currentGroup && <p className="req-muted">Now in {row.currentGroup}<InfoTip label="What approving does">Approving moves them out of that group and into the one you choose.</InfoTip></p>}
         {row.dashboard.ownershipPendingReview && <p className="req-warn">The owners are under review, so only a Super Admin can decide this now.</p>}
       </div>
 
@@ -148,8 +150,7 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
           {row.needsOverride && (
             <>
               <div className="override-note">
-                <strong>Override of the owners' approval</strong>
-                <span className="req-muted">Only for exceptions. Your reason is saved in the audit log, and the owners are told.</span>
+                <strong>Override of the owners' approval<InfoTip label="About overrides">Only for exceptions. Your reason is saved in the audit log, and the owners are told.</InfoTip></strong>
               </div>
               <label className="field">
                 <span>Reason for the override (required)</span>
@@ -159,14 +160,14 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
           )}
           {needsChoice ? (
             <label className="field">
-              <span>Access group (decides which data they see)</span>
+              <span>Access group<InfoTip label="About the access group">It decides which data they see.</InfoTip></span>
               <select value={groupId} onChange={(e) => setGroupId(e.target.value)}>
                 <option value="">Choose…</option>
                 {usable.map((g) => <option key={g.id} value={g.id}>{g.name}: {g.rlsValue}{g.isDefault ? " (default, owners' group)" : ""}</option>)}
               </select>
             </label>
           ) : (
-            <p className="req-muted">No row-level security on this dashboard, so they join {usable[0]?.name ?? "the default group"}.</p>
+            <p className="req-muted">Joins {usable[0]?.name ?? "the default group"}<InfoTip label="Why this group">This dashboard has no row-level security, so everyone who is approved joins its default group.</InfoTip></p>
           )}
           <label className="field">
             <span>Note to the requester (optional)</span>
@@ -183,8 +184,8 @@ function RequestCard({ row, canDecide, onChanged, dashboardLink }: { row: Access
       {canDecide && row.needsOverride && !overriding && (
         <div className="request-decide">
           <p className="req-muted">
-            Waiting for {row.owners.filter(Boolean).length > 0 ? <strong>{row.owners.filter(Boolean).join(" or ")}</strong> : "an owner"} to decide
-            {row.owners.filter(Boolean).length === 0 ? " (this dashboard has no owner right now)" : ""}. They approve it in the User Portal.
+            Waiting for {row.owners.filter(Boolean).length > 0 ? <strong>{row.owners.filter(Boolean).join(" or ")}</strong> : "an owner"}
+            <InfoTip label="Who decides">{row.owners.filter(Boolean).length === 0 ? "This dashboard has no owner right now. " : ""}Owners approve requests in the User Portal.</InfoTip>
           </p>
           <button type="button" className="btn" onClick={() => setOverriding(true)}>Override Approval…</button>
         </div>

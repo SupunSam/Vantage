@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, useFlash, BiInactiveBadge } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, useFlash, BiInactiveBadge, PageSkeleton, ErrorState } from "@vantage/shared";
 import { Crumbs, FolderGrid, plural } from "./FolderGrid";
 
 export type Folder = { id: number; name: string; dashboardIds: number[] };
@@ -54,8 +54,8 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
     } catch (err) { setNotice(message(err)); }
   }
 
-  if (error) return <p className="notice notice-error">{error}</p>;
-  if (!folders || !mine) return <p className="muted">Loading your folders…</p>;
+  if (error) return <ErrorState onRetry={() => { setError(null); void load(); }}>{error}</ErrorState>;
+  if (!folders || !mine) return <PageSkeleton kind="cards" />;
 
   const inFolder = selected ? selected.dashboardIds.map((id) => byId.get(id)).filter((d): d is Mine => !!d) : [];
   const needle = q.trim().toLowerCase();

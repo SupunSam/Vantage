@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
-import { api, can, useSession, useFlash, useBiTypes } from "@vantage/shared";
+import { Link, useSearchParams } from "react-router-dom";
+import { api, can, useSession, useFlash, useBiTypes, PageSkeleton, ErrorState, EmptyState, FilePicker } from "@vantage/shared";
 import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
 import { errorText, Notice, useApi } from "@vantage/shared";
 import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
@@ -26,7 +26,11 @@ export function PublishPage() {
     { key: "tableau", label: "Tableau", on: isEnabled("Tableau") },
     { key: "genai", label: "GenAI", on: isEnabled("GenAi") && me?.isSuperAdmin === true },
   ] as const).filter((t) => t.on);
-  const [chosen, setType] = useState<"powerbi" | "tableau" | "genai">("powerbi");
+  // Dashboards Master sends a saved draft as ?type=…&draft=…
+  const [params] = useSearchParams();
+  const draftParam = Number(params.get("draft")) || undefined;
+  const typeParam = params.get("type");
+  const [chosen, setType] = useState<"powerbi" | "tableau" | "genai">(typeParam === "tableau" || typeParam === "genai" ? typeParam : "powerbi");
   const type = available.some((t) => t.key === chosen) ? chosen : available[0]?.key;
   const showGenAi = type === "genai";
   const tab = (key: typeof chosen, label: string) => (
@@ -41,7 +45,7 @@ export function PublishPage() {
           <div className="tabs" role="tablist" aria-label="BI type">
             {available.map((t) => tab(t.key, t.label))}
           </div>
-          {type === "tableau" ? <PublishTableauPage /> : showGenAi ? <PublishGenAiPage /> : <PublishPowerBiPage />}
+          {type === "tableau" ? <PublishTableauPage resumeId={draftParam} /> : showGenAi ? <PublishGenAiPage resumeId={draftParam} /> : <PublishPowerBiPage resumeId={draftParam} />}
         </>
       )}
     </>
@@ -52,7 +56,7 @@ export function PublishPage() {
  * Publish a Power BI dashboard: upload the .pbix, the service principal imports it into the chosen workspace,
  * and the dashboard goes live with its default group (the owners). Only verified tenants can be chosen.
  */
-function PublishPowerBiPage() {
+function PublishPowerBiPage({ resumeId }: { resumeId?: number }) {
   const { me } = useSession();
   const { data: options, error } = useApi<Options>("/api/publishing/options");
 
@@ -79,7 +83,7 @@ function PublishPowerBiPage() {
     setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
     setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
     setRls(Boolean(v.rls)); setRlsValue(String(v.rlsValue ?? "")); if (v.tenantId) setTenantId(Number(v.tenantId)); if (v.workspaceId) setWorkspaceId(Number(v.workspaceId));
-  });
+  }, resumeId);
   useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const setMessage = useFlash();
   const poll = useRef<number | undefined>(undefined);
@@ -92,18 +96,14 @@ function PublishPowerBiPage() {
     if (me) setPrimaryOwnerId(String(me.id));
   }, [options, tenantId, me]);
 
-  if (error) return <Notice tone="error">{error}</Notice>;
-  if (!options || !me) return <p className="muted">Loading…</p>;
+  if (error) return <ErrorState>{error}</ErrorState>;
+  if (!options || !me) return <PageSkeleton kind="page" />;
 
   if (options.categories.length === 0) {
     return (
       <>
         <div className="page-head"><div><h1>Publish a Power BI Dashboard</h1></div></div>
-        <div className="empty">
-          <h2>Add a Category First</h2>
-          <p>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</p>
-          {can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}
-        </div>
+        <EmptyState icon="categories" title="Add a Category First" action={<>{can(me, "categories", "Edit") ? <Link className="btn btn-primary" to="/categories">Go to Categories</Link> : <p className="small">Ask a Super Admin to add categories.</p>}</>}>Every dashboard is filed under at least a primary category, so publishing needs one to exist.</EmptyState>
       </>
     );
   }
@@ -112,11 +112,7 @@ function PublishPowerBiPage() {
     return (
       <>
         <div className="page-head"><div><h1>Publish a Power BI Dashboard</h1></div></div>
-        <div className="empty">
-          <h2>No Verified Tenant Yet</h2>
-          <p>Publishing needs a Power BI tenant whose connection and permissions have been verified.</p>
-          <Link className="btn btn-primary" to="/tenants">Go to Tenants</Link>
-        </div>
+        <EmptyState icon="server" title="No Verified Tenant Yet" action={<><Link className="btn btn-primary" to="/tenants">Go to Tenants</Link></>}>Publishing needs a Power BI tenant whose connection and permissions have been verified.</EmptyState>
       </>
     );
   }
@@ -182,10 +178,10 @@ function PublishPowerBiPage() {
           <fieldset className="form-section">
             <legend>Report File</legend>
             <div className="cols cols-3">
-              <label className="field">
-                <span>.pbix file (up to {options.limits.pbixMaxMb} MB)</span>
-                <input type="file" accept=".pbix" required onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !name) setName(f.name.replace(/\.pbix$/i, "")); }} />
-              </label>
+              <div className="field span-3">
+                <span>.pbix file <span className="optional">(up to {options.limits.pbixMaxMb} MB)</span></span>
+                <FilePicker file={file} accept=".pbix" required label="Choose the .pbix file" onChange={(f) => { setFile(f); if (f && !name) setName(f.name.replace(/\.pbix$/i, "")); }} />
+              </div>
               <label className="field">
                 <span>Tenant</span>
                 <select value={tenantId} onChange={(e) => { const t = Number(e.target.value); setTenantId(t); setWorkspaceId(verifiedTenants.find((x) => x.id === t)?.workspaces[0]?.id ?? 0); }}>
@@ -209,8 +205,9 @@ function PublishPowerBiPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <span>Dashboard code</span>
                 <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
+                <small className="field-hint">Made from the name.</small>
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -276,7 +273,7 @@ function PublishPowerBiPage() {
             </label>
           </fieldset>
 
-          <div className="actions">
+          <div className="actions form-actions-sticky">
             <button className="btn btn-primary" type="submit" disabled={busy || !file || !categoryId}>{busy ? "Publishing…" : "Publish"}</button>
             <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}
