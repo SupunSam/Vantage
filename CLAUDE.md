@@ -70,7 +70,8 @@ vantage/
   docs/
     requirements.md         snapshot of the requirements and decisions
     handoff.md              where the build stands and what's next
-  .github/workflows/ci.yml  backend build and tests (with SQL Server), frontend typecheck and build
+  .github/workflows/ci.yml  backend build and tests (with SQL Server), frontend typecheck and build; skips the job whose area did not change (C49)
+  .claude/                  cloud-session SessionStart hook (installs .NET 10 and SQL Server for tests)
 ```
 
 ## Running it
@@ -99,6 +100,8 @@ cd frontend && npm run dev:admin                    # Vite 5174
 cd frontend && npm run typecheck && npm run build
 dotnet ef migrations add <Name> -p backend/src/Vantage.Infrastructure -s backend/src/Vantage.Api
 ```
+Cloud sessions (C49): `.claude/hooks/session-start.sh` installs .NET 10 and starts SQL Server 2022 in a local Docker
+container (`vantage-sql`) and sets `VANTAGE_TEST_SQL`, so run `cd backend && dotnet test Vantage.slnx` before every push.
 Tests that need SQL Server are skipped when `VANTAGE_TEST_SQL` is unset. Each test class creates and drops its
 own database. All tests must pass before a change is done (CI runs the SQL ones).
 
@@ -232,7 +235,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C49) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C50) and refresh `docs/requirements.md`.
 
 ## Status (4 Oct 2026)
 
