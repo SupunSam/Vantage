@@ -53,7 +53,7 @@ public class AccessRequestTests(SqlServerFixture fx) : IClassFixture<SqlServerFi
         var factory = new DashboardFactory(k.Db, new OwnershipService(k.Db, TimeProvider.System), new AuditWriter(k.Db, new Ctx(), TimeProvider.System), TimeProvider.System);
         var d = await factory.CreateAsync(new Dashboard
         {
-            Code = "AR", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls, PrimaryOwnerId = k.Owner.Id, Audience = audience,
+            Code = "AR", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls, PrimaryOwnerId = k.Owner.Id, Audience = audience,
         }, rls ? "Region_All" : null, k.Owner.Id);
         return (d, await k.Db.DashboardGroups.SingleAsync(g => g.DashboardId == d.Id && g.IsDefault));
     }

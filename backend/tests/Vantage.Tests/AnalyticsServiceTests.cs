@@ -44,7 +44,7 @@ public class AnalyticsServiceTests(SqlServerFixture fx) : IClassFixture<SqlServe
     {
         var d = await k.Factory.CreateAsync(new Dashboard
         {
-            Code = "AN", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = status, RlsEnabled = rls, PrimaryOwnerId = owner.Id,
+            Code = "AN", Name = Unique("Dash "), Type = BiType.PowerBi, Status = status, RlsEnabled = rls, PrimaryOwnerId = owner.Id,
         }, rls ? "Region_All" : null, owner.Id);
         return d;
     }

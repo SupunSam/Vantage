@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, apiObjectUrl, Icon, useGridPageSize } from "@vantage/shared";
-import { errorText, Modal, Notice, useApi, when } from "../ui";
+import { errorText, Modal, Notice, useApi, when } from "@vantage/shared";
 
 type Row = {
   id: number; occurredAtUtc: string; actorUserId: number | null; actor: string | null; action: string; entityType: string; entityId: string | null;

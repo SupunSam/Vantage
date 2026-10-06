@@ -1,10 +1,15 @@
-import { Navigate, Route, Routes } from "react-router-dom";
-import { AppShell, can, SignInPage, useSession, type NavSection } from "@vantage/shared";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { AppShell, can, SignInPage, useSession, type NavSection, AccessGroupDetailPage, DashboardDetailPage, DashboardsPage, ManageScope, ownerRoutes } from "@vantage/shared";
 import { HomePage } from "./pages/HomePage";
 import { ViewerPage } from "./pages/ViewerPage";
 import { CataloguePage } from "./pages/CataloguePage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { OwnerAnalyticsPage } from "./pages/OwnerAnalyticsPage";
+
+/** My Dashboards reuses the Admin Portal's dashboard and access group screens, scoped to the dashboards the person owns (C59). */
+function OwnerScope() {
+  return <ManageScope routes={ownerRoutes}><Outlet /></ManageScope>;
+}
 
 /** The Admin Portal runs next to this one: port 8080 in the local Docker build. */
 const adminPortalUrl = `${window.location.protocol}//${window.location.hostname}:8080`;
@@ -25,7 +30,7 @@ export function App() {
         { to: "/catalogue", label: "Dashboard Catalogue", icon: "search" },
       ],
     },
-    ...(isOwner ? [{ title: "Owner Workspace", items: [{ to: "/approvals", label: "Access Requests", icon: "inbox" }, { to: "/owner-analytics", label: "Analytics", icon: "chart" }] }] : []),
+    ...(isOwner ? [{ title: "Owner Workspace", items: [{ to: "/my-dashboards", label: "My Dashboards", icon: "dashboards" }, { to: "/approvals", label: "Access Requests", icon: "inbox" }, { to: "/owner-analytics", label: "Analytics", icon: "chart" }] }] : []),
   ];
   const showAdmin = adminModules.some((m) => can(me, m));
 
@@ -38,6 +43,13 @@ export function App() {
         <Route path="/folders" element={<Navigate to="/?tab=folders" replace />} />   {/* Personal Folders is a tab on Home now */}
         {isOwner && <Route path="/approvals" element={<ApprovalsPage />} />}
         {isOwner && <Route path="/owner-analytics" element={<OwnerAnalyticsPage />} />}
+        {isOwner && (
+          <Route element={<OwnerScope />}>
+            <Route path="/my-dashboards" element={<DashboardsPage />} />
+            <Route path="/my-dashboards/:id" element={<DashboardDetailPage />} />
+            <Route path="/my-dashboards/groups/:id" element={<AccessGroupDetailPage />} />
+          </Route>
+        )}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </AppShell>

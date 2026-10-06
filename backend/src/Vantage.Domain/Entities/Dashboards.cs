@@ -7,7 +7,7 @@ public class Dashboard
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
     public string? Description { get; set; }
-    public DashboardType Type { get; set; }
+    public BiType Type { get; set; }
     public DashboardStatus Status { get; set; } = DashboardStatus.Draft;
 
     /// <summary>The deepest category chosen (Primary, Secondary or Tertiary); the dashboard sits here.</summary>
@@ -149,4 +149,17 @@ public class GroupMember
 
     public DashboardGroup Group { get; set; } = null!;
     public User User { get; set; } = null!;
+}
+
+/// <summary>A saved, unpublished publish form (C60): the details only, kept per person. Files are chosen again at publish time.</summary>
+public class PublishDraft
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public User User { get; set; } = null!;
+    public BiType Type { get; set; }
+    public string Title { get; set; } = "";
+    /// <summary>The form values as JSON.</summary>
+    public string Payload { get; set; } = "{}";
+    public DateTime UpdatedAtUtc { get; set; }
 }

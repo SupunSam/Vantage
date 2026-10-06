@@ -22,7 +22,7 @@ public sealed class TableauPublisher(
 {
     public async Task<PublishStatus> PublishAsync(PublishTableauRequest req, int actorUserId, CancellationToken ct = default)
     {
-        await ServiceTypes.EnsureAllowedAsync(db, DashboardType.Tableau, null, ct);
+        await ServiceTypes.EnsureAllowedAsync(db, BiType.Tableau, null, ct);
         var tenant = await ResolveTenantAsync(req.TenantId, ct);
         var view = TableauViewUrl.Parse(req.ViewUrl, tenant?.ServerUrl, tenant?.SiteContentUrl);
         EnsureClassificationFits(view.IsPublic, req.DataClassification);
@@ -33,7 +33,7 @@ public sealed class TableauPublisher(
         var dashboard = await factory.CreateAsync(new Dashboard
         {
             Code = req.Code.Trim(), Name = req.Name.Trim(), Description = req.Description?.Trim(),
-            Type = DashboardType.Tableau, Status = DashboardStatus.Publishing, CategoryId = req.CategoryId, RlsEnabled = false,
+            Type = BiType.Tableau, Status = DashboardStatus.Publishing, CategoryId = req.CategoryId, RlsEnabled = false,
             TenantId = tenant?.Id, TableauViewUrl = view.Src,
             PrimaryOwnerId = req.PrimaryOwnerId, BackupOwnerId = req.BackupOwnerId == req.PrimaryOwnerId ? null : req.BackupOwnerId,
             Audience = req.Audience, DataClassification = req.DataClassification,

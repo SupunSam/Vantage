@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, apiObjectUrl, Icon, Pager, useGridPageSize, usePaged } from "@vantage/shared";
-import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "../ui";
+import { Icon } from "../Icon";
+import { Pager, usePaged } from "../Pager";
+import { useFlash } from "../Toast";
+import { api, apiObjectUrl } from "../api";
+import { useGridPageSize } from "../session";
+import { errorText, MenuButton, Modal, Notice, StatusPill, useApi, when } from "./ui";
 import { NewGroupModal, type GroupRow, type MemberResult } from "./AccessGroupsPage";
 import { RulesPanel } from "./RulesPanel";
+import { useManage } from "./routes";
 
 type Member = { userId: number; email: string; displayName: string | null; userType: string; userStatus: string; source: string; addedAtUtc: string; addedBy: string | null };
 type Sibling = { id: number; name: string; rlsValue: string | null; status: string; isDefault: boolean };
@@ -21,7 +26,7 @@ type Detail = {
   noRlsMessage: string;
 };
 /** What adding people did: sent to the owners (Requested), or nothing could be added. */
-type AddOutcome = { mode: "Requested" | "Nothing"; requestId: number | null; results: MemberResult[] };
+type AddOutcome = { mode: "Requested" | "Added" | "Nothing"; requestId: number | null; results: MemberResult[] };
 
 const tabs = [
   { key: "members", label: "Members" },
@@ -37,11 +42,12 @@ const sourceLabel: Record<string, string> = {
 
 /** One access group: its settings, then tabs for its members (add, move, remove), its rules and its history. */
 export function AccessGroupDetailPage() {
+  const routes = useManage();
   const { id } = useParams();
   const navigate = useNavigate();
   const { data, error, reload } = useApi<Detail>(`/api/admin/access-groups/${id}`);
   const { data: allGroups } = useApi<GroupRow[]>("/api/admin/access-groups");
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
   const [results, setResults] = useState<MemberResult[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [dialog, setDialog] = useState<"copy" | "clone" | null>(null);
@@ -78,7 +84,9 @@ export function AccessGroupDetailPage() {
 
   function handleOutcome(o: AddOutcome) {
     const sent = o.results.filter((r) => r.outcome === "Requested").length;
-    if (o.mode === "Requested") setMessage({ ok: true, text: `Sent to the owners of ${d.name} as one request for ${sent} ${sent === 1 ? "person" : "people"}. They are added only when the owners approve.` });
+    const added = o.results.filter((r) => r.outcome === "Added" || r.outcome === "Moved").length;
+    if (o.mode === "Added") setMessage({ ok: true, text: `Added ${added} ${added === 1 ? "person" : "people"} to ${g.name}.` });
+    else if (o.mode === "Requested") setMessage({ ok: true, text: `Sent to the owners of ${d.name} as one request for ${sent} ${sent === 1 ? "person" : "people"}. They are added only when the owners approve.` });
     else setMessage({ ok: false, text: "Nobody could be added. See the list below for why." });
     setResults(o.results);
     reload();
@@ -99,10 +107,10 @@ export function AccessGroupDetailPage() {
     <>
       <div className="page-head">
         <div>
-          <p className="crumb"><Link to="/access-groups">Access Groups</Link></p>
+          <p className="crumb">{routes.groups ? <Link to={routes.groups}>Access Groups</Link> : <Link to={routes.dashboard(d.id)}>{routes.dashboardsLabel}</Link>}</p>
           <h1 className="group-title">{g.name}</h1>
           <p>
-            Gives access to <Link to={`/dashboards/${d.id}`}>{d.name}</Link>
+            Gives access to <Link to={routes.dashboard(d.id)}>{d.name}</Link>
             {g.isDefault ? ", as its default group (holds the owners)." : "."}
             {g.clonedFrom && <> Members first copied from {g.clonedFrom}.</>}
           </p>
@@ -124,12 +132,11 @@ export function AccessGroupDetailPage() {
 
       {d.ownershipPendingReview && <Notice>{d.name}'s owners are under review, so access changes are paused{data.isSuperAdmin ? " for everyone except Super Admins" : " until a Super Admin confirms them"}.</Notice>}
       {g.status === "Inactive" && <Notice>This group is inactive: its members keep their place but can't open {d.name}. Set it to Active under Details.</Notice>}
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       <GroupDetails data={data} editable={editable} onSaved={ok} />
 
       <div className="tabs" role="tablist">
-        {tabs.map((t) => (
+        {tabs.filter((t) => t.key !== "rules" || routes.mode === "admin").map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`tab ${tab === t.key ? "tab-on" : ""}`}
             onClick={() => { setMessage(null); setSearch(t.key === "members" ? {} : { tab: t.key }, { replace: true }); }}>
             {t.label}
@@ -229,7 +236,7 @@ export function AccessGroupDetailPage() {
       )}
       {dialog === "clone" && allGroups && (
         <NewGroupModal title={`Clone ${g.name}`} groups={allGroups} copyFromGroupId={g.id} dashboardId={d.rlsEnabled ? d.id : undefined}
-          onClose={() => setDialog(null)} onCreated={(newId) => { setDialog(null); navigate(`/access-groups/${newId}`); }} />
+          onClose={() => setDialog(null)} onCreated={(newId) => { setDialog(null); navigate(routes.group(newId)); }} />
       )}
     </>
   );
@@ -238,6 +245,7 @@ export function AccessGroupDetailPage() {
 // ---------------------------------------------------------------- Details
 
 function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boolean; onSaved: (text: string) => void }) {
+  const routes = useManage();
   const g = data.group;
   const d = g.dashboard;
   const [editing, setEditing] = useState(false);
@@ -280,7 +288,7 @@ function GroupDetails({ data, editable, onSaved }: { data: Detail; editable: boo
       {!editing ? (
         <dl className="facts facts-wide">
           <dt>Group name</dt><dd>{g.name}{g.isDefault && <span className="muted small"> (default group: the name is fixed)</span>}</dd>
-          <dt>Dashboard</dt><dd><Link to={`/dashboards/${d.id}`}>{d.name}</Link> <span className="muted small">{d.rlsEnabled ? "uses row-level security" : "has no row-level security"}</span></dd>
+          <dt>Dashboard</dt><dd><Link to={routes.dashboard(d.id)}>{d.name}</Link> <span className="muted small">{d.rlsEnabled ? "uses row-level security" : "has no row-level security"}</span></dd>
           <dt>RLS value</dt>
           <dd>
             {g.rlsValue ? <code className={d.rlsEnabled ? "" : "rls-ignored"}>{g.rlsValue}</code> : <span className={d.rlsEnabled ? "warn-text" : "muted"}>None{d.rlsEnabled ? ": members can't open the dashboard" : ""}</span>}
@@ -410,8 +418,8 @@ function AddPeople({ groupId, hasSiblings, onCancel, onDone, onError }: { groupI
           )}
           {q.trim().length >= 2 && found.length === 0 && (
             emailLike
-              ? <p className="small">{q.trim()} isn't a portal user yet. Only portal users can join an access group: add them in <Link to="/users">Users</Link> first, then come back.</p>
-              : <p className="muted small">No portal user matches. People must be added in <Link to="/users">Users</Link> before they can join a group.</p>
+              ? <p className="small">{q.trim()} isn't a portal user yet. Only portal users can join an access group: a Super Admin adds people to the portal first (Users in the Admin Portal), then you can add them here.</p>
+              : <p className="muted small">No portal user matches. People must be added by a Super Admin before they can join a group.</p>
           )}
         </div>
       )}

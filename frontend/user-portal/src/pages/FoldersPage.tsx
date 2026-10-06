@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, useFlash, BiInactiveBadge } from "@vantage/shared";
 import { Crumbs, FolderGrid, plural } from "./FolderGrid";
 
 export type Folder = { id: number; name: string; dashboardIds: number[] };
@@ -15,7 +15,7 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [mine, setMine] = useState<Mine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const setNotice = useFlash();
   const [search, setSearch] = useSearchParams();
   const [newName, setNewName] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -67,7 +67,6 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
         {!embedded && <h1>Personal Folders</h1>}
         <p className="muted home-count">Your own folders for the dashboards you open often. Only you can see them, and a dashboard you lose access to leaves them automatically.</p>
       </div>
-      {notice && <p className="notice notice-error">{notice}</p>}
 
       <div className="folders-layout">
         <aside className="folders-side" aria-label="Your folders">
@@ -161,7 +160,7 @@ export function FoldersPage({ embedded = false }: { embedded?: boolean }) {
                         <div className="card-body">
                           {d.categoryPath && <p className="card-cat">{d.categoryPath}</p>}
                           <h3>{d.name}</h3>
-                          <p className="card-meta"><span>{typeLabel[d.type]}</span></p>
+                          <p className="card-meta"><span>{typeLabel[d.type]}<BiInactiveBadge type={d.type} /></span></p>
                         </div>
                       </Link>
                       <button type="button" className="card-pin" onClick={() => void run(() => api(`/api/folders/${selected.id}/dashboards/${d.id}`, { method: "DELETE" }))}

@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import * as pbi from "powerbi-client";
-import { api, ApiError, apiObjectUrl, GenAiFrame, Icon, TableauViz, Thumbnail } from "@vantage/shared";
-import { errorText, Modal, Notice, StatusPill, useApi, when } from "../ui";
-import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
-import type { CategoryNode } from "./CategoriesPage";
+import { GenAiFrame } from "../GenAiFrame";
+import { Icon } from "../Icon";
+import { TableauViz } from "../TableauViz";
+import { Thumbnail } from "../Thumbnail";
+import { useFlash } from "../Toast";
+import { BiInactiveBadge } from "../TypeIcon";
+import { api, ApiError, apiObjectUrl } from "../api";
+import { errorText, Modal, Notice, StatusPill, useApi, when } from "./ui";
+import { CategoryPicker, TagInput, ThumbnailPicker } from "./fields";
+import type { CategoryNode } from "./fields";
+import { useManage } from "./routes";
 
 type Group = { id: number; name: string; rlsValue: string | null; isDefault: boolean; status: string; members: { email: string; displayName: string | null; source: string }[] };
 type Detail = {
@@ -23,6 +30,7 @@ type Detail = {
   thumbnail: string | null;
   canPreview: boolean;
   canEdit: boolean;
+  canEditOwners?: boolean;
   canEditGroups: boolean;
   canModify: boolean;
   isSuperAdmin: boolean;
@@ -47,11 +55,12 @@ const typeLabel: Record<string, string> = { PowerBi: "Power BI", Tableau: "Table
 
 /** One dashboard in Dashboards Master: details (editable), thumbnail, groups with their RLS values, preview and file versions. */
 export function DashboardDetailPage() {
+  const routes = useManage();
   const { id } = useParams();
   const [search, setSearch] = useSearchParams();
   const tab = (tabs.some((t) => t.key === search.get("tab")) ? search.get("tab") : "details") as Tab;
   const { data, error, reload } = useApi<Detail>(`/api/admin/dashboards/${id}`);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
   const [modifying, setModifying] = useState(false);
   useEffect(() => setMessage(null), [id]);
 
@@ -87,12 +96,12 @@ export function DashboardDetailPage() {
       <div className="detail-hero">
         <div className="detail-thumb"><Thumbnail dashboardId={d.id} version={data.thumbnail} type={d.type} /></div>
         <div className="detail-title grow">
-          <p className="crumb"><Link to="/dashboards">Dashboards Master</Link></p>
+          <p className="crumb"><Link to={routes.dashboards}>{routes.dashboardsLabel}</Link></p>
           <h1>{d.name}</h1>
           <p className="muted">{data.categoryPath ?? "No category yet"}</p>
           <div className="detail-badges">
             <StatusPill status={d.status} />
-            <span className="pill pill-neutral">{typeLabel[d.type] ?? d.type}</span>
+            <span className="pill pill-neutral">{typeLabel[d.type] ?? d.type}</span><BiInactiveBadge type={d.type} />
             <span className={`pill ${d.rlsEnabled ? "pill-brand" : "pill-neutral"}`}>{d.rlsEnabled ? "RLS on" : "No RLS"}</span>
             {needsRls && <span className="pill pill-warn">A group needs an RLS value</span>}
           </div>
@@ -126,7 +135,6 @@ export function DashboardDetailPage() {
         ))}
       </div>
 
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
       {d.lastError && <Notice tone="error">{d.lastError}</Notice>}
 
       {tab === "details" && <DetailsTab data={data} onSaved={(t) => { say(true, t); reload(); }} onError={(t) => say(false, t)} />}
@@ -479,21 +487,21 @@ function DetailsForm({ data, onCancel, onSaved, onError }: { data: Detail; onCan
           <div className="cols cols-4">
             <label className="field">
               <span>Primary owner</span>
-              <select required value={primaryOwnerId} onChange={(e) => setPrimaryOwnerId(e.target.value)}>
+              <select required value={primaryOwnerId} disabled={data.canEditOwners === false} onChange={(e) => setPrimaryOwnerId(e.target.value)}>
                 <option value="">Choose…</option>
                 {options.users.map((u) => <option key={u.id} value={u.id}>{u.displayName ?? u.email}</option>)}
               </select>
             </label>
             <label className="field">
               <span>Backup owner</span>
-              <select value={backupOwnerId} onChange={(e) => setBackupOwnerId(e.target.value)}>
+              <select value={backupOwnerId} disabled={data.canEditOwners === false} onChange={(e) => setBackupOwnerId(e.target.value)}>
                 <option value="">None</option>
                 {options.users.filter((u) => String(u.id) !== primaryOwnerId).map((u) => <option key={u.id} value={u.id}>{u.displayName ?? u.email}</option>)}
               </select>
             </label>
             <label className="field">
               <span>Audience</span>
-              <select value={audience} onChange={(e) => setAudience(e.target.value)}><option>Internal</option><option>Client</option></select>
+              <select value={audience} onChange={(e) => setAudience(e.target.value)}><option>Internal</option><option>Client</option><option value="Both">Both</option></select>
             </label>
             <label className="field">
               <span>Data classification</span>
@@ -524,6 +532,7 @@ function DetailsForm({ data, onCancel, onSaved, onError }: { data: Detail; onCan
 // ---------------------------------------------------------------- Groups and RLS
 
 function GroupsTab({ data, onChanged, onError }: { data: Detail; onChanged: (t: string) => void; onError: (t: string) => void }) {
+  const routes = useManage();
   const d = data.dashboard;
   const [adding, setAdding] = useState(false);
 
@@ -554,7 +563,7 @@ function GroupsTab({ data, onChanged, onError }: { data: Detail; onChanged: (t: 
           {d.groups.map((g) => (
             <tr key={g.id}>
               <td>
-                <Link to={`/access-groups/${g.id}`} className="group-name">{g.name}</Link>
+                <Link to={routes.group(g.id)} className="group-name">{g.name}</Link>
                 {g.isDefault && <div className="muted small">Default group, holds the owners</div>}
                 {g.status !== "Active" && <StatusPill status={g.status} />}
               </td>

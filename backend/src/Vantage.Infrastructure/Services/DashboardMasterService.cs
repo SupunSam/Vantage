@@ -50,7 +50,7 @@ public sealed class DashboardMasterService(
         d.CategoryId = input.CategoryId;
         d.PrimaryOwnerId = primary;
         d.BackupOwnerId = backup;
-        if (d.Type == DashboardType.Tableau && d.TenantId is null) TableauPublisher.EnsureClassificationFits(true, input.DataClassification);
+        if (d.Type == BiType.Tableau && d.TenantId is null) TableauPublisher.EnsureClassificationFits(true, input.DataClassification);
         d.Audience = input.Audience;
         d.DataClassification = input.DataClassification;
         d.SharePointFolder = folder;
@@ -95,7 +95,7 @@ public sealed class DashboardMasterService(
     public async Task SetTableauViewAsync(int id, int? tenantId, string viewUrl, int actorUserId, CancellationToken ct = default)
     {
         var d = await db.Dashboards.Include(x => x.Tenant).SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException();
-        if (d.Type != DashboardType.Tableau) throw new RuleException("Only Tableau dashboards have a Tableau view.");
+        if (d.Type != BiType.Tableau) throw new RuleException("Only Tableau dashboards have a Tableau view.");
         if (d.Status == DashboardStatus.Retired) throw new RuleException("Retired dashboards can't be edited.");
 
         var tenant = tenantId is null or 0 ? null : await db.BiTenants.AsNoTracking().SingleOrDefaultAsync(t => t.Id == tenantId, ct) ?? throw new RuleException("That Tableau tenant doesn't exist.");
@@ -138,7 +138,7 @@ public sealed class DashboardMasterService(
     public async Task<(bool RlsEnabled, bool Changed)> SyncRlsAsync(int id, CancellationToken ct = default)
     {
         var d = await db.Dashboards.Include(x => x.Tenant).Include(x => x.Workspace).SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException();
-        if (d.Type != DashboardType.PowerBi) throw new RuleException("Only Power BI dashboards have row-level security roles to check.");
+        if (d.Type != BiType.PowerBi) throw new RuleException("Only Power BI dashboards have row-level security roles to check.");
         if (d.Tenant is null || d.Workspace is null || d.PowerBiReportId is null)
             throw new RuleException("This dashboard isn't linked to a published Power BI report yet.");
 

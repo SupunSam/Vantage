@@ -84,7 +84,7 @@ public class DashboardVersionTests(SqlServerFixture fx) : IClassFixture<SqlServe
         var factory = new DashboardFactory(db, new OwnershipService(db, clock), audit, clock);
         var d = await factory.CreateAsync(new Dashboard
         {
-            Code = "SALES", Name = "Sales " + Guid.NewGuid().ToString("N")[..6], Type = DashboardType.PowerBi, Status = DashboardStatus.Active,
+            Code = "SALES", Name = "Sales " + Guid.NewGuid().ToString("N")[..6], Type = BiType.PowerBi, Status = DashboardStatus.Active,
             TenantId = tenant.Id, WorkspaceId = tenant.Workspaces[0].Id, PrimaryOwnerId = owner.Id, PowerBiReportId = Guid.NewGuid(),
         }, null, owner.Id);
         // Version 1, as publishing leaves it.

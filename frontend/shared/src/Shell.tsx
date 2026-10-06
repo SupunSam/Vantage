@@ -95,6 +95,10 @@ export function AppShell({ portalLabel, sections, otherPortal, children }: {
           <LogOutButton />
         </header>
         <main className="content">{children}</main>
+        <footer className="app-footer">
+          <span>© {new Date().getFullYear()} {branding.portalName ?? "Vantage"}</span>
+          {branding.footerText && <span>{branding.footerText}</span>}
+        </footer>
       </div>
     </div>
   );

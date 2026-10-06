@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, ApiError, Icon } from "@vantage/shared";
+import { Icon } from "../Icon";
+import { api, ApiError } from "../api";
 
 /** Loads data from the API; `reload` fetches again. */
 export function useApi<T>(path: string | null) {
@@ -45,7 +46,7 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
     <dialog ref={ref} className={`modal ${wide ? "modal-wide" : ""}`} onCancel={(e) => { e.preventDefault(); onClose(); }}>
       <div className="modal-head">
         <h2>{title}</h2>
-        <button type="button" className="btn btn-quiet" onClick={onClose} aria-label="Close">Close</button>
+        <button type="button" className="modal-x" onClick={onClose} aria-label="Close" title="Close"><Icon name="close" size={20} /></button>
       </div>
       <div className="modal-body">{children}</div>
     </dialog>

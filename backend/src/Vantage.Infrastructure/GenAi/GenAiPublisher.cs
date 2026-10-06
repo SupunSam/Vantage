@@ -28,7 +28,7 @@ public sealed class GenAiPublisher(
         var dashboard = await factory.CreateAsync(new Dashboard
         {
             Code = req.Code.Trim(), Name = req.Name.Trim(), Description = req.Description?.Trim(),
-            Type = DashboardType.GenAi, Status = DashboardStatus.Publishing, CategoryId = req.CategoryId, RlsEnabled = false,
+            Type = BiType.GenAi, Status = DashboardStatus.Publishing, CategoryId = req.CategoryId, RlsEnabled = false,
             PrimaryOwnerId = req.PrimaryOwnerId, BackupOwnerId = req.BackupOwnerId == req.PrimaryOwnerId ? null : req.BackupOwnerId,
             Audience = req.Audience, DataClassification = req.DataClassification,
             Tags = tags.Select(t => new DashboardTag { Tag = t }).ToList(),

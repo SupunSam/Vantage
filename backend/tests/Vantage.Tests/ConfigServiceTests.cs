@@ -8,7 +8,7 @@ using Vantage.Infrastructure.Storage;
 
 namespace Vantage.Tests;
 
-/// <summary>Admin Configuration: validated settings, the logo, approved CDNs, dashboard types, and the audit trail of all of it.</summary>
+/// <summary>Admin Configuration: validated settings, the logo, approved CDNs, BI types, and the audit trail of all of it.</summary>
 public class ConfigServiceTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
 {
     private sealed class Ctx : IRequestContext
@@ -62,7 +62,7 @@ public class ConfigServiceTests(SqlServerFixture fx) : IClassFixture<SqlServerFi
         var bad = new[]
         {
             (SettingKeys.IdleTimeoutMinutes, "2"), (SettingKeys.IdleTimeoutMinutes, "soon"), (SettingKeys.BrandPrimaryColor, "blue"), (SettingKeys.HrmsSyncCron, "every day"),
-            (SettingKeys.InternalEmailDomain, "not a domain"), (SettingKeys.NewHireDigestFrequency, "Hourly"), (SettingKeys.BrandPortalName, "  "), (SettingKeys.ExternalSeeInternalCatalogue, "maybe"),
+            (SettingKeys.InternalEmailDomain, "not a domain"), (SettingKeys.NewHireDigestFrequency, "Hourly"), (SettingKeys.BrandPortalName, "  "), (SettingKeys.ToastSeconds, "1"), (SettingKeys.ToastSeconds, "31"), (SettingKeys.ExternalSeeInternalCatalogue, "maybe"),
         };
         foreach (var (key, value) in bad)
             await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateAsync(new Dictionary<string, string?> { [key] = value }, k.Admin.Id));
@@ -71,18 +71,20 @@ public class ConfigServiceTests(SqlServerFixture fx) : IClassFixture<SqlServerFi
         await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateAsync(new Dictionary<string, string?> { [SettingKeys.IdleTimeoutMinutes] = "45", [SettingKeys.BrandPrimaryColor] = "nope" }, k.Admin.Id));
         Assert.Equal(before, await ChangesAudited(k.Db, "config.setting-changed"));
         Assert.Equal(30, (await k.Config.UiAsync()).IdleTimeoutMinutes);
+        Assert.Equal(6, (await k.Config.UiAsync()).ToastSeconds);
 
         var changed = await k.Config.UpdateAsync(new Dictionary<string, string?>
         {
-            [SettingKeys.IdleTimeoutMinutes] = " 45 ", [SettingKeys.BrandPrimaryColor] = "#1f4e79", [SettingKeys.DefaultGridPageSize] = "50",
+            [SettingKeys.IdleTimeoutMinutes] = " 45 ", [SettingKeys.BrandPrimaryColor] = "#1f4e79", [SettingKeys.DefaultGridPageSize] = "50", [SettingKeys.ToastSeconds] = "10",
             [SettingKeys.InternalEmailDomain] = "@RRD.com", [SettingKeys.HrmsSyncCron] = "0  3 * * 1", [SettingKeys.ExternalSeeInternalCatalogue] = "TRUE",
         }, k.Admin.Id);
 
-        Assert.Equal(4, changed);                                    // the colour and the domain already had those values once tidied, so they aren't changes
-        Assert.Equal(before + 4, await ChangesAudited(k.Db, "config.setting-changed"));
+        Assert.Equal(5, changed);                                    // the colour and the domain already had those values once tidied, so they aren't changes
+        Assert.Equal(before + 5, await ChangesAudited(k.Db, "config.setting-changed"));
         var ui = await k.Config.UiAsync();
         Assert.Equal(45, ui.IdleTimeoutMinutes);
         Assert.Equal(50, ui.GridPageSize);
+        Assert.Equal(10, ui.ToastSeconds);
         var list = await k.Config.ListAsync();
         Assert.Equal("rrd.com", list.Single(s => s.Key == SettingKeys.InternalEmailDomain).Value);
         Assert.Equal("0 3 * * 1", list.Single(s => s.Key == SettingKeys.HrmsSyncCron).Value);
@@ -149,31 +151,37 @@ public class ConfigServiceTests(SqlServerFixture fx) : IClassFixture<SqlServerFi
         // The database is seeded with the three types; make sure they are all there and switched on, with known limits.
         foreach (var t in new[]
         {
-            new BiServiceType { Type = DashboardType.PowerBi, DisplayName = "Power BI", RequiresFile = true, AllowedExtensions = ".pbix", MaxFileSizeMb = 1024 },
-            new BiServiceType { Type = DashboardType.Tableau, DisplayName = "Tableau", RequiresUrl = true },
-            new BiServiceType { Type = DashboardType.GenAi, DisplayName = "GenAI Dashboard", RequiresFile = true, AllowedExtensions = ".html", MaxFileSizeMb = 5 },
+            new BiTypeConfig { Type = BiType.PowerBi, DisplayName = "Power BI", RequiresFile = true, AllowedExtensions = ".pbix", MaxFileSizeMb = 1024 },
+            new BiTypeConfig { Type = BiType.Tableau, DisplayName = "Tableau", RequiresUrl = true },
+            new BiTypeConfig { Type = BiType.GenAi, DisplayName = "GenAI Dashboard", RequiresFile = true, AllowedExtensions = ".html", MaxFileSizeMb = 5 },
         })
         {
-            var row = await k.Db.BiServiceTypes.SingleOrDefaultAsync(x => x.Type == t.Type);
-            if (row is null) k.Db.BiServiceTypes.Add(t);
+            var row = await k.Db.BiTypes.SingleOrDefaultAsync(x => x.Type == t.Type);
+            if (row is null) k.Db.BiTypes.Add(t);
             else { row.IsEnabled = true; row.MaxFileSizeMb = t.MaxFileSizeMb; }
         }
         await k.Db.SaveChangesAsync();
 
-        await ServiceTypes.EnsureAllowedAsync(k.Db, DashboardType.PowerBi, 10L * 1024 * 1024);                       // fine at first
-        await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateTypeAsync(DashboardType.PowerBi, true, 0));       // limit out of range
-        await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateTypeAsync(DashboardType.PowerBi, true, 5000));
+        await ServiceTypes.EnsureAllowedAsync(k.Db, BiType.PowerBi, 10L * 1024 * 1024);                       // fine at first
+        await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateTypeAsync(BiType.PowerBi, true, false, 0));       // limit out of range
+        await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateTypeAsync(BiType.PowerBi, true, false, 5000));
 
-        await k.Config.UpdateTypeAsync(DashboardType.PowerBi, true, 50);
-        await ServiceTypes.EnsureAllowedAsync(k.Db, DashboardType.PowerBi, 50L * 1024 * 1024);
-        var tooBig = await Assert.ThrowsAsync<RuleException>(() => ServiceTypes.EnsureAllowedAsync(k.Db, DashboardType.PowerBi, 51L * 1024 * 1024));
+        await k.Config.UpdateTypeAsync(BiType.PowerBi, true, false, 50);
+        await ServiceTypes.EnsureAllowedAsync(k.Db, BiType.PowerBi, 50L * 1024 * 1024);
+        var tooBig = await Assert.ThrowsAsync<RuleException>(() => ServiceTypes.EnsureAllowedAsync(k.Db, BiType.PowerBi, 51L * 1024 * 1024));
         Assert.Contains("50 MB", tooBig.Message);
 
-        await k.Config.UpdateTypeAsync(DashboardType.PowerBi, false, 50);
-        var off = await Assert.ThrowsAsync<RuleException>(() => ServiceTypes.EnsureAllowedAsync(k.Db, DashboardType.PowerBi, 1));
+        await k.Config.UpdateTypeAsync(BiType.PowerBi, false, false, 50);
+        var off = await Assert.ThrowsAsync<RuleException>(() => ServiceTypes.EnsureAllowedAsync(k.Db, BiType.PowerBi, 1));
         Assert.Contains("switched off", off.Message);
-        await k.Config.UpdateTypeAsync(DashboardType.Tableau, false, null);
-        await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateTypeAsync(DashboardType.GenAi, false, 5));       // the last one stays on
+        await k.Config.UpdateTypeAsync(BiType.Tableau, false, false, null);
+        var state = (await k.Config.UiAsync()).BiTypes;
+        Assert.False(state.Single(x => x.Type == "PowerBi").Enabled);
+        Assert.False(state.Single(x => x.Type == "Tableau").HideExisting);
+        await k.Config.UpdateTypeAsync(BiType.Tableau, false, true, null);
+        Assert.True((await k.Config.UiAsync()).BiTypes.Single(x => x.Type == "Tableau").HideExisting);
+        Assert.True((await k.Config.TypesAsync()).Single(x => x.Type == "Tableau").HideWhenInactive);
+        await Assert.ThrowsAsync<RuleException>(() => k.Config.UpdateTypeAsync(BiType.GenAi, false, false, 5));       // the last one stays on
         Assert.True(await k.Db.AuditLogs.AnyAsync(a => a.Action == "config.service-type-updated" && a.Details!.Contains("Power BI")));
     }
 }

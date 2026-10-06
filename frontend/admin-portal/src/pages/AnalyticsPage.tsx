@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, DashboardDetailPanel, DashboardsPanel, downloadFile, Icon, OverviewPanel, Pager, RangePicker, TypePicker, typeParam, usePaged, type Overview } from "@vantage/shared";
-import { errorText, Notice, Pill, useApi, when } from "../ui";
+import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 const BASE = "/api/admin/analytics";
 const tabs = [
@@ -19,7 +19,7 @@ export function AnalyticsPage() {
   const [search, setSearch] = useSearchParams();
   const tab: Tab = search.get("tab") === "dashboards" ? "dashboards" : search.get("tab") === "reports" ? "reports" : "overview";
   const [days, setDays] = useState(30);
-  const [type, setType] = useState("");   // all dashboard types by default
+  const [type, setType] = useState("");   // all BI types by default
   const [selected, setSelected] = useState<number | null>(null);
   const overview = useApi<Overview>(tab === "overview" ? `${BASE}/overview?days=${days}${typeParam(type)}` : null);
 

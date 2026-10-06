@@ -62,6 +62,9 @@ Key services: CategoryService, DashboardMasterService, GroupService, AccessGroup
 ## How I want to work
 Keep it simple and go step by step: finish one module end to end, let me test it in the browser, then move on. Explain anything I need to do on Power BI/Azure in plain steps. Never ask me to paste secrets into chat. Keep the tests passing. UI should look professional and consistent with the layout.
 
+## UI polish and owners (6 to 7 Oct 2026, C54 to C62)
+Slim scrollbars, red ✕ on modals, aligned Add User and Add Many Users fields, and toasts in the bottom right (`ui.toastSeconds` on the Configuration page). BI Types (C56): the tab is renamed, Inactive hides the type's tab, tenant option and filter, existing dashboards show a BI Inactive badge, and Hide Existing removes them from the User Portal; the table is now `BiTypes`. Tenants are table rows (C57). The viewer has Default, Wide and Full Screen sizes (C58). Owners manage their own dashboards from My Dashboards (C59), with codes made from names, drafts and Audience Both (C60), upload folders (C61), a footer and tenant Save and Verify (C62). The next decision number is C63.
+
 ## Next step
 Parked by the owner for now: a Tableau Server test site, real sign-in (ADFS/Cognito, separate sessions per portal) and AWS, then the migration from the .NET 4.8 portal (U7). Nothing is open.
 

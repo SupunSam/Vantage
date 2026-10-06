@@ -28,7 +28,7 @@ public sealed class PublishingService(
     {
         if (!req.FileName.EndsWith(".pbix", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Choose a .pbix file.");
-        await ServiceTypes.EnsureAllowedAsync(db, DashboardType.PowerBi, pbix.CanSeek ? pbix.Length : null, ct);
+        await ServiceTypes.EnsureAllowedAsync(db, BiType.PowerBi, pbix.CanSeek ? pbix.Length : null, ct);
 
         var workspace = await db.PowerBiWorkspaces.Include(w => w.Tenant)
             .SingleOrDefaultAsync(w => w.Id == req.WorkspaceId && w.IsActive && w.Tenant.IsActive, ct)
@@ -43,7 +43,7 @@ public sealed class PublishingService(
         // Publishing again over a failed attempt reuses that dashboard and adds a new file version.
         var dashboard = await db.Dashboards.Include(d => d.Groups)
             .Include(d => d.Tags)
-            .SingleOrDefaultAsync(d => d.Name == req.Name.Trim() && d.Status == DashboardStatus.Failed && d.Type == DashboardType.PowerBi, ct);
+            .SingleOrDefaultAsync(d => d.Name == req.Name.Trim() && d.Status == DashboardStatus.Failed && d.Type == BiType.PowerBi, ct);
         if (dashboard is not null)
         {
             if (req.RlsEnabled && string.IsNullOrWhiteSpace(req.DefaultGroupRlsValue))
@@ -69,7 +69,7 @@ public sealed class PublishingService(
             dashboard = await factory.CreateAsync(new Dashboard
             {
                 Code = req.Code.Trim(), Name = req.Name.Trim(), Description = req.Description?.Trim(),
-                Type = DashboardType.PowerBi, Status = DashboardStatus.Publishing,
+                Type = BiType.PowerBi, Status = DashboardStatus.Publishing,
                 TenantId = workspace.TenantId, WorkspaceId = workspace.Id, CategoryId = req.CategoryId,
                 RlsEnabled = req.RlsEnabled, PrimaryOwnerId = req.PrimaryOwnerId,
                 BackupOwnerId = req.BackupOwnerId == req.PrimaryOwnerId ? null : req.BackupOwnerId,
@@ -82,7 +82,7 @@ public sealed class PublishingService(
         var versionNumber = (await db.DashboardVersions.Where(v => v.DashboardId == dashboard.Id).MaxAsync(v => (int?)v.VersionNumber, ct) ?? 0) + 1;
         await db.DashboardVersions.Where(v => v.DashboardId == dashboard.Id && v.IsCurrent)
             .ExecuteUpdateAsync(u => u.SetProperty(v => v.IsCurrent, false), ct);
-        var key = $"dashboards/{dashboard.Id}/v{versionNumber}/{Path.GetFileName(req.FileName)}";
+        var key = StorageFolders.Key(await StorageFolders.ForAsync(db, BiType.PowerBi, ct), dashboard.Id, versionNumber, req.FileName, clock.GetUtcNow().UtcDateTime);
         var (size, sha) = await files.SaveAsync(key, pbix, ct);
         db.DashboardVersions.Add(new DashboardVersion
         {

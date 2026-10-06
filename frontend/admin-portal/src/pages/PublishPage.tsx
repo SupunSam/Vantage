@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, can, useSession } from "@vantage/shared";
-import { errorText, Notice, useApi } from "../ui";
-import { CategoryPicker, TagInput, ThumbnailPicker } from "../fields";
-import type { CategoryNode } from "./CategoriesPage";
+import { api, can, useSession, useFlash, useBiTypes } from "@vantage/shared";
+import { DraftPicker, SaveDraftButton, useDraft, useGeneratedCode } from "../drafts";
+import { errorText, Notice, useApi } from "@vantage/shared";
+import { CategoryPicker, TagInput, ThumbnailPicker } from "@vantage/shared";
+import type { CategoryNode } from "@vantage/shared";
 import { PublishGenAiPage } from "./PublishGenAiPage";
 import { PublishTableauPage } from "./PublishTableauPage";
 
@@ -18,20 +19,31 @@ type PublishStatus = { dashboardId: number; name: string; status: string; error:
 /** Publish Dashboard: choose the type, then the matching form. */
 export function PublishPage() {
   const { me } = useSession();
-  const [type, setType] = useState<"powerbi" | "tableau" | "genai">("powerbi");
-  // GenAI pages are code, so only Super Admins vet and publish them.
-  const showGenAi = me?.isSuperAdmin === true;
-  const tab = (key: typeof type, label: string) => (
-    <button type="button" role="tab" aria-selected={type === key} className={`tab ${type === key ? "tab-on" : ""}`} onClick={() => setType(key)}>{label}</button>
+  const { isEnabled } = useBiTypes();
+  // GenAI pages are code, so only Super Admins vet and publish them. A type switched off in BI Types has no tab (C56).
+  const available = ([
+    { key: "powerbi", label: "Power BI", on: isEnabled("PowerBi") },
+    { key: "tableau", label: "Tableau", on: isEnabled("Tableau") },
+    { key: "genai", label: "GenAI", on: isEnabled("GenAi") && me?.isSuperAdmin === true },
+  ] as const).filter((t) => t.on);
+  const [chosen, setType] = useState<"powerbi" | "tableau" | "genai">("powerbi");
+  const type = available.some((t) => t.key === chosen) ? chosen : available[0]?.key;
+  const showGenAi = type === "genai";
+  const tab = (key: typeof chosen, label: string) => (
+    <button key={key} type="button" role="tab" aria-selected={type === key} className={`tab ${type === key ? "tab-on" : ""}`} onClick={() => setType(key)}>{label}</button>
   );
   return (
     <>
-      <div className="tabs" role="tablist" aria-label="Dashboard type">
-        {tab("powerbi", "Power BI")}
-        {tab("tableau", "Tableau")}
-        {showGenAi && tab("genai", "GenAI")}
-      </div>
-      {type === "tableau" ? <PublishTableauPage /> : type === "genai" && showGenAi ? <PublishGenAiPage /> : <PublishPowerBiPage />}
+      {available.length === 0 ? (
+        <Notice>Every BI type you can publish is switched off. A Super Admin can switch one on under Configuration, BI Types.</Notice>
+      ) : (
+        <>
+          <div className="tabs" role="tablist" aria-label="BI type">
+            {available.map((t) => tab(t.key, t.label))}
+          </div>
+          {type === "tableau" ? <PublishTableauPage /> : showGenAi ? <PublishGenAiPage /> : <PublishPowerBiPage />}
+        </>
+      )}
     </>
   );
 }
@@ -49,7 +61,7 @@ function PublishPowerBiPage() {
   const [workspaceId, setWorkspaceId] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const code = useGeneratedCode(name);
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [tags, setTags] = useState<string[]>([]);
@@ -62,7 +74,14 @@ function PublishPowerBiPage() {
   const [rlsValue, setRlsValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<PublishStatus | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const draft = useDraft("PowerBi", name, () => ({ name, description, categoryId, tags, audience, classification, primaryOwnerId, backupOwnerId, rls, rlsValue, tenantId, workspaceId }), (v) => {
+    setName(String(v.name ?? "")); setDescription(String(v.description ?? "")); setCategoryId((v.categoryId as number | null) ?? null);
+    setTags((v.tags as string[]) ?? []); setAudience(String(v.audience ?? "Internal")); setClassification(String(v.classification ?? "Internal"));
+    setPrimaryOwnerId(String(v.primaryOwnerId ?? "")); setBackupOwnerId(String(v.backupOwnerId ?? ""));
+    setRls(Boolean(v.rls)); setRlsValue(String(v.rlsValue ?? "")); if (v.tenantId) setTenantId(Number(v.tenantId)); if (v.workspaceId) setWorkspaceId(Number(v.workspaceId));
+  });
+  useEffect(() => { if (status?.status === "Active") draft.finish(); }, [status?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMessage = useFlash();
   const poll = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(poll.current), []);
@@ -158,6 +177,7 @@ function PublishPowerBiPage() {
       </div>
 
       <section className="panel">
+        <DraftPicker draft={draft} />
         <form className="form-sections" onSubmit={submit}>
           <fieldset className="form-section">
             <legend>Report File</legend>
@@ -189,8 +209,8 @@ function PublishPowerBiPage() {
                 <input required maxLength={options.limits.nameMax} value={name} onChange={(e) => setName(e.target.value)} />
               </label>
               <label className="field">
-                <span>Dashboard code (up to {options.limits.codeMax} characters)</span>
-                <input required maxLength={options.limits.codeMax} pattern="[A-Za-z0-9_\-]+" title="Letters, digits, hyphens and underscores" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+                <span>Dashboard code <span className="optional">(made from the name)</span></span>
+                <input readOnly value={code} placeholder="Type the name first" aria-label="Dashboard code, made from the name" />
               </label>
               <label className="field span-3">
                 <span>Description <span className="optional">({description.length} of {options.limits.descriptionMax})</span></span>
@@ -222,6 +242,7 @@ function PublishPowerBiPage() {
                 <select value={audience} onChange={(e) => setAudience(e.target.value)}>
                   <option value="Internal">Internal</option>
                   <option value="Client">Client</option>
+                  <option value="Both">Both (Internal and Client)</option>
                 </select>
               </label>
               <label className="field">
@@ -257,11 +278,11 @@ function PublishPowerBiPage() {
 
           <div className="actions">
             <button className="btn btn-primary" type="submit" disabled={busy || !file || !categoryId}>{busy ? "Publishing…" : "Publish"}</button>
+            <SaveDraftButton draft={draft} />
             {!categoryId && <span className="muted small">Choose a category to publish.</span>}
           </div>
         </form>
 
-        {message && <Notice tone="error">{message}</Notice>}
         {status?.status === "Publishing" && <Notice>Importing “{status.name}” into Power BI. This usually takes under a minute…</Notice>}
         {status?.status === "Active" && (
           <Notice tone="ok">

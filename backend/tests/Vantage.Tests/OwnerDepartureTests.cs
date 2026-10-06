@@ -31,13 +31,13 @@ public class OwnerAndTypeRulesTests
     [InlineData("  ", null)]
     [InlineData("all", null)]
     [InlineData("ALL", null)]
-    [InlineData("PowerBi", DashboardType.PowerBi)]
-    [InlineData("powerbi", DashboardType.PowerBi)]
-    [InlineData("Power BI", DashboardType.PowerBi)]
-    [InlineData("Tableau", DashboardType.Tableau)]
-    [InlineData("GenAi", DashboardType.GenAi)]
-    [InlineData(" genai ", DashboardType.GenAi)]
-    public void The_analytics_type_filter_reads_a_type_or_means_all(string? text, DashboardType? expected) =>
+    [InlineData("PowerBi", BiType.PowerBi)]
+    [InlineData("powerbi", BiType.PowerBi)]
+    [InlineData("Power BI", BiType.PowerBi)]
+    [InlineData("Tableau", BiType.Tableau)]
+    [InlineData("GenAi", BiType.GenAi)]
+    [InlineData(" genai ", BiType.GenAi)]
+    public void The_analytics_type_filter_reads_a_type_or_means_all(string? text, BiType? expected) =>
         Assert.Equal(expected, AnalyticsService.ParseType(text));
 
     [Theory]
@@ -101,7 +101,7 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
     private static Task SetStatusAsync(AppDbContext db, int userId, UserStatus status) =>
         db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, status));
 
-    private async Task<Dashboard> DashboardAsync(Kit k, User primary, User? backup = null, DashboardType type = DashboardType.PowerBi, DashboardStatus status = DashboardStatus.Active)
+    private async Task<Dashboard> DashboardAsync(Kit k, User primary, User? backup = null, BiType type = BiType.PowerBi, DashboardStatus status = DashboardStatus.Active)
     {
         var d = await k.Factory.CreateAsync(new Dashboard
         {
@@ -202,10 +202,10 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
         await using var k = await ArrangeAsync();
         var owner = await PersonAsync(k.Db);
         var other = await PersonAsync(k.Db);
-        var pbi = await DashboardAsync(k, owner, type: DashboardType.PowerBi);
-        var tab = await DashboardAsync(k, owner, type: DashboardType.Tableau);
-        var gen = await DashboardAsync(k, owner, type: DashboardType.GenAi);
-        var othersTab = await DashboardAsync(k, other, type: DashboardType.Tableau);
+        var pbi = await DashboardAsync(k, owner, type: BiType.PowerBi);
+        var tab = await DashboardAsync(k, owner, type: BiType.Tableau);
+        var gen = await DashboardAsync(k, owner, type: BiType.GenAi);
+        var othersTab = await DashboardAsync(k, other, type: BiType.Tableau);
         var analytics = new AnalyticsService(k.Db, TimeProvider.System);
 
         Assert.Null(await analytics.ScopeAsync(null, null));                                      // all types, everyone: no filter
@@ -226,8 +226,8 @@ public class OwnerDepartureTests(SqlServerFixture fx) : IClassFixture<SqlServerF
         await using var k = await ArrangeAsync();
         var owner = await PersonAsync(k.Db);
         var viewer = await PersonAsync(k.Db);
-        var pbi = await DashboardAsync(k, owner, type: DashboardType.PowerBi);
-        var tab = await DashboardAsync(k, owner, type: DashboardType.Tableau);
+        var pbi = await DashboardAsync(k, owner, type: BiType.PowerBi);
+        var tab = await DashboardAsync(k, owner, type: BiType.Tableau);
         var now = DateTime.UtcNow;
         k.Db.DashboardViews.AddRange(
             new DashboardView { DashboardId = pbi.Id, UserId = viewer.Id, Source = ViewSource.Portal, ViewedAtUtc = now },

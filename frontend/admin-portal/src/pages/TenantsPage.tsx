@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
-import { api, can, Icon, useSession } from "@vantage/shared";
-import { errorText, MenuButton, Modal, Notice, Pill, useApi, when } from "../ui";
+import { useMemo, useState, type FormEvent } from "react";
+import { api, can, Icon, Pager, usePaged, useBiTypes, useGridPageSize, useSession, useFlash } from "@vantage/shared";
+import { errorText, MenuButton, Modal, Notice, Pill, useApi, when } from "@vantage/shared";
 
 type Check = { name: string; result: "Pass" | "Warn" | "Fail"; detail: string };
 type Workspace = { id: number; name: string; workspaceId: string; isActive: boolean; servicePrincipalAccess: string | null; onDedicatedCapacity: boolean | null };
@@ -12,20 +12,39 @@ type Tenant = {
   workspaces: Workspace[]; dashboards: number;
 };
 
+const platformLabel = (p: Tenant["platform"]) => (p === "PowerBi" ? "Power BI" : "Tableau Server");
+const short = (v: string | null) => (v && v.length > 13 ? `${v.slice(0, 8)}…${v.slice(-4)}` : v ?? "–");
+
+function VerifyPill({ t }: { t: Tenant }) {
+  if (t.lastVerifyPassed === true) return <Pill tone="ok">Verified</Pill>;
+  if (t.lastVerifyPassed === false) return <Pill tone="bad">Failed</Pill>;
+  return <Pill tone="warn">Not verified</Pill>;
+}
+
 export function TenantsPage() {
   const { me } = useSession();
   const canEdit = can(me, "tenants", "Edit");
+  const { isEnabled } = useBiTypes();
   const { data, error, reload } = useApi<Tenant[]>("/api/admin/tenants");
   const [editing, setEditing] = useState<Tenant | "PowerBi" | "Tableau" | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
   const [verifying, setVerifying] = useState<number | null>(null);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [q, setQ] = useState("");
+  const [platform, setPlatform] = useState("");
+  const setMessage = useFlash();
+
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return (data ?? []).filter((t) => (!platform || t.platform === platform)
+      && (!needle || [t.name, t.azureTenantId, t.clientId, t.serverUrl, ...t.workspaces.map((w) => w.name)].some((v) => v?.toLowerCase().includes(needle))));
+  }, [data, q, platform]);
+  const { rows: pageRows, pager } = usePaged(rows, useGridPageSize(), `${q}|${platform}`);
 
   async function verify(t: Tenant) {
     setVerifying(t.id);
-    setMessage(null);
     try {
       const r = await api<{ passed: boolean }>(`/api/admin/tenants/${t.id}/verify`, { method: "POST" });
-      setMessage({ ok: r.passed, text: r.passed ? `${t.name} is verified. You can publish into its workspaces.` : `${t.name} failed verification. The checks below say what to fix.` });
+      setMessage({ ok: r.passed, text: r.passed ? `${t.name} is verified. You can publish into its workspaces.` : `${t.name} failed verification. Open the tenant to see which checks to fix.` });
       reload();
     } catch (e) {
       setMessage({ ok: false, text: errorText(e) });
@@ -37,67 +56,116 @@ export function TenantsPage() {
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <p className="muted">Loading…</p>;
 
+  const opened = data.find((t) => t.id === openId) ?? null;
+  // A BI type switched off in Configuration can't get new tenants (C56).
+  const addItems = [
+    ...(isEnabled("PowerBi") ? [{ label: "Power BI", hint: "A service principal and its workspaces", onSelect: () => setEditing("PowerBi" as const) }] : []),
+    ...(isEnabled("Tableau") ? [{ label: "Tableau Server", hint: "A server site and its Connected App", onSelect: () => setEditing("Tableau" as const) }] : []),
+  ];
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Tenants</h1>
-          <p>Each Power BI tenant is one service principal with the workspaces it publishes into. Verify a tenant before publishing; any change to it needs verifying again.</p>
+          <p>Each tenant is one connection a BI platform publishes through: a Power BI service principal with its workspaces, or a Tableau Server site. Verify a tenant before publishing; any change to it needs verifying again.</p>
         </div>
-        {canEdit && (
-          <MenuButton primary label={<><Icon name="plus" size={18} /> Add tenant</>} items={[
-            { label: "Power BI", hint: "A service principal and its workspaces", onSelect: () => setEditing("PowerBi") },
-            { label: "Tableau Server", hint: "A server site and its Connected App", onSelect: () => setEditing("Tableau") },
-          ]} />
-        )}
+        {canEdit && addItems.length > 0 && <MenuButton primary label={<><Icon name="plus" size={18} /> Add tenant</>} items={addItems} />}
       </div>
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
-      {data.length === 0 && (
+      {data.length === 0 ? (
         <div className="empty">
           <h2>No Tenants Yet</h2>
           <p>Add your Power BI tenant: its Azure tenant ID, the service principal's client ID and secret, and the workspace dashboards will be published into.</p>
         </div>
-      )}
-
-      {data.map((t) => (
-        <section key={t.id} className="panel tenant">
-          <div className="panel-row">
-            <div>
-              <h2>{t.name} {!t.isActive && <Pill tone="neutral">Inactive</Pill>}</h2>
-              <p className="muted small">
-                {t.platform === "PowerBi" ? `Power BI, tenant ${t.azureTenantId}, client ${t.clientId}` : `Tableau, ${t.serverUrl}${t.siteContentUrl ? `, site ${t.siteContentUrl}` : ""}`}
-                {`. Secret saved ${when(t.secretUpdatedAtUtc)}. ${t.dashboards} dashboard${t.dashboards === 1 ? "" : "s"}.`}
-              </p>
-            </div>
-            <div className="actions">
-              {t.lastVerifyPassed === true && <Pill tone="ok">Verified {when(t.lastVerifiedAtUtc)}</Pill>}
-              {t.lastVerifyPassed === false && <Pill tone="bad">Failed {when(t.lastVerifiedAtUtc)}</Pill>}
-              {t.lastVerifyPassed == null && <Pill tone="warn">Not verified</Pill>}
-              {canEdit && <button className="btn" type="button" onClick={() => setEditing(t)}>Edit</button>}
-              {canEdit && <button className="btn btn-primary" type="button" disabled={verifying === t.id} onClick={() => void verify(t)}>{verifying === t.id ? "Verifying…" : "Verify Connection"}</button>}
-            </div>
+      ) : (
+        <>
+          <div className="filters">
+            <label className="field field-search">
+              <span>Search</span>
+              <span className="input-icon"><Icon name="search" size={18} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, tenant ID, client ID, server or workspace" /></span>
+            </label>
+            <label className="field">
+              <span>Platform</span>
+              <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+                <option value="">All</option>
+                <option value="PowerBi">Power BI</option>
+                <option value="Tableau">Tableau Server</option>
+              </select>
+            </label>
+            <span className="muted small filters-count">{rows.length} of {data.length}</span>
           </div>
 
-          {t.platform === "PowerBi" && (
-            <table className="grid">
-              <thead><tr><th>Workspace</th><th>Workspace ID</th><th>Service principal access</th><th>Capacity</th></tr></thead>
+          <div className="table-wrap">
+            <table className="grid grid-rows">
+              <thead>
+                <tr><th>Tenant</th><th>Platform</th><th>Connection</th><th className="num">Workspaces</th><th className="num">Dashboards</th><th>Verification</th><th>Last Verified</th>{canEdit && <th><span className="visually-hidden">Actions</span></th>}</tr>
+              </thead>
               <tbody>
-                {t.workspaces.map((w) => (
-                  <tr key={w.id} className={w.isActive ? "" : "muted"}>
-                    <td>{w.name}{!w.isActive && " (inactive)"}</td>
-                    <td className="small mono-ish">{w.workspaceId}</td>
-                    <td>{w.servicePrincipalAccess ?? <span className="muted">Verify to check</span>}</td>
-                    <td>{w.onDedicatedCapacity == null ? <span className="muted">Verify to check</span> : w.onDedicatedCapacity ? "Dedicated (F64)" : <span style={{ color: "var(--danger)" }}>Shared</span>}</td>
+                {pageRows.map((t) => (
+                  <tr key={t.id} onClick={() => setOpenId(t.id)}>
+                    <td>
+                      <button type="button" className="link" onClick={(e) => { e.stopPropagation(); setOpenId(t.id); }}>{t.name}</button>
+                      {!t.isActive && <> <Pill tone="neutral">Inactive</Pill></>}
+                    </td>
+                    <td className="small">{platformLabel(t.platform)}</td>
+                    <td className="small mono-ish" title={t.platform === "PowerBi" ? `Tenant ${t.azureTenantId}, client ${t.clientId}` : t.serverUrl ?? undefined}>
+                      {t.platform === "PowerBi" ? short(t.azureTenantId) : (t.serverUrl ?? "–").replace(/^https?:\/\//, "")}
+                    </td>
+                    <td className="num">{t.platform === "PowerBi" ? t.workspaces.length : "–"}</td>
+                    <td className="num">{t.dashboards}</td>
+                    <td><VerifyPill t={t} /></td>
+                    <td className="small muted">{when(t.lastVerifiedAtUtc)}</td>
+                    {canEdit && (
+                      <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                        <button className="btn" type="button" onClick={() => setEditing(t)}>Edit</button>{" "}
+                        <button className="btn btn-primary" type="button" disabled={verifying === t.id} onClick={() => void verify(t)}>{verifying === t.id ? "Verifying…" : "Verify"}</button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
+            {rows.length === 0 && <p className="pop-empty">No tenants match these filters.</p>}
+          </div>
+          <Pager {...pager} />
+        </>
+      )}
 
-          {t.checks.length > 0 && <VerifyChecks checks={t.checks} />}
-        </section>
-      ))}
+      {opened && (
+        <Modal title={opened.name} onClose={() => setOpenId(null)} wide>
+          <div className="stack">
+            <p className="muted small">
+              {opened.platform === "PowerBi" ? `Power BI. Azure tenant ${opened.azureTenantId}, client ${opened.clientId}.` : `Tableau Server ${opened.serverUrl}${opened.siteContentUrl ? `, site ${opened.siteContentUrl}` : ""}.`}
+              {` Secret saved ${when(opened.secretUpdatedAtUtc)}. ${opened.dashboards} dashboard${opened.dashboards === 1 ? "" : "s"}.`}
+            </p>
+            <div className="actions">
+              <VerifyPill t={opened} />
+              {opened.lastVerifiedAtUtc && <span className="muted small">{when(opened.lastVerifiedAtUtc)}</span>}
+              {canEdit && <button className="btn" type="button" onClick={() => { setOpenId(null); setEditing(opened); }}>Edit</button>}
+              {canEdit && <button className="btn btn-primary" type="button" disabled={verifying === opened.id} onClick={() => void verify(opened)}>{verifying === opened.id ? "Verifying…" : "Verify Connection"}</button>}
+            </div>
+
+            {opened.platform === "PowerBi" && (
+              <table className="grid">
+                <thead><tr><th>Workspace</th><th>Workspace ID</th><th>Service principal access</th><th>Capacity</th></tr></thead>
+                <tbody>
+                  {opened.workspaces.map((w) => (
+                    <tr key={w.id} className={w.isActive ? "" : "muted"}>
+                      <td>{w.name}{!w.isActive && " (inactive)"}</td>
+                      <td className="small mono-ish">{w.workspaceId}</td>
+                      <td>{w.servicePrincipalAccess ?? <span className="muted">Verify to check</span>}</td>
+                      <td>{w.onDedicatedCapacity == null ? <span className="muted">Verify to check</span> : w.onDedicatedCapacity ? "Dedicated (F64)" : <span style={{ color: "var(--danger)" }}>Shared</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {opened.checks.length > 0 && <VerifyChecks checks={opened.checks} />}
+          </div>
+        </Modal>
+      )}
 
       {editing && (
         <TenantEditor
@@ -105,6 +173,7 @@ export function TenantsPage() {
           platform={typeof editing === "string" ? editing : editing.platform}
           onClose={() => setEditing(null)}
           onSaved={(text) => { setEditing(null); setMessage({ ok: true, text }); reload(); }}
+          onChanged={reload}
         />
       )}
     </>
@@ -112,11 +181,11 @@ export function TenantsPage() {
 }
 
 /** The last verification's checks, folded into one summary line; opens by itself when something failed. */
-function VerifyChecks({ checks }: { checks: Check[] }) {
+function VerifyChecks({ checks, startOpen }: { checks: Check[]; startOpen?: boolean }) {
   const fails = checks.filter((c) => c.result === "Fail").length;
   const warns = checks.filter((c) => c.result === "Warn").length;
   const passes = checks.length - fails - warns;
-  const [open, setOpen] = useState(fails > 0);
+  const [open, setOpen] = useState(startOpen === true || fails > 0);
   const tone = fails ? "fail" : warns ? "warn" : "pass";
   return (
     <div className={`verify verify-${tone}`}>
@@ -146,7 +215,7 @@ function VerifyChecks({ checks }: { checks: Check[] }) {
 
 type WsRow = { id?: number; name: string; workspaceId: string; isActive: boolean };
 
-function TenantEditor({ tenant, platform, onClose, onSaved }: { tenant: Tenant | null; platform: "PowerBi" | "Tableau"; onClose: () => void; onSaved: (text: string) => void }) {
+function TenantEditor({ tenant, platform, onClose, onSaved, onChanged }: { tenant: Tenant | null; platform: "PowerBi" | "Tableau"; onClose: () => void; onSaved: (text: string) => void; onChanged: () => void }) {
   const [f, setF] = useState({
     name: tenant?.name ?? (platform === "PowerBi" ? "RRD Power BI" : "RRD Tableau Server"),
     isActive: tenant?.isActive ?? true,
@@ -165,6 +234,9 @@ function TenantEditor({ tenant, platform, onClose, onSaved }: { tenant: Tenant |
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<number | null>(tenant?.id ?? null);
+  const [verifying, setVerifying] = useState(false);
+  const [report, setReport] = useState<{ passed: boolean; checks: Check[] } | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   function pasteWorkspaceUrl(i: number, value: string) {
@@ -175,15 +247,25 @@ function TenantEditor({ tenant, platform, onClose, onSaved }: { tenant: Tenant |
     setWorkspaces(next);
   }
 
+  /** Saves the form as it is. Returns the tenant's id. */
+  async function persist(): Promise<number> {
+    const body = JSON.stringify({ ...f, platform, secret: f.secret || null, workspaces: platform === "PowerBi" ? workspaces : null });
+    if (savedId !== null) {
+      await api(`/api/admin/tenants/${savedId}`, { method: "PUT", body });
+      return savedId;
+    }
+    const created = await api<{ id: number }>("/api/admin/tenants", { method: "POST", body });
+    setSavedId(created.id);
+    return created.id;
+  }
+
   async function save(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      const body = JSON.stringify({ ...f, platform, secret: f.secret || null, workspaces: platform === "PowerBi" ? workspaces : null });
-      if (tenant) await api(`/api/admin/tenants/${tenant.id}`, { method: "PUT", body });
-      else await api("/api/admin/tenants", { method: "POST", body });
-      onSaved(`${tenant ? "Saved" : "Added"} ${f.name}. Now verify the connection.`);
+      await persist();
+      onSaved(`${savedId !== null ? "Saved" : "Added"} ${f.name}. Now verify the connection.`);
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -191,9 +273,27 @@ function TenantEditor({ tenant, platform, onClose, onSaved }: { tenant: Tenant |
     }
   }
 
+  /** Saves, then runs every check, and keeps the window open so each stage's result can be read. */
+  async function saveAndVerify() {
+    if (!(document.getElementById("tenant-form") as HTMLFormElement | null)?.reportValidity()) return;
+    setVerifying(true);
+    setError(null);
+    setReport(null);
+    try {
+      const id = await persist();
+      setReport(await api<{ passed: boolean; checks: Check[] }>(`/api/admin/tenants/${id}/verify`, { method: "POST" }));
+      setF((x) => ({ ...x, secret: "" }));
+      onChanged();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setVerifying(false);
+    }
+  }
+
   return (
     <Modal title={tenant ? `Edit ${tenant.name}` : platform === "PowerBi" ? "Add Power BI Tenant" : "Add Tableau Server"} onClose={onClose} wide>
-      <form onSubmit={save} className="stack" autoComplete="off">
+      <form id="tenant-form" onSubmit={save} className="stack" autoComplete="off">
         <div className="form-grid">
           <label className="field"><span>Name</span><input required maxLength={100} value={f.name} onChange={set("name")} /></label>
           <label className="check"><input type="checkbox" checked={f.isActive} onChange={(e) => setF({ ...f, isActive: e.target.checked })} /> Active</label>
@@ -238,9 +338,17 @@ function TenantEditor({ tenant, platform, onClose, onSaved }: { tenant: Tenant |
         <p className="muted small">Secrets are stored encrypted and never shown again.</p>
         {error && <Notice tone="error">{error}</Notice>}
         <div className="actions">
-          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? "Saving…" : tenant ? "Save Tenant" : "Add Tenant"}</button>
-          <button className="btn" type="button" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" type="submit" disabled={saving || verifying}>{saving ? "Saving…" : savedId !== null ? "Save Tenant" : "Add Tenant"}</button>
+          <button className="btn" type="button" disabled={saving || verifying} onClick={() => void saveAndVerify()}>{verifying ? "Verifying…" : "Save and Verify"}</button>
+          <button className="btn" type="button" onClick={onClose}>{report ? "Close" : "Cancel"}</button>
         </div>
+        {verifying && <p className="muted small">Saving, then checking each stage. This can take a little while…</p>}
+        {report && (
+          <div className="stack">
+            <Notice tone={report.passed ? "ok" : "error"}>{report.passed ? "Every required check passed. You can publish through this tenant." : "Some checks failed. Each stage below says what to fix; then run Save and Verify again."}</Notice>
+            <VerifyChecks checks={report.checks} startOpen />
+          </div>
+        )}
       </form>
     </Modal>
   );

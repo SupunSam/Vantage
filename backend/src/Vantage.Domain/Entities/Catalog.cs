@@ -68,11 +68,13 @@ public class PowerBiWorkspace
 }
 
 /// <summary>Per dashboard type: what the publish form asks for and whether the type is switched on.</summary>
-public class BiServiceType
+public class BiTypeConfig
 {
-    public DashboardType Type { get; set; }
+    public BiType Type { get; set; }
     public string DisplayName { get; set; } = "";
     public bool IsEnabled { get; set; } = true;
+    /// <summary>When the type is Inactive, also hide the dashboards of this type from the User Portal (C56). Off by default: they stay and show a badge.</summary>
+    public bool HideWhenInactive { get; set; }
     public bool RequiresFile { get; set; }
     public bool RequiresUrl { get; set; }
     public bool RequiresTenant { get; set; }

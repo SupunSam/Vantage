@@ -1,8 +1,12 @@
+import { ToastProvider } from "./Toast";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, getDevUser, setDevUser, type Branding, type Me } from "./api";
 
 /** Behaviour settings from Admin Configuration: idle timeout and the default rows per page. */
-export type UiSettings = { idleTimeoutMinutes: number; gridPageSize: number };
+export type UiSettings = { idleTimeoutMinutes: number; gridPageSize: number; toastSeconds: number; biTypes: BiTypeState[] };
+
+/** A BI type as the portals see it: on or off, and whether its existing dashboards are hidden while it is off (C56). */
+export type BiTypeState = { type: string; displayName: string; enabled: boolean; hideExisting: boolean };
 
 type Session = {
   me: Me | null;
@@ -40,6 +44,15 @@ export function can(me: Me | null, module: string, level: "View" | "Edit" = "Vie
   return l === "Edit" || (level === "View" && l === "View");
 }
 
+/** Which BI types are on. Until the settings load, every type counts as on so nothing flickers away. */
+export function useBiTypes() {
+  const { biTypes } = useSession().settings;
+  return {
+    biTypes,
+    isEnabled: (type: string) => biTypes.find((t) => t.type === type)?.enabled ?? true,
+  };
+}
+
 /** Rows per page to start a grid or list on: the Admin Configuration default, or `fallback` until it has loaded. */
 export function useGridPageSize(): number {
   return useSession().settings.gridPageSize;
@@ -50,7 +63,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [branding, setBranding] = useState<Branding>({});
-  const [settings, setSettings] = useState<UiSettings>({ idleTimeoutMinutes: 30, gridPageSize: 25 });
+  const [settings, setSettings] = useState<UiSettings>({ idleTimeoutMinutes: 30, gridPageSize: 25, toastSeconds: 6, biTypes: [] });
   const [idleNotice, setIdleNotice] = useState<string | null>(readIdleNotice);
   const lastActive = useRef(Date.now());
 
@@ -124,5 +137,5 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => { events.forEach((e) => window.removeEventListener(e, touch)); window.clearInterval(timer); };
   }, [me, settings.idleTimeoutMinutes, endSession]);
 
-  return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}>{children}</SessionContext.Provider>;
+  return <SessionContext.Provider value={{ me, loading, branding, settings, idleNotice, signIn, signOut }}><ToastProvider seconds={settings.toastSeconds}>{children}</ToastProvider></SessionContext.Provider>;
 }

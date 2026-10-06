@@ -44,7 +44,7 @@ public class GroupAddRequestTests(SqlServerFixture fx) : IClassFixture<SqlServer
         var factory = new DashboardFactory(db, new OwnershipService(db, clock), audit, clock);
         var d = await factory.CreateAsync(new Dashboard
         {
-            Code = "GA", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls, PrimaryOwnerId = owner.Id,
+            Code = "GA", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls, PrimaryOwnerId = owner.Id,
         }, rls ? "Region_All" : null, owner.Id);
         var def = await db.DashboardGroups.SingleAsync(g => g.DashboardId == d.Id && g.IsDefault);
         return new Kit(db, new GroupAddRequestService(db, access, notifications, email, audit, clock), access, groups, owner, admin, super, d, def);

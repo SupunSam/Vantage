@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, Icon, useSession } from "@vantage/shared";
-import { errorText, Notice, Pill, useApi, when } from "../ui";
+import { api, Icon, useSession, useFlash } from "@vantage/shared";
+import { errorText, Notice, Pill, useApi, when } from "@vantage/shared";
 
 type Setting = {
-  key: string; label: string; group: string; kind: "text" | "int" | "bool" | "choice" | "color" | "cron" | "domain" | "host" | "url" | "origins"; description: string; value: string; defaultValue: string;
+  key: string; label: string; group: string; kind: "text" | "int" | "bool" | "choice" | "color" | "cron" | "domain" | "host" | "url" | "origins" | "folder"; description: string; value: string; defaultValue: string;
   min: number | null; max: number | null; options: string[] | null; inUse: boolean; note: string | null; updatedAtUtc: string | null; updatedBy: string | null;
 };
 type Cdn = { id: number; host: string; notes: string | null; isActive: boolean };
-type ServiceType = { type: string; displayName: string; isEnabled: boolean; requiresFile: boolean; allowedExtensions: string | null; maxFileSizeMb: number | null };
+type ServiceType = { type: string; displayName: string; isEnabled: boolean; hideWhenInactive: boolean; requiresFile: boolean; allowedExtensions: string | null; maxFileSizeMb: number | null };
 type Config = { canEdit: boolean; canEditGenAi: boolean; settings: Setting[]; cdns: Cdn[]; types: ServiceType[]; logoMaxBytes: number };
 
 const tabs = [
   { key: "branding", label: "Branding" },
   { key: "settings", label: "Settings" },
   { key: "genai", label: "GenAI Config" },
-  { key: "types", label: "Dashboard Types" },
+  { key: "types", label: "BI Types" },
 ] as const;
 type Tab = (typeof tabs)[number]["key"];
 
@@ -25,7 +25,7 @@ export function ConfigPage() {
   const [search, setSearch] = useSearchParams();
   const wanted = search.get("tab") === "cdns" ? "genai" : search.get("tab"); // the GenAI Config tab used to be "Approved CDNs"
   const tab: Tab = (tabs.find((t) => t.key === wanted)?.key ?? "branding") as Tab;
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <p className="muted">Loading…</p>;
@@ -48,7 +48,6 @@ export function ConfigPage() {
             onClick={() => { setMessage(null); setSearch(t.key === "branding" ? {} : { tab: t.key }, { replace: true }); }}>{t.label}</button>
         ))}
       </div>
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       {tab === "branding" && <BrandingTab data={data} onDone={done} onError={(t) => say(false, t)} />}
       {tab === "settings" && <SettingsTab data={data} scope="general" onDone={done} onError={(t) => say(false, t)} />}
@@ -68,6 +67,7 @@ function BrandingTab({ data, onDone, onError }: TabProps) {
   const [name, setName] = useState(get("branding.portalName").value);
   const [primary, setPrimary] = useState(get("branding.primaryColor").value);
   const [accent, setAccent] = useState(get("branding.accentColor").value);
+  const [footer, setFooter] = useState(get("branding.footerText").value);
   const [busy, setBusy] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   const hex = /^#[0-9A-Fa-f]{6}$/;
@@ -78,7 +78,7 @@ function BrandingTab({ data, onDone, onError }: TabProps) {
     e.preventDefault();
     setBusy(true);
     try {
-      await api("/api/admin/config/settings", { method: "PUT", body: JSON.stringify({ values: { "branding.portalName": name, "branding.primaryColor": primary, "branding.accentColor": accent } }) });
+      await api("/api/admin/config/settings", { method: "PUT", body: JSON.stringify({ values: { "branding.portalName": name, "branding.primaryColor": primary, "branding.accentColor": accent, "branding.footerText": footer } }) });
       // Apply straight away on this page; other pages and other people see it the next time they load.
       const root = document.documentElement.style;
       root.setProperty("--brand", primary);
@@ -114,6 +114,10 @@ function BrandingTab({ data, onDone, onError }: TabProps) {
           <ColorField label="Accent colour" value={accent} onChange={setAccent} disabled={!data.canEdit} />
         </div>
         <p className="muted small">Primary is used for the menu, buttons and links; accent for highlights such as "New" badges.</p>
+        <label className="field">
+          <span>Footer text <span className="optional">(optional, shown after the copyright in both portals)</span></span>
+          <input maxLength={200} value={footer} disabled={!data.canEdit} onChange={(e) => setFooter(e.target.value)} />
+        </label>
         {data.canEdit && <div className="actions"><button className="btn btn-primary" type="submit" disabled={busy || !valid}>{busy ? "Saving…" : "Save Branding"}</button></div>}
       </form>
 
@@ -225,7 +229,7 @@ function SettingInput({ s, value, disabled, onChange }: { s: Setting; value: str
   if (s.kind === "int") {
     return <input type="number" inputMode="numeric" min={s.min ?? undefined} max={s.max ?? undefined} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={s.label} className="cfg-num" />;
   }
-  const placeholder = { cron: "0 2 1 * *", domain: "rrd.com", url: "https://genai.example.com", origins: "https://portal.example.com https://admin.example.com", host: "clamav" }[s.kind as string];
+  const placeholder = { folder: "powerbi", cron: "0 2 1 * *", domain: "rrd.com", url: "https://genai.example.com", origins: "https://portal.example.com https://admin.example.com", host: "clamav" }[s.kind as string];
   return <input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={s.label} className="cfg-text" placeholder={placeholder} />;
 }
 
@@ -301,16 +305,16 @@ function CdnsTab({ data, onDone, onError }: TabProps) {
   );
 }
 
-// ---------------------------------------------------------------- Dashboard types
+// ---------------------------------------------------------------- BI types
 
 function TypesTab({ data, onDone, onError }: TabProps) {
   return (
     <section className="panel stack">
-      <h2>Dashboard Types</h2>
-      <p className="muted small">Switch a type off to stop new dashboards and new file versions of that type. Existing dashboards keep working. At least one type must stay on.</p>
+      <h2>BI Types</h2>
+      <p className="muted small">Set a type to Inactive to stop new dashboards, tenants and file versions of that type, and to hide its tab and options in the portals. Existing dashboards keep working and show a BI Inactive badge, unless you also choose to hide them from the User Portal. At least one type must stay Active.</p>
       <div className="requests-table-wrap">
         <table className="requests-table">
-          <thead><tr><th>Type</th><th>Files accepted</th><th>Largest upload (MB)</th><th>On</th>{data.canEdit && <th />}</tr></thead>
+          <thead><tr><th>Type</th><th>Files accepted</th><th>Largest upload (MB)</th><th>Status</th><th>Hide Existing</th>{data.canEdit && <th />}</tr></thead>
           <tbody>{data.types.map((t) => <TypeRow key={t.type} t={t} canEdit={data.canEdit} onDone={onDone} onError={onError} />)}</tbody>
         </table>
       </div>
@@ -320,13 +324,14 @@ function TypesTab({ data, onDone, onError }: TabProps) {
 
 function TypeRow({ t, canEdit, onDone, onError }: { t: ServiceType; canEdit: boolean; onDone: (s: string) => void; onError: (s: string) => void }) {
   const [on, setOn] = useState(t.isEnabled);
+  const [hide, setHide] = useState(t.hideWhenInactive);
   const [mb, setMb] = useState(t.maxFileSizeMb?.toString() ?? "");
-  useEffect(() => { setOn(t.isEnabled); setMb(t.maxFileSizeMb?.toString() ?? ""); }, [t]);
-  const dirty = on !== t.isEnabled || (t.requiresFile && mb !== (t.maxFileSizeMb?.toString() ?? ""));
+  useEffect(() => { setOn(t.isEnabled); setHide(t.hideWhenInactive); setMb(t.maxFileSizeMb?.toString() ?? ""); }, [t]);
+  const dirty = on !== t.isEnabled || hide !== t.hideWhenInactive || (t.requiresFile && mb !== (t.maxFileSizeMb?.toString() ?? ""));
 
   async function save() {
     try {
-      await api(`/api/admin/config/types/${t.type}`, { method: "PUT", body: JSON.stringify({ isEnabled: on, maxFileSizeMb: t.requiresFile ? Number(mb) : null }) });
+      await api(`/api/admin/config/types/${t.type}`, { method: "PUT", body: JSON.stringify({ isEnabled: on, hideWhenInactive: hide, maxFileSizeMb: t.requiresFile ? Number(mb) : null }) });
       onDone(`${t.displayName} saved.`);
     } catch (err) { onError(errorText(err)); setOn(t.isEnabled); }
   }
@@ -336,7 +341,8 @@ function TypeRow({ t, canEdit, onDone, onError }: { t: ServiceType; canEdit: boo
       <td><strong>{t.displayName}</strong></td>
       <td className="small">{t.allowedExtensions ?? <span className="muted">A web address, no file</span>}</td>
       <td>{t.requiresFile ? <input type="number" min={1} max={2048} value={mb} disabled={!canEdit} onChange={(e) => setMb(e.target.value)} className="cfg-num" aria-label={`Largest ${t.displayName} upload in MB`} /> : <span className="muted">–</span>}</td>
-      <td><label className="switch"><input type="checkbox" checked={on} disabled={!canEdit} onChange={(e) => setOn(e.target.checked)} /><span>{on ? "On" : "Off"}</span></label></td>
+      <td><label className="switch"><input type="checkbox" checked={on} disabled={!canEdit} onChange={(e) => setOn(e.target.checked)} /><span>{on ? "Active" : "Inactive"}</span></label></td>
+      <td><label className="switch"><input type="checkbox" checked={hide} disabled={!canEdit || on} onChange={(e) => setHide(e.target.checked)} /><span>{hide ? "Hidden while inactive" : "Stay visible"}</span></label></td>
       {canEdit && <td className="cell-actions"><button type="button" className="btn btn-primary" disabled={!dirty} onClick={() => void save()}>Save</button></td>}
     </tr>
   );

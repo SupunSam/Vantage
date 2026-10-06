@@ -1,4 +1,4 @@
-import { RulesPanel } from "./RulesPanel";
+import { RulesPanel } from "@vantage/shared";
 
 /**
  * Access Group Rules: "when an HRMS field equals a value, propose adding the person to this group" (or removing them).

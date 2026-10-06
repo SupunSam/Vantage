@@ -32,6 +32,8 @@ public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, Tableau
 
         if (dashboard.Status != DashboardStatus.Active)
             throw new NoAccessException(dashboardId, "inactive");
+        if (await db.BiTypes.AnyAsync(t => t.Type == dashboard.Type && !t.IsEnabled && t.HideWhenInactive, ct))
+            throw new NoAccessException(dashboardId, "inactive");
 
         var membership = await db.GroupMembers
             .Where(m => m.DashboardId == dashboardId && m.UserId == userId && m.RemovedAtUtc == null && m.Group.Status == GroupStatus.Active)
@@ -78,9 +80,9 @@ public sealed class EmbedService(AppDbContext db, PowerBiClient powerBi, Tableau
 
     private async Task<EmbedInfo> BuildAsync(Dashboard dashboard, string email, string? tableauUserName, string? rlsValue, CancellationToken ct) => dashboard.Type switch
     {
-        DashboardType.PowerBi => await PowerBiAsync(dashboard, email, rlsValue, ct),
-        DashboardType.Tableau => await TableauAsync(dashboard, tableauUserName, ct),
-        DashboardType.GenAi => await GenAiAsync(dashboard, ct),
+        BiType.PowerBi => await PowerBiAsync(dashboard, email, rlsValue, ct),
+        BiType.Tableau => await TableauAsync(dashboard, tableauUserName, ct),
+        BiType.GenAi => await GenAiAsync(dashboard, ct),
         _ => throw new EmbedException("not-configured", "Unknown dashboard type."),
     };
 

@@ -91,13 +91,13 @@ public sealed class AdminConfigController(CurrentUser current, ConfigService con
         return await Guard(async () => { await config.RemoveCdnAsync(id, ct); return NoContent(); });
     }
 
-    public sealed record TypeBody(bool IsEnabled, int? MaxFileSizeMb);
+    public sealed record TypeBody(bool IsEnabled, bool HideWhenInactive, int? MaxFileSizeMb);
 
     [HttpPut("types/{type}")]
     public async Task<IActionResult> UpdateType(string type, TypeBody body, CancellationToken ct)
     {
         if (await RequireAsync(AppModules.AdminConfig, PermissionLevel.Edit, ct) is { } denied) return denied;
-        if (!Enum.TryParse<DashboardType>(type, true, out var t)) return NotFound();
-        return await Guard(async () => { await config.UpdateTypeAsync(t, body.IsEnabled, body.MaxFileSizeMb, ct); return NoContent(); });
+        if (!Enum.TryParse<BiType>(type, true, out var t)) return NotFound();
+        return await Guard(async () => { await config.UpdateTypeAsync(t, body.IsEnabled, body.HideWhenInactive, body.MaxFileSizeMb, ct); return NoContent(); });
     }
 }

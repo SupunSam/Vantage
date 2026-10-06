@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, ApiError, Icon, Thumbnail, useSession } from "@vantage/shared";
+import { api, ApiError, Icon, Thumbnail, useSession, useFlash, BiInactiveBadge } from "@vantage/shared";
 import { FolderMenu } from "./FolderMenu";
 import { FoldersPage } from "./FoldersPage";
 import { Crumbs, FolderGrid, plural } from "./FolderGrid";
@@ -97,7 +97,7 @@ function MyDashboards() {
   const cat = search.get("cat");                       // the category folder we are inside, or none for the top level
   const [rows, setRows] = useState<MyDashboard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const setNotice = useFlash();
   const [q, setQ] = useState("");
   const [prefs, setPrefs] = useState(readPrefs);
 
@@ -179,7 +179,6 @@ function MyDashboards() {
             </div>
           </div>
 
-          {notice && <p className="notice notice-error">{notice}</p>}
 
           {filtered.length === 0 && <p className="muted">No dashboards match “{q}”.</p>}
 
@@ -304,7 +303,7 @@ function Cards({ rows, onPin }: { rows: MyDashboard[]; onPin: (d: MyDashboard) =
                 <h3>{d.name}</h3>
                 {d.description && <p className="card-desc">{d.description}</p>}
                 <p className="card-meta">
-                  <span>{typeLabel[d.type]}</span>
+                  <span>{typeLabel[d.type]}<BiInactiveBadge type={d.type} /></span>
                   {d.owner && <span>{d.owner}</span>}
                 </p>
                 {!d.linked && <p className="card-warn">Not linked to a report yet</p>}
@@ -345,7 +344,7 @@ function ListView({ rows, sort, onSort, onPin }: { rows: MyDashboard[]; sort: So
               <td><Link to={`/dashboards/${d.id}`}>{d.name}</Link>{d.description && <div className="muted small list-desc">{d.description}</div>}</td>
               <td className="small">{d.categoryPath ?? <span className="muted">Not categorised</span>}</td>
               <td className="small">{d.owner ?? "–"}</td>
-              <td className="small">{typeLabel[d.type]}</td>
+              <td className="small">{typeLabel[d.type]}<BiInactiveBadge type={d.type} /></td>
               <td className="small muted">{d.publishedAtUtc ? new Date(time(d.publishedAtUtc)).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "–"}</td>
             </tr>
           ))}

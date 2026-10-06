@@ -35,6 +35,10 @@ const paths: Record<string, string> = {
   close: "M6 6l12 12M18 6 6 18",
   refresh: "M20 11a8 8 0 0 0-14.3-4.5M4 4.5V8h3.5M4 13a8 8 0 0 0 14.3 4.5M20 19.5V16h-3.5",
   lock: "M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
+  fullscreen: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+  exitFullscreen: "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5",
+  viewDefault: "M6 8h12v8H6z",
+  viewWide: "M2.5 7h19v10h-19z",
 };
 
 export type IconName = keyof typeof paths;

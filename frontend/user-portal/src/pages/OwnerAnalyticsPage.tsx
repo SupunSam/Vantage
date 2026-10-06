@@ -7,7 +7,7 @@ const BASE = "/api/owner/analytics";
 export function OwnerAnalyticsPage() {
   const { me } = useSession();
   const [days, setDays] = useState(30);
-  const [type, setType] = useState("");   // all dashboard types by default
+  const [type, setType] = useState("");   // all BI types by default
   const [selected, setSelected] = useState<number | null>(null);
   const [data, setData] = useState<{ owns: boolean; overview: Overview } | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -15,7 +15,7 @@ Sizing: about 1,000 users and 100 to 150 dashboards, 80 to 85% of them Power BI.
 Requirements:
 - The live requirements and decisions log is a Claude Doc:
   https://claude.ai/code/artifact/23091f2e-8231-484a-9f67-405ece572694
-- `docs/requirements.md` is a snapshot of it (decisions C1–C53).
+- `docs/requirements.md` is a snapshot of it (decisions C1–C62).
 - The original SRS is "SRS_RD_Dashboard - Dev Version.pdf", kept in the claude.ai project "DashboardRevamp", not in git.
 
 ## Components
@@ -58,7 +58,8 @@ vantage/
     tests/Vantage.Tests/    xUnit; most tests are [SqlFact] against a throwaway database
   frontend/
     package.json            npm workspaces: shared, user-portal, admin-portal
-    shared/src/             Shell (sidebar + top bar), Icon, Thumbnail, api.ts, session, Requests (review cards)
+    shared/src/             Shell (sidebar + top bar + footer), Icon, Thumbnail, api.ts, session, Toast, Requests (review cards)
+    shared/src/manage/      the dashboard and access group screens both portals use (C59): Dashboards grid, Dashboard detail, Access Groups, Rules panel, plus ui.tsx and fields.tsx; links come from `ManageScope` (`routes.tsx`); styles are `manage.css`, scoped under `.manage`
     admin-portal/src/       App.tsx (routes + sidebar), ui.tsx, fields.tsx, pages/*
     user-portal/src/        App.tsx, pages/ (Home, Catalogue, Viewer, Approvals, Folders)
   deploy/
@@ -126,7 +127,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
   - Each group belongs to one dashboard.
 - **Default group.** Named `<code>-<id>-default`, created when publishing, always active.
   - The primary and backup owners are in it and can't be removed.
-  - The dashboard code is fixed after publishing because the name depends on it.
+  - The dashboard code is fixed after publishing because the name depends on it. It is made from the name, 6 characters, never typed (C60: `DashboardCodes.Generate`, `PublishingController.CodeForAsync`; the same name gets the same code back, so republishing a failed dashboard reuses it).
 - **RLS.**
   - Only dashboards with RLS = Y can have more than the default group (C15).
   - Every group keeps an editable RLS value. It is ignored and not sent in the embed token when the dashboard has no RLS.
@@ -134,13 +135,14 @@ volume copy. Those old names appear only in that script and that guide. Don't in
   - The value is the Power BI role name (comma-separated for several).
   - The effective identity is sent only when the model requires it (`RlsIdentityBuilder`).
 - **Access Groups only take existing portal users** (C22). Unknown emails are reported, never created.
-- **Adding people to a group needs owner approval** (C26).
+- **Adding people to a group needs owner approval** (C26), except when an owner adds (C59).
   - `GroupAddRequestService` turns "add these people" (add, copy members, clone) into ONE `GroupAddRequest` per action. Nobody is added until approved.
-  - Owners hold approve and reject only (they have no Access Groups permission). They tick who to approve; unticked people are rejected.
+  - **The owners of a dashboard add people to its groups themselves, at once** (C59: they are the approvers, so a request to themselves would be empty). `AccessGroupsController.AddOrRequestAsync` does this through `AccessGroupService.AddMembersAsync` for an owner of that dashboard (`DashboardOwners.IsAsync`); everyone else, Super Admins included, still sends a request. An owner may copy members only from a group of the same dashboard.
+  - Owners also approve and reject requests. They tick who to approve; unticked people are rejected.
   - The only override is a Super Admin deciding in the owners' place from the Admin Portal's Access Requests page ("Override Approval"). A reason is required. It goes into the audit log (`overrideReason`) and the group's History, and the owners are notified. The add screens have no override.
-  - `AccessGroupService.AddMembersAsync` is the direct primitive behind it; controllers must not call it for admin adds.
+  - `AccessGroupService.AddMembersAsync` is the direct primitive behind it; controllers call it directly only for an owner of that dashboard.
   - Moves, removals and the default group at publishing stay direct.
-- **Configuration is data, validated and audited** (C30). Settings live in `SystemSettings`, defined in `ConfigService` (label, kind, limits, whether anything uses it yet). Add a new setting there and in `SettingKeys.Defaults`; never read a setting without a default. Dashboard type on/off and size limits are enforced with `ServiceTypes.EnsureAllowedAsync`.
+- **Configuration is data, validated and audited** (C30). Settings live in `SystemSettings`, defined in `ConfigService` (label, kind, limits, whether anything uses it yet). Add a new setting there and in `SettingKeys.Defaults`; never read a setting without a default. BI type Active/Inactive and size limits are enforced with `ServiceTypes.EnsureAllowedAsync`.
 - **Analytics counts views, not previews** (C31). A view is a `DashboardViews` row written when a member's embed token is issued. Never write one for a Super Admin preview or any other administrative action.
 - **Access group rules** (C29).
   - A rule (HRMS field equals value, all conditions) proposes adding people to, or removing people from, ONE access group. It never changes membership.
@@ -163,7 +165,9 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - **Ownership.** Naming someone owner grants the Dashboard Owner role automatically.
 - **Publishing and versions.**
   - Power BI imports run as the service principal with `nameConflict=CreateOrOverwrite` on the dataset name `<code>-<id>.pbix`.
-  - Modify Dashboard replaces the report in place (C21). The last 3 files are kept; Super Admins can download or restore them.
+  - Modify Dashboard replaces the report in place (C21). The last 3 files are kept; Super Admins (and a dashboard's owners, Power BI only) can download or restore them.
+  - Uploaded files go to `<folder>/<dashboardId>/v<n>/<name>_<yyyyMMdd-HHmmss>.<ext>`; the folder is the `storage.powerBiFolder` or `storage.genAiFolder` setting (C61; `StorageFolders`). Build keys only through `StorageFolders.Key`.
+  - Publish Dashboard keeps drafts per person (`PublishDraft`, C60): the form details only, never files.
 - **ServiceNow reference.** Optional on admin changes. It is stored on the audit log row, never on the user (C20).
 - **Limits.**
   - 12 pins, 20 personal folders (names ≤60 characters) and 8 tags (alphanumeric, ≤10 characters each).
@@ -192,10 +196,12 @@ volume copy. Those old names appear only in that script and that guide. Don't in
   - `TableauPublisher` publishes (live at once, no import); `DashboardMasterService.SetTableauViewAsync` changes the view. The shared `TableauViz` component renders it in both portals.
 - **Users, publishers and sessions** (C39 to C41).
   - Only Super Admins create users (Add User, Add Many, Excel; `RequireSuperAdminAsync`). Nobody is created at sign-in or by the HRMS job; an unknown person who signs in is refused.
-  - Only Super Admins publish, modify and restore dashboards of any type. There is no publisher role, and role permissions can't grant it. Owners see only the dashboards they own, in the Owner Workspace.
+  - Only Super Admins publish new dashboards of any type. There is no publisher role, and role permissions can't grant it. **Owners manage the dashboards they own from My Dashboards in the User Portal** (C59): edit details, thumbnail and Tableau view, Modify Dashboard, download and restore versions (Power BI only), manage groups and members. They do not change owners (Super Admins do, C43), and GenAI files stay with Super Admins (C33).
+  - Owner access goes through the same `/api/admin/dashboards` and `/api/admin/access-groups` endpoints, checked per dashboard with `RequireOnDashboardAsync` / `RequireOnGroupAsync` (the module permission, or `DashboardOwners.IsAsync`). A new endpoint that acts on one dashboard must use them, not `RequireAsync`.
   - The Admin Portal and User Portal never share a session. Don't build anything that signs one in or out through the other.
 - **Owners leaving** (C43). `OwnerDepartureService.ReviewAsync` makes an Active dashboard Inactive (and sets `OwnershipPendingReview`) when neither owner is an Active user, tells the Super Admins and audits it. It runs after the HRMS job and when a user is set Inactive by hand. A Super Admin naming a new active owner in Dashboards Master (`DashboardMasterService.UpdateAsync`) reactivates it. The portal never picks owners.
 - **Sign-in, Home and log out** (C45). Both portals show `SignInPage` (Login as Internal User / External User) before sign-in and land on Home after it. `signOut` ends only that portal's session and reloads at `/`; don't route a sign-out through the other portal. The Admin Home is `AdminHomeService` (`GET /api/admin/home`), which fills only the parts the role may see; its charts use a fixed colour per dashboard type. Personal Folders is a tab on the User Portal Home (`/folders` redirects there). By Category and Personal Folders both browse as a folder grid with breadcrumbs (C46): `FolderGrid`/`Crumbs`, the place is kept in the address (`?cat=`, `?folder=`), and the category tree is built in the browser from each dashboard's `categoryChain` (`CategoryService.BuildChains`). Home sorts through one `Sort` preference (`sortRows`) used by the flat cards, the list and category folders (C47); dashboard types show as `TypeIcon` (icon plus name, never colour alone).
+- **BI Types** (C56). The master is `BiTypes` (`BiTypeConfig`; the enum is `BiType`). Anything that offers a type (a publish tab, a tenant option, a filter) must use `useBiTypes().isEnabled(type)` and hide it when Inactive, and show `BiInactiveBadge` beside dashboards of an Inactive type. Hide Existing (`HideWhenInactive`) removes those dashboards from the User Portal queries (`mine`, `catalogue`, `EmbedService.GetEmbedAsync`); never from the Admin Portal. Don't rename `BiTypes` or the `BiType` columns.
 - **Analytics type filter** (C42). Admin and owner analytics take an optional `type` (blank = all). Build the scope with `AnalyticsService.ScopeAsync` and never parse the type yourself (`ParseType` refuses unknown values).
 - **Retire** soft-deletes in the portal and deletes the Power BI asset. Nothing is hard-deleted in the portal.
 
@@ -217,6 +223,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
   - Call the API with `api<T>()` from `@vantage/shared`. Fetch images and files with `apiObjectUrl` (it adds the dev header).
   - Keep shared UI in `frontend/shared`.
 - **Long lists are paged.** Use `Pager` and `usePaged` from `@vantage/shared` for lists held in the browser, and a `page`/`pageSize` API for lists that can grow without limit (audit log, group history, users). Never render an unbounded list.
+- **Pop-up messages** (C55). Show the result of an action (saved, added, failed) with `useFlash()` or `useToast()` from `@vantage/shared`, never an inline banner. The time on screen is the `ui.toastSeconds` setting, the same for every toast. Keep `Notice` for messages that describe a state, and for form errors inside a modal. Modals close with the red ✕ (`Modal` in `admin-portal/src/ui.tsx`).
 - **UI text.**
   - **Title Case** for menus, page titles, tabs, dialog titles and buttons ("Add Group", "Save Changes", "Request Access").
   - Messages and help text are plain sentences.
@@ -235,7 +242,7 @@ volume copy. Those old names appear only in that script and that guide. Don't in
 - Finish with exact click-by-click steps to test in the browser.
 - Explain any Power BI or Azure setup in plain steps.
 - Never ask for secrets in chat.
-- Record new decisions in the requirements doc's decision log (next number C54) and refresh `docs/requirements.md`.
+- Record new decisions in the requirements doc's decision log (next number C63) and refresh `docs/requirements.md`.
 
 ## Status (4 Oct 2026)
 

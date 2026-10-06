@@ -83,7 +83,7 @@ public class CatalogueTests(SqlServerFixture fx) : IClassFixture<SqlServerFixtur
         var factory = new DashboardFactory(k.Db, new OwnershipService(k.Db, TimeProvider.System), audit, TimeProvider.System);
         return await factory.CreateAsync(new Dashboard
         {
-            Code = "D", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls,
+            Code = "D", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, RlsEnabled = rls,
             PrimaryOwnerId = owner.Id, CategoryId = categoryId, TenantId = tenant.Id, WorkspaceId = tenant.Workspaces[0].Id, PowerBiReportId = linkedToFake ? k.PowerBi.ReportId : Guid.NewGuid(),
         }, rls ? "Region_All" : null, owner.Id);
     }

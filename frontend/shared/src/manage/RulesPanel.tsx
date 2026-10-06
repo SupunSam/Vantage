@@ -1,8 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { api, Icon, Pager, usePaged } from "@vantage/shared";
-import { errorText, Modal, Notice, Pill, useApi, when } from "../ui";
+import { Icon } from "../Icon";
+import { Pager, usePaged } from "../Pager";
+import { useFlash } from "../Toast";
+import { api } from "../api";
+import { errorText, Modal, Notice, Pill, useApi, when } from "./ui";
 import type { GroupRow } from "./AccessGroupsPage";
+import { useManage } from "./routes";
 
 type Condition = { field: string; value: string };
 type Rule = {
@@ -25,12 +29,13 @@ const toBody = (r: Rule): Draft => ({ groupId: r.groupId, name: r.name, action: 
  * A rule never changes anyone's access: what it finds goes to the dashboard's owners as a request.
  */
 export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged?: () => void }) {
+  const routes = useManage();
   const { data, error, reload } = useApi<Data>(`/api/admin/access-rules${fixed ? `?groupId=${fixed.groupId}` : ""}`);
   const groups = useApi<GroupRow[]>(fixed ? null : "/api/admin/access-groups");
   const values = useApi<Record<string, string[]>>("/api/admin/access-rules/field-values");
   const [editing, setEditing] = useState<Rule | "new" | null>(null);
   const [previewing, setPreviewing] = useState<Rule | null>(null);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const setMessage = useFlash();
   const [busy, setBusy] = useState<number | "all" | null>(null);
   const paged = usePaged(data?.rules ?? [], 10);
 
@@ -78,7 +83,6 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
         )}
       </div>
       {!data.canEdit && <Notice>Only Super Admins can create, change or run rules. You can see them here.</Notice>}
-      {message && <Notice tone={message.ok ? "ok" : "error"}>{message.text}</Notice>}
 
       {data.rules.length === 0 ? (
         <div className="empty"><h2>No Rules Yet</h2><p>{data.canEdit ? "Create a rule to keep this access group in step with the HRMS data, with the owners always confirming." : "No Super Admin has created a rule yet."}</p></div>
@@ -96,7 +100,7 @@ export function RulesPanel({ fixed, onChanged }: { fixed?: FixedGroup; onChanged
                     </td>
                     <td className="small">
                       <Pill tone={r.action === "Add" ? "ok" : "warn"}>{r.action === "Add" ? "Add people" : "Remove people"}</Pill>
-                      {!fixed && <div><Link to={`/access-groups/${r.groupId}?tab=rules`}>{r.group}</Link></div>}
+                      {!fixed && <div><Link to={routes.group(r.groupId, "rules")}>{r.group}</Link></div>}
                       <div className="muted">{!fixed && <>{r.dashboard}</>}{r.moveFromOtherGroups ? `${fixed ? "" : " · "}may move people from other groups` : ""}</div>
                     </td>
                     <td className="small">{r.conditions.map((c) => <div key={c.field}>{fieldLabel(c.field)} equals <strong>{c.value}</strong></div>)}</td>

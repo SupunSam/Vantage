@@ -109,7 +109,7 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
 
         Assert.Equal("Active", status.Status);
         var d = await k.Db.Dashboards.AsNoTracking().SingleAsync(x => x.Id == status.DashboardId);
-        Assert.Equal(DashboardType.GenAi, d.Type);
+        Assert.Equal(BiType.GenAi, d.Type);
         Assert.False(d.RlsEnabled);
         Assert.NotNull(d.PublishedAtUtc);
         var v = await k.Db.DashboardVersions.AsNoTracking().SingleAsync(x => x.DashboardId == d.Id);
@@ -145,7 +145,7 @@ public class GenAiTests(SqlServerFixture fx) : IClassFixture<SqlServerFixture>
     public async Task A_switched_off_genai_type_refuses_publishing()
     {
         await using var k = await ArrangeAsync();
-        var type = await k.Db.BiServiceTypes.SingleAsync(t => t.Type == DashboardType.GenAi);
+        var type = await k.Db.BiTypes.SingleAsync(t => t.Type == BiType.GenAi);
         type.IsEnabled = false;
         await k.Db.SaveChangesAsync();
         try

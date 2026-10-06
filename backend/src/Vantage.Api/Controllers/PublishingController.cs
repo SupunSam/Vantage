@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Vantage.Api.Auth;
 using Vantage.Domain;
+using Vantage.Domain.Entities;
 using Vantage.Infrastructure.Data;
 using Vantage.Infrastructure.Embedding;
 using Vantage.Infrastructure.GenAi;
@@ -16,6 +17,63 @@ public sealed class PublishingController(
     AppDbContext db, CurrentUser current, PublishingService publishing, GenAiPublisher genAiPublisher, GenAiService genAi, TableauPublisher tableauPublisher,
     CategoryService categoryService, DashboardMasterService master) : ControllerBase
 {
+    /// <summary>The code a dashboard of this name gets (C60): the existing one when the name is already a dashboard, else a new unique one.</summary>
+    private async Task<string> CodeForAsync(string? name, CancellationToken ct)
+    {
+        var n = (name ?? "").Trim();
+        var existing = await db.Dashboards.AsNoTracking().Where(d => d.Name == n).Select(d => d.Code).FirstOrDefaultAsync(ct);
+        if (existing is not null) return existing;
+        var taken = (await db.Dashboards.AsNoTracking().Select(d => d.Code).ToListAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return DashboardCodes.Generate(n, taken.Contains);
+    }
+
+    [HttpGet("code")]
+    public async Task<IActionResult> Code([FromQuery] string? name, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.View, ct) is { } denied) return denied;
+        return Ok(new { code = await CodeForAsync(name, ct) });
+    }
+
+    public sealed record DraftBody(int? Id, BiType Type, string? Name, string Payload);
+
+    /// <summary>The signed-in person's saved drafts, newest first.</summary>
+    [HttpGet("drafts")]
+    public async Task<IActionResult> Drafts(CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.Edit, ct) is { } denied) return denied;
+        var me = (await current.GetAsync(ct))!;
+        return Ok(await db.PublishDrafts.AsNoTracking().Where(d => d.UserId == me.Id).OrderByDescending(d => d.UpdatedAtUtc)
+            .Select(d => new { d.Id, type = d.Type.ToString(), d.Title, d.Payload, d.UpdatedAtUtc }).ToListAsync(ct));
+    }
+
+    [HttpPost("drafts")]
+    public async Task<IActionResult> SaveDraft(DraftBody body, [FromServices] TimeProvider clock, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.Edit, ct) is { } denied) return denied;
+        var me = (await current.GetAsync(ct))!;
+        if (body.Payload.Length > 40_000) return BadRequest(new { message = "That draft is too big to save." });
+        try { System.Text.Json.JsonDocument.Parse(body.Payload); } catch (System.Text.Json.JsonException) { return BadRequest(new { message = "That draft isn't valid." }); }
+        var title = string.IsNullOrWhiteSpace(body.Name) ? "Untitled draft" : body.Name.Trim();
+        if (title.Length > 200) title = title[..200];
+        var draft = body.Id is { } id ? await db.PublishDrafts.SingleOrDefaultAsync(d => d.Id == id && d.UserId == me.Id, ct) : null;
+        if (draft is null) { draft = new PublishDraft { UserId = me.Id }; db.PublishDrafts.Add(draft); }
+        draft.Type = body.Type;
+        draft.Title = title;
+        draft.Payload = body.Payload;
+        draft.UpdatedAtUtc = clock.GetUtcNow().UtcDateTime;
+        await db.SaveChangesAsync(ct);
+        return Ok(new { draft.Id, type = draft.Type.ToString(), draft.Title, draft.Payload, draft.UpdatedAtUtc });
+    }
+
+    [HttpDelete("drafts/{id:int}")]
+    public async Task<IActionResult> DeleteDraft(int id, CancellationToken ct)
+    {
+        if (await RequireAsync(PermissionLevel.Edit, ct) is { } denied) return denied;
+        var me = (await current.GetAsync(ct))!;
+        await db.PublishDrafts.Where(d => d.Id == id && d.UserId == me.Id).ExecuteDeleteAsync(ct);
+        return NoContent();
+    }
+
     /// <summary>Choices for the publish form: Power BI tenants with their workspaces, categories, users for owner pickers.</summary>
     [HttpGet("options")]
     public async Task<IActionResult> Options(CancellationToken ct)
@@ -110,7 +168,7 @@ public sealed class PublishingController(
 
             await using var stream = form.File.OpenReadStream();
             var status = await publishing.PublishPowerBiAsync(new PublishPowerBiRequest(
-                form.Name, form.Code, form.Description, form.WorkspaceId, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId,
+                form.Name, await CodeForAsync(form.Name, ct), form.Description, form.WorkspaceId, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId,
                 form.RlsEnabled, form.DefaultGroupRlsValue, form.CategoryId, form.File.FileName,
                 Rules.NormalizeTags([form.Tags ?? ""]), form.Audience, form.DataClassification), stream, me.Id, ct);
             if (thumbnail is not null) await master.SetThumbnailAsync(status.DashboardId, thumbnail, ct);
@@ -155,7 +213,7 @@ public sealed class PublishingController(
         {
             var thumbnail = await ReadThumbnailAsync(form.Thumbnail, ct);
             var status = await tableauPublisher.PublishAsync(new PublishTableauRequest(
-                form.Name, form.Code, form.Description, form.TenantId, form.ViewUrl, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId, form.CategoryId,
+                form.Name, await CodeForAsync(form.Name, ct), form.Description, form.TenantId, form.ViewUrl, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId, form.CategoryId,
                 Rules.NormalizeTags([form.Tags ?? ""]), form.Audience, form.DataClassification), me.Id, ct);
             if (thumbnail is not null) await master.SetThumbnailAsync(status.DashboardId, thumbnail, ct);
             return Ok(status);
@@ -220,7 +278,7 @@ public sealed class PublishingController(
             var thumbnail = await ReadThumbnailAsync(form.Thumbnail, ct);
             await using var stream = form.File.OpenReadStream();
             var status = await genAiPublisher.PublishAsync(new PublishGenAiRequest(
-                form.Name, form.Code, form.Description, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId, form.CategoryId, form.File.FileName,
+                form.Name, await CodeForAsync(form.Name, ct), form.Description, form.PrimaryOwnerId ?? me.Id, form.BackupOwnerId, form.CategoryId, form.File.FileName,
                 Rules.NormalizeTags([form.Tags ?? ""]), form.Audience, form.DataClassification), stream, me.Id, ct);
             if (thumbnail is not null) await master.SetThumbnailAsync(status.DashboardId, thumbnail, ct);
             return Ok(status);
@@ -280,7 +338,7 @@ public sealed class PublishingController(
     {
         if (await RequireAsync(PermissionLevel.View, ct) is { } denied) return denied;
         var rows = await db.Dashboards.AsNoTracking()
-            .Where(d => d.Type == DashboardType.PowerBi && d.Versions.Any())
+            .Where(d => d.Type == BiType.PowerBi && d.Versions.Any())
             .OrderByDescending(d => d.CreatedAtUtc)
             .Take(20)
             .Select(d => new

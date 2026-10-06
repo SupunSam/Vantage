@@ -32,7 +32,7 @@ public class PersonalFolderTests(SqlServerFixture fx) : IClassFixture<SqlServerF
         var factory = new DashboardFactory(db, new OwnershipService(db, TimeProvider.System), new AuditWriter(db, new Ctx(), TimeProvider.System), TimeProvider.System);
         return await factory.CreateAsync(new Dashboard
         {
-            Code = "PF", Name = Unique("Dash "), Type = DashboardType.PowerBi, Status = DashboardStatus.Active, PrimaryOwnerId = owner.Id,
+            Code = "PF", Name = Unique("Dash "), Type = BiType.PowerBi, Status = DashboardStatus.Active, PrimaryOwnerId = owner.Id,
         }, null, owner.Id);
     }
 

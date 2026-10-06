@@ -27,12 +27,12 @@ public sealed class DashboardVersionService(
     public async Task<ReplaceStatus> ReplaceAsync(int dashboardId, Stream pbix, string fileName, int actorUserId, CancellationToken ct = default)
     {
         if (!fileName.EndsWith(".pbix", StringComparison.OrdinalIgnoreCase)) throw new RuleException("Choose a .pbix file.");
-        await ServiceTypes.EnsureAllowedAsync(db, DashboardType.PowerBi, pbix.CanSeek ? pbix.Length : null, ct);
+        await ServiceTypes.EnsureAllowedAsync(db, BiType.PowerBi, pbix.CanSeek ? pbix.Length : null, ct);
         var d = await LoadReplaceableAsync(dashboardId, ct);
         await powerBi.EnsureSignInAsync(d.Tenant!, ct); // fail fast before storing anything
 
         var number = await NextVersionAsync(d.Id, ct);
-        var key = $"dashboards/{d.Id}/v{number}/{Path.GetFileName(fileName)}";
+        var key = StorageFolders.Key(await StorageFolders.ForAsync(db, BiType.PowerBi, ct), d.Id, number, fileName, Now);
         var (size, sha) = await files.SaveAsync(key, pbix, ct);
         db.DashboardVersions.Add(new DashboardVersion
         {
@@ -53,7 +53,7 @@ public sealed class DashboardVersionService(
         await powerBi.EnsureSignInAsync(d.Tenant!, ct);
 
         var number = await NextVersionAsync(d.Id, ct);
-        var key = $"dashboards/{d.Id}/v{number}/{source.FileName}";
+        var key = StorageFolders.Key(await StorageFolders.ForAsync(db, d.Type, ct), d.Id, number, source.FileName, Now);
         long size;
         string sha;
         await using (var stream = files.OpenRead(source.FileKey)) (size, sha) = await files.SaveAsync(key, stream, ct);
@@ -153,7 +153,7 @@ public sealed class DashboardVersionService(
     {
         var d = await db.Dashboards.Include(x => x.Tenant).Include(x => x.Workspace).SingleOrDefaultAsync(x => x.Id == dashboardId, ct)
             ?? throw new KeyNotFoundException();
-        if (d.Type != DashboardType.PowerBi) throw new RuleException("Only Power BI dashboards are modified with a new .pbix.");
+        if (d.Type != BiType.PowerBi) throw new RuleException("Only Power BI dashboards are modified with a new .pbix.");
         if (d.Status is not (DashboardStatus.Active or DashboardStatus.Inactive))
             throw new RuleException(d.Status == DashboardStatus.Failed
                 ? "This dashboard never finished publishing. Publish it again from Publish Dashboard with the same name."
